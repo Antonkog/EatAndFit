@@ -16,14 +16,9 @@ import {
 import { useEffect, useMemo, useState } from 'react';
 import { localDate, saveFood, type MealType } from '../data/db';
 import { recipeSearchParams } from './filters';
-import type { Recipe, RecipePage } from './types';
+import type { RecipeDetail, RecipePage, RecipeSummary } from './types';
 
 const DATASET_URL = 'https://huggingface.co/datasets/datahiveai/recipes-with-nutrition';
-const cuisineOptions = ['American', 'Asian', 'British', 'Chinese', 'French', 'Greek', 'Indian', 'Italian', 'Japanese', 'Mediterranean', 'Mexican', 'Middle Eastern', 'Spanish', 'Thai'];
-const dishOptions = ['Bread', 'Desserts', 'Main course', 'Pancake', 'Salad', 'Sandwiches', 'Side dish', 'Soup', 'Starter'];
-const mealOptions = ['Breakfast', 'Brunch', 'Lunch', 'Dinner', 'Snack'];
-const dietOptions = ['Balanced', 'High-fiber', 'High-protein', 'Low-carb', 'Low-fat', 'Low-sodium'];
-const healthOptions = ['Dairy-free', 'Egg-free', 'Gluten-free', 'Keto-friendly', 'Peanut-free', 'Vegan', 'Vegetarian'];
 const meals: MealType[] = ['breakfast', 'lunch', 'dinner', 'snack'];
 
 type Filters = { cuisine: string; dish: string; meal: string; diet: string; health: string; minCalories: string; maxCalories: string };
@@ -48,7 +43,9 @@ export function RecipeView({
   const [filters, setFilters] = useState<Filters>(emptyFilters);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [data, setData] = useState<RecipePage>();
-  const [selected, setSelected] = useState<Recipe>();
+  const [selected, setSelected] = useState<RecipeDetail>();
+  const [detailLoading, setDetailLoading] = useState('');
+  const [detailError, setDetailError] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
@@ -57,7 +54,7 @@ export function RecipeView({
   useEffect(() => {
     const timer = setTimeout(() => {
       setLoading(true);
-      const params = recipeSearchParams({ query: query || ingredients[0] || '', page: String(page), pageSize: '12', ...filters });
+      const params = recipeSearchParams({ query, page: String(page), pageSize: '12', ...filters }, ingredients);
       fetch(`/api/recipes?${params}`)
         .then((response) => {
           if (!response.ok) throw new Error('Recipe catalog is unavailable. Import the DataHive dataset to enable it.');
@@ -72,6 +69,21 @@ export function RecipeView({
 
   const activeFilters = Object.values(filters).filter(Boolean).length;
   const totalPages = Math.max(1, Math.ceil((data?.total ?? 0) / (data?.pageSize ?? 12)));
+
+  const openRecipe = async (recipe: RecipeSummary) => {
+    setDetailLoading(recipe.id);
+    setDetailError('');
+    try {
+      const response = await fetch(`/api/recipes/${encodeURIComponent(recipe.id)}`);
+      const detail = await response.json();
+      if (!response.ok) throw new Error(detail.error || 'Recipe details are unavailable.');
+      setSelected(detail as RecipeDetail);
+    } catch (reason) {
+      setDetailError(reason instanceof Error ? reason.message : 'Recipe details are unavailable.');
+    } finally {
+      setDetailLoading('');
+    }
+  };
 
   const reset = () => {
     setDraft('');
@@ -105,11 +117,11 @@ export function RecipeView({
         <summary><SlidersHorizontal size={17} /><strong>Filters</strong>{activeFilters > 0 && <span className="badge solid">{activeFilters}</span>}<ChevronDown size={17} /></summary>
         <div className="filters-body">
           <div className="recipe-filter-grid">
-            <FilterSelect label="All cuisines" value={filters.cuisine} options={cuisineOptions} onChange={(value) => { setFilters({ ...filters, cuisine: value }); setPage(1); }} />
-            <FilterSelect label="All dish types" value={filters.dish} options={dishOptions} onChange={(value) => { setFilters({ ...filters, dish: value }); setPage(1); }} />
-            <FilterSelect label="All meal types" value={filters.meal} options={mealOptions} onChange={(value) => { setFilters({ ...filters, meal: value }); setPage(1); }} />
-            <FilterSelect label="All diets" value={filters.diet} options={dietOptions} onChange={(value) => { setFilters({ ...filters, diet: value }); setPage(1); }} />
-            <FilterSelect label="All health labels" value={filters.health} options={healthOptions} onChange={(value) => { setFilters({ ...filters, health: value }); setPage(1); }} />
+            <FilterSelect label="All cuisines" value={filters.cuisine} options={data?.facets.cuisines.map((item) => item.value) ?? []} onChange={(value) => { setFilters({ ...filters, cuisine: value }); setPage(1); }} />
+            <FilterSelect label="All dish types" value={filters.dish} options={data?.facets.dishTypes.map((item) => item.value) ?? []} onChange={(value) => { setFilters({ ...filters, dish: value }); setPage(1); }} />
+            <FilterSelect label="All meal types" value={filters.meal} options={data?.facets.mealTypes.map((item) => item.value) ?? []} onChange={(value) => { setFilters({ ...filters, meal: value }); setPage(1); }} />
+            <FilterSelect label="All diets" value={filters.diet} options={data?.facets.dietLabels.map((item) => item.value) ?? []} onChange={(value) => { setFilters({ ...filters, diet: value }); setPage(1); }} />
+            <FilterSelect label="All health labels" value={filters.health} options={data?.facets.healthLabels.map((item) => item.value) ?? []} onChange={(value) => { setFilters({ ...filters, health: value }); setPage(1); }} />
           </div>
           <div className="calorie-filters">
             <FilterNumber label="Minimum calories" value={filters.minCalories} onChange={(value) => setFilters({ ...filters, minCalories: value })} />
@@ -120,10 +132,11 @@ export function RecipeView({
       </details>
 
       {error && <div className="error-state"><AlertTriangle /><div><strong>{error}</strong><button className="text-button" onClick={() => setRefresh((value) => value + 1)}>Try again</button></div></div>}
+      {detailError && <div className="error-state"><AlertTriangle /><div><strong>{detailError}</strong><button className="text-button" onClick={() => setDetailError('')}>Dismiss</button></div></div>}
       {loading ? <div className="loading-state"><LoaderCircle className="spin" /></div> : data?.items.length ? (
         <>
           <div className="recipe-grid">
-            {data.items.map((recipe) => <RecipeCard recipe={recipe} key={recipe.id} onClick={() => setSelected(recipe)} />)}
+            {data.items.map((recipe) => <RecipeCard recipe={recipe} key={recipe.id} loading={detailLoading === recipe.id} onClick={() => void openRecipe(recipe)} />)}
           </div>
           <div className="pagination">
             <button className="icon-button" disabled={page <= 1} onClick={() => setPage((value) => value - 1)} aria-label="Previous"><ChevronLeft /></button>
@@ -140,21 +153,21 @@ export function RecipeView({
 }
 
 function FilterSelect({ label, value, options, onChange }: { label: string; value: string; options: string[]; onChange: (value: string) => void }) {
-  return <select aria-label={label} value={value} onChange={(event) => onChange(event.target.value)}><option value="">{label}</option>{options.map((option) => <option value={option} key={option}>{option}</option>)}</select>;
+  return <select aria-label={label} value={value} onChange={(event) => onChange(event.target.value)}><option value="">{label}</option>{options.map((option) => <option value={option} key={option}>{titleCase(option)}</option>)}</select>;
 }
 
 function FilterNumber({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
   return <label>{label}<span><input type="number" min="0" value={value} onChange={(event) => onChange(event.target.value)} /><i>kcal</i></span></label>;
 }
 
-function RecipeCard({ recipe, onClick }: { recipe: Recipe; onClick: () => void }) {
-  const nutrition = recipeNutrition(recipe);
+function RecipeCard({ recipe, loading, onClick }: { recipe: RecipeSummary; loading: boolean; onClick: () => void }) {
+  const nutrition = recipe.nutrition;
   return (
-    <button className="recipe-card" onClick={onClick}>
+    <button className="recipe-card" disabled={loading} onClick={onClick}>
       <RecipeImage src={recipe.imageUrl} loading="lazy" fallbackClass="recipe-placeholder" />
       <span className="recipe-card-body">
         <span className="badge-row">{[...recipe.dish, ...recipe.meal].slice(0, 2).map((item) => <i className="badge outline" key={item}>{item}</i>)}</span>
-        <strong>{recipe.title}</strong>
+        <strong>{loading ? 'Loading…' : recipe.title}</strong>
         <small>{recipe.source}</small>
         <em>{Math.round(nutrition.calories)} kcal · Protein {nutrition.protein.toFixed(1)}g · Fat {nutrition.fat.toFixed(1)}g</em>
       </span>
@@ -168,26 +181,12 @@ function RecipeImage({ src, className, fallbackClass, loading }: { src?: string;
   return <img className={className} src={src} alt="" loading={loading} referrerPolicy="no-referrer" onError={() => setFailed(true)} />;
 }
 
-function nutrient(recipe: Recipe, term: string) {
-  const item = Object.values(recipe.nutrients).find((value) => value.label.toLowerCase().includes(term));
-  return Number(item?.quantity ?? 0) / Math.max(1, recipe.servings);
-}
-
-function recipeNutrition(recipe: Recipe) {
-  return {
-    calories: Number(recipe.calories || 0) / Math.max(1, recipe.servings),
-    protein: nutrient(recipe, 'protein'),
-    carbs: nutrient(recipe, 'carbohydrate'),
-    fat: nutrient(recipe, 'fat'),
-  };
-}
-
-function RecipeDetail({ recipe, initialDate, onClose, onAdded }: { recipe: Recipe; initialDate: string; onClose: () => void; onAdded: (date: string) => void }) {
+function RecipeDetail({ recipe, initialDate, onClose, onAdded }: { recipe: RecipeDetail; initialDate: string; onClose: () => void; onAdded: (date: string) => void }) {
   const [date, setDate] = useState(initialDate);
   const [meal, setMeal] = useState<MealType>('dinner');
   const [servings, setServings] = useState(1);
   const [added, setAdded] = useState(false);
-  const nutrition = useMemo(() => recipeNutrition(recipe), [recipe]);
+  const nutrition = useMemo(() => recipe.nutrition, [recipe]);
 
   const save = async () => {
     await saveFood({
@@ -245,7 +244,7 @@ function MacroGrid({ values }: { values: { calories: number; protein: number; ca
   return <div className="macro-grid"><div><small>Calories</small><strong>{Math.round(values.calories)} kcal</strong></div><div><small>Protein</small><strong>{values.protein.toFixed(1)} g</strong></div><div><small>Carbs</small><strong>{values.carbs.toFixed(1)} g</strong></div><div><small>Fat</small><strong>{values.fat.toFixed(1)} g</strong></div></div>;
 }
 
-function FullNutrients({ recipe }: { recipe: Recipe }) {
+function FullNutrients({ recipe }: { recipe: RecipeDetail }) {
   const items = Object.entries(recipe.nutrients).filter(([, value]) => Number.isFinite(value.quantity) && value.quantity > 0);
-  return <dl className="full-nutrients">{items.map(([key, item]) => <div key={key}><dt>{item.label}</dt><dd>{(item.quantity / Math.max(1, recipe.servings)).toFixed(item.quantity >= 100 ? 0 : 1)} {item.unit}</dd></div>)}</dl>;
+  return <dl className="full-nutrients">{items.map(([key, item]) => <div key={key}><dt>{item.label}</dt><dd>{item.quantity.toFixed(item.quantity >= 100 ? 0 : 1)} {item.unit}</dd></div>)}</dl>;
 }

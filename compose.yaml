@@ -3,7 +3,7 @@ services:
     profiles: [import]
     build: { context: ., dockerfile: recipe-import/Dockerfile }
     command: [/input/recipes.csv, /data/recipes.sqlite, --expected-rows, '39447']
-    volumes: ['${RECIPE_DATASET_CSV:?Set RECIPE_DATASET_CSV}:/input/recipes.csv:ro', 'recipe-data:/data']
+    volumes: ['${RECIPE_DATASET_CSV:-./data/recipes-with-nutrition.csv}:/input/recipes.csv:ro', 'recipe-data:/data']
     read_only: true
     tmpfs: [/tmp]
     cap_drop: [ALL]
@@ -11,7 +11,7 @@ services:
     profiles: [import]
     build: { context: ., dockerfile: nutrition-import/Dockerfile }
     command: [/input, /data/nutrition.sqlite]
-    volumes: ['${USDA_DATA_DIR:?Set USDA_DATA_DIR}:/input:ro', 'nutrition-data:/data']
+    volumes: ['${USDA_DATA_DIR:-./data/usda}:/input:ro', 'nutrition-data:/data']
     read_only: true
     tmpfs: [/tmp]
     cap_drop: [ALL]
