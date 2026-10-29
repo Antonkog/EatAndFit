@@ -16,7 +16,9 @@
     "typescript": "latest",
     "react": "latest",
     "react-dom": "latest",
-    "lucide-react": "latest"
+    "lucide-react": "latest",
+    "@firebase/app": "latest",
+    "@firebase/analytics": "latest"
   },
   "devDependencies": {
     "@types/node": "latest",
