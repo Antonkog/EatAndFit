@@ -17,6 +17,7 @@ import { readJsonResponse } from '../api/readJsonResponse';
 import { localDate, saveFood, type MealType } from '../data/db';
 import { IngredientScannerTrigger } from '../scanner/ScanView';
 import { getRecognitionCredential } from '../settings/secureKeys';
+import { generateRecipesWithMeta } from './metaRecipeGeneration';
 import { validateAiFilters, type AiRecipe } from './validation';
 
 type Range = { min: string; max: string };
@@ -85,6 +86,22 @@ export function AiRecipeView({
     try {
       const credential = await getRecognitionCredential();
       if (!credential) throw new Error('Add a Meta or Google Gemini API key in Settings first.');
+      const filters = {
+        idea,
+        cuisine,
+        dishType,
+        mealType,
+        diet: selectedDiets.join(', '),
+        ingredients: required,
+        exclude: [...selectedAllergens, ...parseList(excluded)].join(', '),
+        servings: servingCount,
+        nutrition: { calories, protein, carbs, fat },
+        maxTime,
+      };
+      if (credential.provider === 'META') {
+        setRecipes(await generateRecipesWithMeta(filters, credential.apiKey));
+        return;
+      }
       const response = await fetch('/api/ai/recipes/generate', {
         method: 'POST',
         headers: {
@@ -92,18 +109,7 @@ export function AiRecipeView({
           'content-type': 'application/json',
           'x-recognition-provider': credential.provider,
         },
-        body: JSON.stringify({
-          idea,
-          cuisine,
-          dishType,
-          mealType,
-          diet: selectedDiets.join(', '),
-          ingredients: required,
-          exclude: [...selectedAllergens, ...parseList(excluded)].join(', '),
-          servings: servingCount,
-          nutrition: { calories, protein, carbs, fat },
-          maxTime,
-        }),
+        body: JSON.stringify(filters),
       });
       const data = await readJsonResponse<{ error?: string; recipes: AiRecipe[] }>(response, 'Recipe generation');
       if (!response.ok) throw new Error(data.error || 'Recipe generation failed.');
