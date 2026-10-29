@@ -2,6 +2,7 @@ import { ArrowLeft, Search, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { exerciseMatches } from './search';
 import type { Exercise, ExerciseCatalog } from './types';
+import { scheduleWorkout } from '../data/db';
 
 type Gender = 'female' | 'male';
 
@@ -21,6 +22,7 @@ function ExerciseDetail({ exercise, gender, onClose }: { exercise: Exercise; gen
           <ol>{exercise.steps.map((step) => <li key={step}>{step}</li>)}</ol>
           <div className="guidance-grid"><section><h3>Form cues</h3><ul>{exercise.formCues.map((cue) => <li key={cue}>{cue}</li>)}</ul></section><section className="warning"><h3>Common mistakes</h3><ul>{exercise.commonMistakes.map((item) => <li key={item}>{item}</li>)}</ul></section></div>
           <h3>Breathing</h3><p>{exercise.breathing}</p>
+          <button className="primary-button" onClick={() => void scheduleWorkout(exercise.id, exercise.name).then(() => window.alert('Added to today’s workout.'))}>Add to today</button>
         </div>
       </article>
     </div>
