@@ -152,7 +152,7 @@ export function CalendarView({
 function DayHeading({ date, actions }: { date: string; actions: React.ReactNode }) {
   return (
     <div className="day-heading">
-      <div><span>Stored in this browser</span><h2>{fullDate(date)}</h2></div>
+      <div><h2>{fullDate(date)}</h2></div>
       <div className="day-actions">{actions}</div>
     </div>
   );

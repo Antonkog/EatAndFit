@@ -31,6 +31,7 @@ function BalanceGauge({ value }: { value: number }) {
   const needle = point(position.angle, 82);
   return (
     <div className="balance-gauge" aria-label={`Calorie balance ${signed(value)} kilocalories`}>
+      <div className="gauge-value"><strong style={{ color: gaugeColors[position.band] }}>{signed(value)}</strong><span>kcal</span></div>
       <svg viewBox="0 0 320 190" role="img">
         <path className="gauge-track" d={arc(180, 360)} />
         <path className="gauge-red" d={arc(180, 261)} />
@@ -39,8 +40,7 @@ function BalanceGauge({ value }: { value: number }) {
         <line className="gauge-needle" x1="160" y1="150" x2={needle.x} y2={needle.y} />
         <circle className="gauge-pin" cx="160" cy="150" r="9" />
       </svg>
-      <div className="gauge-value"><strong style={{ color: gaugeColors[position.band] }}>{signed(value)}</strong><span>kcal</span></div>
-      <div className="gauge-labels"><span>−5,000</span><span>0</span><span>+5,000</span></div>
+      <div className="gauge-labels"><span>+5,000</span><span>0</span><span>−5,000</span></div>
     </div>
   );
 }
@@ -49,7 +49,7 @@ function SevenDayChart({ days, today }: { days: DailyBalance[]; today: string })
   const maximum = Math.max(1, ...days.map((day) => Math.abs(day.balance)));
   return (
     <section className="balance-chart-card">
-      <header><div><p className="eyebrow">Rolling seven days</p><h2>Daily balance</h2></div><small>Burned − eaten</small></header>
+      <header><h2>Daily balance</h2><small>Eaten − burned</small></header>
       <div className="balance-chart" role="img" aria-label="Calorie balance for today and the previous six days">
         {days.map((day) => {
           const height = day.balance === 0 ? 0 : Math.max(5, Math.abs(day.balance) / maximum * 45);
@@ -93,18 +93,18 @@ export function BalanceView({ onAddFood, onAddExercise }: { onAddFood: () => voi
   return (
     <section className="balance-view">
       <header className="balance-heading">
-        <div><p className="eyebrow">Daily energy overview</p><h1>Balance for today</h1><p>{new Intl.DateTimeFormat('en-US', { weekday: 'long', month: 'long', day: 'numeric' }).format(new Date(`${today}T12:00:00`))}</p></div>
+        <div><h1>Balance for today</h1><p>{new Intl.DateTimeFormat('en-US', { weekday: 'long', month: 'long', day: 'numeric' }).format(new Date(`${today}T12:00:00`))}</p></div>
       </header>
       <div className="balance-grid">
         <article className="balance-gauge-card">
-          <div className="balance-card-title"><span><Flame size={18} /></span><div><strong>Calorie balance</strong><small>Completed exercise minus food</small></div></div>
+          <div className="balance-card-title"><span><Flame size={18} /></span><strong>Calorie balance</strong></div>
           <BalanceGauge value={totals.balance} />
           <p>Food moves the needle left. Calories from completed exercise move it right.</p>
         </article>
         <div className="balance-side">
           <section className="balance-totals">
-            <article><span className="eaten"><Utensils size={18} /></span><small>Eaten</small><strong>{Math.round(totals.eaten).toLocaleString('en-US')} kcal</strong></article>
-            <article><span className="burned"><Flame size={18} /></span><small>Burned</small><strong>{Math.round(totals.burned).toLocaleString('en-US')} kcal</strong></article>
+            <article><span className="eaten"><Utensils size={18} /></span><small>Eaten</small><strong>+{Math.round(totals.eaten).toLocaleString('en-US')} kcal</strong></article>
+            <article><span className="burned"><Flame size={18} /></span><small>Burned</small><strong>−{Math.round(totals.burned).toLocaleString('en-US')} kcal</strong></article>
             <article><span className={`net ${balanceBand(totals.balance)}`}><Flame size={18} /></span><small>Balance</small><strong>{signed(totals.balance)} kcal</strong></article>
           </section>
           <section className="balance-actions">

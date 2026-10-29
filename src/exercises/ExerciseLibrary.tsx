@@ -235,7 +235,6 @@ export function ExerciseLibrary({ onWorkoutAdded }: { onWorkoutAdded: (date: str
       <section className="muscle-browser">
         <div className="exercise-hero">
           <div className="hero-copy">
-            <p className="eyebrow"><span /> Private training library</p>
             <h1>Choose what you train today.</h1>
             <p>Start with a muscle group, then save an exercise to your local calendar.</p>
           </div>

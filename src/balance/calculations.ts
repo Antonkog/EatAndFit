@@ -28,7 +28,7 @@ export function dailyBalance(date: string, food: FoodEntry[], workouts: Workout[
   const burned = workouts
     .filter((item) => item.date === date && item.completed)
     .reduce((total, item) => total + safeCalories(item.caloriesBurned), 0);
-  return { date, eaten, burned, balance: burned - eaten };
+  return { date, eaten, burned, balance: eaten - burned };
 }
 
 export function rollingDateKeys(today: string, count = 7) {
@@ -45,13 +45,13 @@ export function rollingBalances(today: string, food: FoodEntry[], workouts: Work
 }
 
 export function balanceBand(balance: number): 'red' | 'yellow' | 'green' {
-  if (balance < -500) return 'red';
-  if (balance > 500) return 'green';
+  if (balance > 500) return 'red';
+  if (balance < -500) return 'green';
   return 'yellow';
 }
 
 export function gaugePosition(balance: number) {
   const clamped = Math.min(BALANCE_MAX, Math.max(BALANCE_MIN, balance));
-  const ratio = (clamped - BALANCE_MIN) / (BALANCE_MAX - BALANCE_MIN);
+  const ratio = (BALANCE_MAX - clamped) / (BALANCE_MAX - BALANCE_MIN);
   return { clamped, ratio, angle: 180 + ratio * 180, band: balanceBand(balance) };
 }

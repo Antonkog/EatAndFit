@@ -213,11 +213,11 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .gauge-track, .gauge-red, .gauge-yellow, .gauge-green { fill: none; stroke-width: 16; stroke-linecap: round; }
 .gauge-track { stroke: rgba(255,255,255,.06); stroke-width: 22; }
 .gauge-red { stroke: #ff6b5f; }
-.gauge-yellow { stroke: #ffd35f; }
+.gauge-yellow { stroke: #ffd35f; stroke-linecap: butt; }
 .gauge-green { stroke: var(--primary); }
 .gauge-needle { stroke: var(--text); stroke-width: 4; stroke-linecap: round; filter: drop-shadow(0 2px 5px rgba(0,0,0,.7)); }
 .gauge-pin { fill: var(--text); stroke: var(--surface); stroke-width: 4; }
-.gauge-value { position: absolute; top: 49%; left: 50%; display: grid; transform: translate(-50%,-50%); text-align: center; }
+.gauge-value { display: grid; margin-bottom: -22px; text-align: center; }
 .gauge-value strong { font-size: clamp(2.2rem,5vw,3.6rem); letter-spacing: -.06em; }
 .gauge-value span { color: var(--muted-text); font-size: 10px; font-weight: 750; text-transform: uppercase; }
 .gauge-labels { position: absolute; inset: auto 1% 3px; display: grid; grid-template-columns: 1fr 1fr 1fr; color: var(--muted-text); font-size: 9px; }

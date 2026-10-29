@@ -14,7 +14,7 @@ export type View = 'exercises' | 'calendar' | 'balance' | 'recipes' | 'scan' | '
 type PrimaryView = Exclude<View, 'ai' | 'settings'>;
 
 const navigation: Array<{ id: PrimaryView; label: string; icon: typeof Dumbbell }> = [
-  { id: 'exercises', label: 'Muscles', icon: Dumbbell },
+  { id: 'exercises', label: 'Exercises', icon: Dumbbell },
   { id: 'calendar', label: 'Calendar', icon: CalendarDays },
   { id: 'balance', label: 'Balance', icon: Gauge },
   { id: 'recipes', label: 'Recipes', icon: Utensils },
@@ -146,7 +146,9 @@ export function App() {
         </div>
       </header>
 
-      <main className="page">
+      <main className="page" onFocus={(event) => {
+        if (event.target instanceof HTMLInputElement && event.target.type === 'number') event.target.select();
+      }}>
         {view === 'exercises' && <ExerciseLibrary onWorkoutAdded={(date) => showCalendar(date, 'workout')} />}
         {view === 'balance' && <BalanceView onAddFood={() => showRecipes([], localDate(), 'balance')} onAddExercise={() => showView('exercises')} />}
         {view === 'calendar' && (
