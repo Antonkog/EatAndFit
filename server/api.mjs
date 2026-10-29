@@ -3,6 +3,7 @@ import { DatabaseSync } from 'node:sqlite';
 
 const port = Number(process.env.API_PORT ?? 3000);
 const recipePath = process.env.RECIPE_DB_PATH ?? './data/recipes.sqlite';
+const nutritionPath = process.env.NUTRITION_DB_PATH ?? './data/nutrition.sqlite';
 function json(response, status, payload) { response.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'access-control-allow-origin': 'http://localhost:5173' }); response.end(JSON.stringify(payload)); }
 function parseRecipe(item) { for (const key of ['cuisine','dish','meal','diet','health','cautions','ingredientLines']) { try { item[key] = JSON.parse(item[key] || '[]'); } catch { item[key] = []; } } try { item.nutrients = JSON.parse(item.nutrients || '{}'); } catch { item.nutrients = {}; } return item; }
 function recipes(url) {
@@ -12,5 +13,20 @@ function recipes(url) {
   const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : ''; const total = db.prepare(`SELECT COUNT(*) AS count FROM recipes ${where}`).get(values).count;
   const items = db.prepare(`SELECT id,title,source,url,image_url AS imageUrl,servings,calories,cuisine,dish,meal,diet,health,cautions,ingredient_lines AS ingredientLines,nutrients FROM recipes ${where} ORDER BY title LIMIT @limit OFFSET @offset`).all({ ...values, limit: pageSize, offset: (page - 1) * pageSize }); db.close(); return { items: items.map(parseRecipe), page, pageSize, total };
 }
-createServer((request, response) => { const url = new URL(request.url ?? '/', `http://${request.headers.host}`); try { if (url.pathname === '/api/recipes/healthz') return json(response, 200, { ok: true }); if (url.pathname === '/api/recipes') return json(response, 200, recipes(url)); return json(response, 404, { error: 'Not found' }); } catch (error) { return json(response, error.code === 'SQLITE_CANTOPEN' ? 503 : 500, { error: error.code === 'SQLITE_CANTOPEN' ? 'Recipe catalog is not ready.' : 'Request failed.' }); } }).listen(port, '127.0.0.1', () => console.log(`Eat & Fit API listening on ${port}`));
+function nutritionSearch(url) { const query=url.searchParams.get('q')?.trim(); if(!query) return {items:[]}; const db=new DatabaseSync(nutritionPath,{readOnly:true}); const items=db.prepare('SELECT f.fdc_id AS fdcId,f.description,f.data_type AS dataType FROM food_search s JOIN foods f ON f.fdc_id=s.fdc_id WHERE food_search MATCH @query ORDER BY rank LIMIT 20').all({query:`${query.replace(/[^a-zA-Z0-9 ]/g,' ')}*`}); db.close(); return {items}; }
+function nutritionFood(id) { const db=new DatabaseSync(nutritionPath,{readOnly:true}); const food=db.prepare('SELECT fdc_id AS fdcId,description,data_type AS dataType FROM foods WHERE fdc_id=?').get(id); if(!food){db.close();return null} food.nutrients=db.prepare('SELECT n.name,n.unit,fn.amount FROM food_nutrients fn JOIN nutrients n ON n.id=fn.nutrient_id WHERE fn.fdc_id=? ORDER BY n.name').all(id); food.portions=db.prepare('SELECT amount,unit,grams FROM portions WHERE fdc_id=?').all(id); db.close(); return food; }
+function readBody(request){return new Promise((resolve,reject)=>{let body='';request.on('data',(chunk)=>{body+=chunk;if(body.length>250000)request.destroy()});request.on('end',()=>{try{resolve(JSON.parse(body||'{}'))}catch(error){reject(error)}});request.on('error',reject)})}
+async function calculateNutrition(request){const body=await readBody(request);if(!Array.isArray(body.items))throw new Error('INVALID');const totals={};for(const item of body.items.slice(0,100)){const food=nutritionFood(Number(item.fdcId));if(!food)continue;for(const nutrient of food.nutrients){const key=`${nutrient.name}|${nutrient.unit}`;const value=(Number(nutrient.amount)||0)*(Number(item.grams)||0)/100;totals[key]=(totals[key]||0)+value}}return {nutrients:Object.entries(totals).map(([key,amount])=>{const [name,unit]=key.split('|');return{name,unit,amount}})} }
+createServer(async (request, response) => {
+  const url = new URL(request.url ?? '/', `http://${request.headers.host}`);
+  try {
+    if (url.pathname === '/api/recipes/healthz') return json(response, 200, { ok: true });
+    if (url.pathname === '/api/recipes') return json(response, 200, recipes(url));
+    if (url.pathname === '/api/nutrition/healthz') return json(response, 200, { ok: true });
+    if (url.pathname === '/api/nutrition/search') return json(response, 200, nutritionSearch(url));
+    if (url.pathname.startsWith('/api/nutrition/foods/')) { const food=nutritionFood(Number(url.pathname.split('/').at(-1))); return json(response,food?200:404,food??{error:'Food not found.'}); }
+    if (url.pathname === '/api/nutrition/calculate' && request.method === 'POST') return json(response,200,await calculateNutrition(request));
+    return json(response, 404, { error: 'Not found' });
+  } catch (error) { const unavailable=error.code==='SQLITE_CANTOPEN'; return json(response, unavailable?503:error.message==='INVALID'?400:500, { error: unavailable?'Data service is not ready.':'Request failed.' }); }
+}).listen(port, '127.0.0.1', () => console.log(`Eat & Fit API listening on ${port}`));
 
