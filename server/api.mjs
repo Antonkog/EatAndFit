@@ -14,6 +14,9 @@ function recipes(url) {
   const db = new DatabaseSync(recipePath, { readOnly: true }); const page = Math.max(1, Number(url.searchParams.get('page') ?? 1)); const pageSize = Math.min(40, Math.max(1, Number(url.searchParams.get('pageSize') ?? 20))); const query = url.searchParams.get('query')?.trim(); const clauses = []; const values = {};
   for (const [parameter, column] of [['cuisine','cuisine'],['dish','dish'],['meal','meal'],['diet','diet'],['health','health']]) { const value = url.searchParams.get(parameter); if (value) { clauses.push(`${column} LIKE @${parameter}`); values[parameter] = `%${value}%`; } }
   if (query) { clauses.push('(title LIKE @query OR ingredient_lines LIKE @query)'); values.query = `%${query}%`; }
+  const minCalories = Number(url.searchParams.get('minCalories')); const maxCalories = Number(url.searchParams.get('maxCalories'));
+  if (Number.isFinite(minCalories) && minCalories > 0) { clauses.push('calories >= @minCalories'); values.minCalories = minCalories; }
+  if (Number.isFinite(maxCalories) && maxCalories > 0) { clauses.push('calories <= @maxCalories'); values.maxCalories = maxCalories; }
   const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : ''; const total = db.prepare(`SELECT COUNT(*) AS count FROM recipes ${where}`).get(values).count;
   const items = db.prepare(`SELECT id,title,source,url,image_url AS imageUrl,servings,calories,cuisine,dish,meal,diet,health,cautions,ingredient_lines AS ingredientLines,nutrients FROM recipes ${where} ORDER BY title LIMIT @limit OFFSET @offset`).all({ ...values, limit: pageSize, offset: (page - 1) * pageSize }); db.close(); return { items: items.map(parseRecipe), page, pageSize, total };
 }

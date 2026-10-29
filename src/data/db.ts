@@ -1,6 +1,7 @@
-export type WorkoutSet = { id: string; reps: number; weightKg: number; complete: boolean };
+export type WorkoutSet = { id: string; reps: number; weightKg: number; durationSeconds?: number; complete: boolean };
 export type Workout = { id: string; date: string; exerciseId: string; exerciseName: string; sets: WorkoutSet[]; notes: string; completed: boolean };
-export type FoodEntry = { id: string; date: string; title: string; calories?: number; protein?: number; carbs?: number; fat?: number; provider: string; payload?: unknown };
+export type MealType = 'breakfast' | 'lunch' | 'dinner' | 'snack';
+export type FoodEntry = { id: string; date: string; title: string; calories?: number; protein?: number; carbs?: number; fat?: number; provider: string; mealType?: MealType; quantity?: number; quantityUnit?: 'serving' | 'g' | 'ml'; imageUrl?: string; payload?: unknown };
 export type LocalProduct = { barcode: string; name: string; calories?: number; protein?: number; carbs?: number; fat?: number };
 export type Backup = { schemaVersion: 1; exportedAt: string; workouts: Workout[]; food: FoodEntry[]; products: LocalProduct[] };
 
@@ -50,6 +51,9 @@ export async function workoutsForDate(date: string) {
   return (await all<Workout>('workouts')).filter((item) => item.date === date).sort((a, b) => a.exerciseName.localeCompare(b.exerciseName));
 }
 
+export async function allWorkouts() { return all<Workout>('workouts'); }
+export async function allFood() { return all<FoodEntry>('food'); }
+
 export async function scheduleWorkout(exerciseId: string, exerciseName: string, date = localDate()) {
   const workout: Workout = { id: crypto.randomUUID(), date, exerciseId, exerciseName, notes: '', completed: false, sets: [{ id: crypto.randomUUID(), reps: 10, weightKg: 0, complete: false }] };
   await put('workouts', workout);
@@ -71,6 +75,12 @@ export async function removeWorkout(id: string) {
 
 export async function saveFood(entry: FoodEntry) { await put('food', entry); window.dispatchEvent(new Event('eatfit-data-change')); }
 export async function foodForDate(date: string) { return (await all<FoodEntry>('food')).filter((item) => item.date === date); }
+export async function removeFood(id: string) {
+  const db = await openDatabase();
+  await requestResult(db.transaction('food', 'readwrite').objectStore('food').delete(id));
+  db.close();
+  window.dispatchEvent(new Event('eatfit-data-change'));
+}
 export async function saveProduct(product: LocalProduct) { await put('products', product); }
 export async function getProduct(barcode: string) { const db = await openDatabase(); const result = await requestResult(db.transaction('products').objectStore('products').get(barcode)); db.close(); return result as LocalProduct | undefined; }
 

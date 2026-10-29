@@ -1,15 +1,20 @@
-import { ArrowLeft, Search, X } from 'lucide-react';
+import {
+  AlertTriangle,
+  ArrowLeft,
+  CalendarPlus,
+  Check,
+  Clock3,
+  Play,
+  Search,
+  X,
+} from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
+import { localDate, scheduleWorkout } from '../data/db';
 import { exerciseMatches } from './search';
 import type { Exercise, ExerciseCatalog } from './types';
-import { scheduleWorkout } from '../data/db';
 
 type Gender = 'female' | 'male';
-
-type MuscleGroup = {
-  name: string;
-  targets: string[];
-};
+type MuscleGroup = { name: string; targets: string[] };
 
 export const muscleGroups: MuscleGroup[] = [
   { name: 'Neck', targets: ['neck flexors', 'sternocleidomastoid'] },
@@ -36,85 +41,248 @@ export const muscleGroups: MuscleGroup[] = [
   { name: 'Full body & mobility', targets: ['cardiovascular system', 'full body'] },
 ];
 
-function ExerciseDetail({ exercise, gender, onClose }: { exercise: Exercise; gender: Gender; onClose: () => void }) {
-  const video = exercise.media.video?.[gender] ?? exercise.media.video?.female ?? exercise.media.video?.male;
+const MODEL_STORAGE_KEY = 'eat-and-fit-white:exercise-model';
+
+function preferredGender(): Gender {
+  return localStorage.getItem(MODEL_STORAGE_KEY) === 'male' ? 'male' : 'female';
+}
+
+function titleCase(value: string) {
+  return value.replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function mediaFor(exercise: Exercise, gender: Gender) {
+  return {
+    video: exercise.media.video?.[gender] ?? exercise.media.video?.female ?? exercise.media.video?.male,
+    thumbnail: exercise.media.thumbnail?.[gender] ?? exercise.media.thumbnail?.female ?? exercise.media.thumbnail?.male,
+  };
+}
+
+function secondaryMuscles(exercise: Exercise) {
+  const bodyPart = exercise.body_part.toLowerCase();
+  if (bodyPart.includes('chest')) return 'Triceps, shoulders';
+  if (bodyPart.includes('back')) return 'Biceps, forearms';
+  if (bodyPart.includes('shoulder')) return 'Triceps, trapezius';
+  if (bodyPart.includes('upper arm')) return 'Forearms, shoulders';
+  if (bodyPart.includes('upper leg')) return 'Glutes, calves';
+  if (bodyPart.includes('lower leg')) return 'Hamstrings, quadriceps';
+  if (bodyPart.includes('waist')) return 'Hip flexors, lower back';
+  return 'Supporting stabilizers';
+}
+
+function ExerciseDetail({
+  exercise,
+  onClose,
+  onAdded,
+}: {
+  exercise: Exercise;
+  onClose: () => void;
+  onAdded: (date: string) => void;
+}) {
+  const [gender, setGender] = useState<Gender>(preferredGender);
+  const [date, setDate] = useState(localDate());
+  const [adding, setAdding] = useState(false);
+  const [added, setAdded] = useState(false);
+  const [error, setError] = useState('');
+  const [duration, setDuration] = useState(7);
+  const media = mediaFor(exercise, gender);
+  const available = new Set(Object.keys(exercise.media.video ?? {}));
+
+  useEffect(() => {
+    const close = (event: KeyboardEvent) => event.key === 'Escape' && onClose();
+    window.addEventListener('keydown', close);
+    return () => window.removeEventListener('keydown', close);
+  }, [onClose]);
+
+  const chooseGender = (value: Gender) => {
+    if (!available.has(value)) return;
+    setGender(value);
+    localStorage.setItem(MODEL_STORAGE_KEY, value);
+  };
+
+  const add = async () => {
+    setAdding(true);
+    setError('');
+    try {
+      await scheduleWorkout(exercise.id, exercise.name, date);
+      setAdded(true);
+      onAdded(date);
+      onClose();
+    } catch {
+      setError('Could not add this exercise. Please try again.');
+    } finally {
+      setAdding(false);
+    }
+  };
+
   return (
     <div className="detail-overlay" role="dialog" aria-modal="true" aria-label={exercise.name}>
-      <article className="detail-panel">
-        <button className="detail-close" onClick={onClose}><X size={20} /> Close</button>
-        {video && <video src={video} controls muted playsInline poster={exercise.media.thumbnail?.[gender]} />}
-        <div className="detail-content">
-          <p className="eyebrow">{exercise.body_part} · {exercise.difficulty}</p>
-          <h2>{exercise.name}</h2>
-          <p>{exercise.short_description}</p>
-          <dl className="facts"><div><dt>Target</dt><dd>{exercise.target}</dd></div><div><dt>Equipment</dt><dd>{exercise.equipment}</dd></div></dl>
-          <h3>How to do it</h3>
-          <ol>{exercise.steps.map((step) => <li key={step}>{step}</li>)}</ol>
-          <div className="guidance-grid"><section><h3>Form cues</h3><ul>{exercise.formCues.map((cue) => <li key={cue}>{cue}</li>)}</ul></section><section className="warning"><h3>Common mistakes</h3><ul>{exercise.commonMistakes.map((item) => <li key={item}>{item}</li>)}</ul></section></div>
-          <h3>Breathing</h3><p>{exercise.breathing}</p>
-          <button className="primary-button" onClick={() => void scheduleWorkout(exercise.id, exercise.name).then(() => window.alert('Added to today’s workout.'))}>Add to today</button>
+      <article className="exercise-detail-panel">
+        <button className="detail-close" onClick={onClose} aria-label="Close"><X size={25} /></button>
+        <div className="detail-media">
+          {media.video && (
+            <video
+              key={`${exercise.id}-${gender}`}
+              src={media.video}
+              controls
+              loop
+              playsInline
+              preload="metadata"
+              poster={media.thumbnail}
+              onLoadedMetadata={(event) => setDuration(Math.max(1, Math.round(event.currentTarget.duration || 7)))}
+            />
+          )}
+          <span className="media-resolution"><Play size={13} />1920 × 1080</span>
+        </div>
+        <div className="exercise-detail-body">
+          <header className="exercise-detail-header">
+            <div className="badge-row">
+              <span className="badge solid">{titleCase(exercise.body_part)}</span>
+              <span className="badge solid">{titleCase(exercise.difficulty)}</span>
+              <span className="duration"><Clock3 size={13} /> {duration} sec</span>
+            </div>
+            <h2>{exercise.name}</h2>
+            <span className="muscle-pill">{titleCase(exercise.body_part)}</span>
+          </header>
+
+          <div className="exercise-detail-sections">
+            <section>
+              <h3>Demonstration model</h3>
+              <div className="segmented detail-model">
+                <button className={gender === 'female' ? 'active' : ''} disabled={!available.has('female')} onClick={() => chooseGender('female')}>Female</button>
+                <button className={gender === 'male' ? 'active' : ''} disabled={!available.has('male')} onClick={() => chooseGender('male')}>Male</button>
+              </div>
+            </section>
+            <section>
+              <h3>Description</h3>
+              <p>{exercise.short_description || exercise.instructions}</p>
+              {exercise.instructions && exercise.instructions !== exercise.short_description && <p>{exercise.instructions}</p>}
+            </section>
+            <section>
+              <h3>Technique</h3>
+              <ol className="technique-list">
+                {exercise.steps.map((step, index) => <li key={`${index}-${step}`}><span>{index + 1}</span><p>{step}</p></li>)}
+              </ol>
+            </section>
+            {exercise.formCues.length > 0 && <InfoList title="Form cues" items={exercise.formCues} />}
+            {exercise.commonMistakes.length > 0 && (
+              <section className="mistakes-panel">
+                <h4><AlertTriangle size={17} /> Common mistakes</h4>
+                <BulletList items={exercise.commonMistakes} />
+              </section>
+            )}
+            {exercise.breathing && <section><h3>Breathing</h3><p>{exercise.breathing}</p></section>}
+            <section>
+              <h3>Exercise details</h3>
+              <dl className="exercise-facts">
+                <Fact label="Target" value={exercise.target} />
+                <Fact label="Equipment" value={exercise.equipment} />
+                <Fact label="Secondary muscles" value={secondaryMuscles(exercise)} />
+                <Fact label="Compound" value={exercise.compound ? 'Yes' : 'No'} />
+                <Fact label="Unilateral" value={exercise.unilateral ? 'Yes' : 'No'} />
+              </dl>
+            </section>
+          </div>
+          <footer className="exercise-detail-footer">
+            {error && <p className="form-error">{error}</p>}
+            <label>Workout date<input type="date" value={date} onChange={(event) => setDate(event.target.value)} /></label>
+            <button className="primary-button" disabled={adding} onClick={() => void add()}>
+              {added ? <Check size={18} /> : <CalendarPlus size={18} />}
+              {adding ? 'Adding…' : added ? 'Added' : 'Add to workout'}
+            </button>
+          </footer>
         </div>
       </article>
     </div>
   );
 }
 
-export function ExerciseLibrary() {
+function InfoList({ title, items }: { title: string; items: string[] }) {
+  return <section><h3>{title}</h3><BulletList items={items} /></section>;
+}
+
+function BulletList({ items }: { items: string[] }) {
+  return <ul className="bullet-list">{items.map((item) => <li key={item}><i /> <span>{item}</span></li>)}</ul>;
+}
+
+function Fact({ label, value }: { label: string; value: string }) {
+  return <div><dt>{label}</dt><dd>{titleCase(value)}</dd></div>;
+}
+
+export function ExerciseLibrary({ onWorkoutAdded }: { onWorkoutAdded: (date: string) => void }) {
   const [catalog, setCatalog] = useState<ExerciseCatalog>();
   const [query, setQuery] = useState('');
   const [selectedGroup, setSelectedGroup] = useState<MuscleGroup>();
-  const [gender, setGender] = useState<Gender>(() => localStorage.getItem('eatfit-model') === 'male' ? 'male' : 'female');
   const [selected, setSelected] = useState<Exercise>();
-  useEffect(() => { void fetch('/data/catalog.json').then((response) => response.json()).then(setCatalog); }, []);
-  const groupedExercises = useMemo(() => new Map(muscleGroups.map((group) => [group.name, (catalog?.exercises ?? []).filter((exercise) => group.targets.includes(exercise.target.toLowerCase()))])), [catalog]);
-  const visible = useMemo(() => (selectedGroup ? groupedExercises.get(selectedGroup.name) ?? [] : []).filter((item) => exerciseMatches(item, query)), [groupedExercises, query, selectedGroup]);
-  const chooseGender = (value: Gender) => { setGender(value); localStorage.setItem('eatfit-model', value); };
 
-  if (!catalog) return <section className="empty-card"><p>Loading exercise library…</p></section>;
-  if (!selectedGroup) return (
-    <section className="muscle-browser">
-      <div className="exercise-hero">
-        <div className="hero-copy">
-          <p className="eyebrow"><span /> PRIVATE TRAINING LIBRARY</p>
-          <h1>Choose what<br />you train today.</h1>
-          <p>Start with a muscle group, then save an exercise to your local calendar.</p>
-        </div>
-        <div className="hero-stats" aria-label="Library statistics">
-          <div><strong>{muscleGroups.length}</strong><span>Muscle groups</span></div>
-          <div><strong>{catalog.exercises.length}</strong><span>Exercises</span></div>
-        </div>
-      </div>
-      <div className="muscle-grid">
-        {muscleGroups.map((group, index) => {
-          const exercises = groupedExercises.get(group.name) ?? [];
-          const cover = exercises[0]?.media.thumbnail?.[gender] ?? exercises[0]?.media.thumbnail?.female ?? exercises[0]?.media.thumbnail?.male;
-          return <button className={`muscle-card ${index === 0 ? 'featured' : ''}`} key={group.name} onClick={() => { setSelectedGroup(group); setQuery(''); }}>
-            {cover && <img src={cover} alt="" loading={index < 5 ? 'eager' : 'lazy'} />}
-            <span className="muscle-shade" />
-            <span className="muscle-label"><strong>{group.name}</strong><small><i /> {exercises.length} movements</small></span>
-          </button>;
-        })}
-      </div>
-    </section>
+  useEffect(() => {
+    void fetch('/data/catalog.json').then((response) => response.json()).then(setCatalog);
+  }, []);
+
+  const groupedExercises = useMemo(
+    () => new Map(muscleGroups.map((group) => [group.name, (catalog?.exercises ?? []).filter((exercise) => group.targets.includes(exercise.target.toLowerCase()))])),
+    [catalog],
   );
+  const visible = useMemo(
+    () => (selectedGroup ? groupedExercises.get(selectedGroup.name) ?? [] : []).filter((item) => exerciseMatches(item, query)),
+    [groupedExercises, query, selectedGroup],
+  );
+
+  if (!catalog) return <section className="skeleton-grid">{Array.from({ length: 10 }, (_, index) => <i key={index} />)}</section>;
+
+  if (!selectedGroup) {
+    return (
+      <section className="muscle-browser">
+        <div className="exercise-hero">
+          <div className="hero-copy">
+            <p className="eyebrow"><span /> Private training library</p>
+            <h1>Choose what you train today.</h1>
+            <p>Start with a muscle group, then save an exercise to your local calendar.</p>
+          </div>
+          <div className="hero-stats" aria-label="Library statistics">
+            <div><strong>{muscleGroups.length}</strong><span>Muscle groups</span></div>
+            <div><strong>{catalog.exercises.length}</strong><span>Exercises</span></div>
+          </div>
+        </div>
+        <div className="muscle-grid">
+          {muscleGroups.map((group, index) => {
+            const exercises = groupedExercises.get(group.name) ?? [];
+            const cover = exercises[0] ? mediaFor(exercises[0], preferredGender()).thumbnail : undefined;
+            return (
+              <button className={`muscle-card ${index === 0 ? 'featured' : ''}`} key={group.name} onClick={() => { setSelectedGroup(group); setQuery(''); }}>
+                {cover && <img src={cover} alt="" loading={index < 5 ? 'eager' : 'lazy'} />}
+                <span className="muscle-shade" />
+                <span className="muscle-label"><strong>{group.name}</strong><small><i /> {exercises.length} movements</small></span>
+              </button>
+            );
+          })}
+        </div>
+      </section>
+    );
+  }
+
   return (
     <>
       <section className="exercise-list-heading">
-        <button className="back-button" onClick={() => setSelectedGroup(undefined)}><ArrowLeft size={17} /> All muscle groups</button>
+        <button className="back-button" onClick={() => setSelectedGroup(undefined)}><ArrowLeft size={17} /> Back to muscles</button>
         <div className="exercise-list-title">
-          <div><p className="eyebrow">TRAINING LIBRARY</p><h1>{selectedGroup.name}</h1><p>{visible.length} movements</p></div>
-          <div className="exercise-list-tools">
-            <label className="search-box"><Search size={18} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search exercises" /></label>
-            <div className="segmented" aria-label="Demonstration model"><button className={gender === 'female' ? 'active' : ''} onClick={() => chooseGender('female')}>Female</button><button className={gender === 'male' ? 'active' : ''} onClick={() => chooseGender('male')}>Male</button></div>
-          </div>
+          <div><span className="badge outline">{visible.length} movements</span><h1>{selectedGroup.name}</h1></div>
+          <label className="search-box"><Search size={18} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search exercises" aria-label="Search exercises" /></label>
         </div>
       </section>
       <section className="exercise-grid">
-        {visible.map((exercise) => <button className="exercise-card" key={exercise.id} onClick={() => setSelected(exercise)}><img loading="lazy" src={exercise.media.thumbnail?.[gender] ?? exercise.media.thumbnail?.female} alt="" /><span><small>{exercise.body_part} · {exercise.equipment}</small><strong>{exercise.name}</strong><em>{exercise.target}</em></span></button>)}
+        {visible.map((exercise) => {
+          const media = mediaFor(exercise, preferredGender());
+          return (
+            <button className="exercise-card" key={exercise.id} onClick={() => setSelected(exercise)} aria-label={exercise.name}>
+              {media.thumbnail && <img loading="lazy" src={media.thumbnail} alt="" />}
+              <span><small>{exercise.body_part}</small><strong>{exercise.name}</strong><em>7 sec</em></span>
+            </button>
+          );
+        })}
       </section>
       {visible.length === 0 && <div className="empty-card"><p>No exercises match your search.</p></div>}
-      {selected && <ExerciseDetail exercise={selected} gender={gender} onClose={() => setSelected(undefined)} />}
+      {selected && <ExerciseDetail exercise={selected} onClose={() => setSelected(undefined)} onAdded={onWorkoutAdded} />}
     </>
   );
 }
-

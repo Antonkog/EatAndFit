@@ -5,12 +5,15 @@ export type ExerciseMedia = {
 
 export type Exercise = {
   id: string;
+  source_id?: string;
   name: string;
   body_part: string;
   target: string;
   equipment: string;
   muscle_group: string;
   difficulty: string;
+  compound?: boolean | number;
+  unilateral?: boolean | number;
   short_description: string;
   instructions: string;
   breathing: string;
