@@ -1,5 +1,6 @@
 import { CalendarDays, Dumbbell, ScanLine, Settings, Utensils } from 'lucide-react';
 import { useState } from 'react';
+import { ExerciseLibrary } from './exercises/ExerciseLibrary';
 
 export type View = 'exercises' | 'calendar' | 'recipes' | 'scan' | 'settings';
 
@@ -31,11 +32,7 @@ export function App() {
           <h1>{view === 'exercises' ? 'Build a stronger routine' : navigation.find((item) => item.id === view)?.label ?? 'Settings'}</h1>
           <p>Simple tools for thoughtful training and everyday nutrition.</p>
         </section>
-        <section className="empty-card">
-          <Dumbbell size={28} />
-          <h2>{view === 'exercises' ? 'Your exercise library is next' : `${view[0].toUpperCase()}${view.slice(1)} is being prepared`}</h2>
-          <p>This fresh workspace is ready for the next product milestone.</p>
-        </section>
+        {view === 'exercises' ? <ExerciseLibrary /> : <section className="empty-card"><Dumbbell size={28} /><h2>{`${view[0].toUpperCase()}${view.slice(1)} is being prepared`}</h2><p>This fresh workspace is ready for the next product milestone.</p></section>}
       </main>
 
       <nav className="bottom-nav" aria-label="Primary navigation">
