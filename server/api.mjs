@@ -5,6 +5,7 @@ import { detectIngredients } from './ingredient-provider.mjs';
 import { findProduct } from './openfoodfacts.mjs';
 
 const port = Number(process.env.API_PORT ?? 3000);
+const host = process.env.API_HOST ?? '0.0.0.0';
 const recipePath = process.env.RECIPE_DB_PATH ?? './data/recipes.sqlite';
 const nutritionPath = process.env.NUTRITION_DB_PATH ?? './data/nutrition.sqlite';
 function json(response, status, payload) { response.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'access-control-allow-origin': 'http://localhost:5173' }); response.end(JSON.stringify(payload)); }
@@ -37,5 +38,5 @@ createServer(async (request, response) => {
     if (url.pathname === '/api/nutrition/calculate' && request.method === 'POST') return json(response,200,await calculateNutrition(request));
     return json(response, 404, { error: 'Not found' });
   } catch (error) { const unavailable=error.code==='SQLITE_CANTOPEN'; const status=error.message==='INVALID'||error.message==='MODEL_FORMAT'?400:error.message==='AI_NOT_CONFIGURED'?503:error.message==='AI_RATE_LIMIT'?429:unavailable?503:500; const message=error.message==='AI_NOT_CONFIGURED'?'AI generation is not configured.':error.message==='AI_RATE_LIMIT'?'The AI service is busy. Try again shortly.':unavailable?'Data service is not ready.':'Request failed.'; return json(response,status,{error:message}); }
-}).listen(port, '127.0.0.1', () => console.log(`Eat & Fit API listening on ${port}`));
+}).listen(port, host, () => console.log(`Eat & Fit API listening on ${host}:${port}`));
 
