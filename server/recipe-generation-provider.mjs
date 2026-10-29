@@ -1,5 +1,6 @@
 const GEMINI_API_ROOT = 'https://generativelanguage.googleapis.com/v1beta/models';
 const META_API_BASE_URL = 'https://api.meta.ai/v1';
+const DEFAULT_META_MODEL = 'muse-spark-1.3-contributor';
 
 const nutritionSchema = {
   type: 'object',
@@ -115,10 +116,10 @@ export class RecipeGenerationProvider {
 }
 
 export class MetaRecipeGenerationProvider extends RecipeGenerationProvider {
-  constructor({ apiKey = '', model = 'muse-spark-1.3', baseUrl = META_API_BASE_URL, fetchImpl = fetch, timeoutMs = 45_000 } = {}) {
+  constructor({ apiKey = '', model = DEFAULT_META_MODEL, baseUrl = META_API_BASE_URL, fetchImpl = fetch, timeoutMs = 45_000 } = {}) {
     super();
     this.apiKey = apiKey;
-    this.model = model || 'muse-spark-1.3';
+    this.model = model || DEFAULT_META_MODEL;
     this.baseUrl = (baseUrl || META_API_BASE_URL).replace(/\/$/, '');
     this.fetch = fetchImpl;
     this.timeoutMs = parseTimeout(timeoutMs);
@@ -146,6 +147,10 @@ export class MetaRecipeGenerationProvider extends RecipeGenerationProvider {
       throw providerError('Meta is temporarily unavailable.', 502, 'provider_unavailable');
     }
     const body = await response.json().catch(() => ({}));
+    if (response.status === 401) throw providerError('Wrong Meta API key.', 401, 'invalid_api_key');
+    if (response.status === 402) throw providerError('Meta billing is not available for this API key.', 402, 'billing_required');
+    if (response.status === 403) throw providerError('This Meta API key cannot generate recipes.', 403, 'provider_forbidden');
+    if (response.status === 404 && body?.error?.code === 'model_not_found') throw providerError('The Meta recipe model is not available for this API key.', 503, 'model_unavailable');
     if (response.status === 429) throw providerError('Meta rate limit reached.', 429, 'rate_limited');
     if (body?.error?.code === 'content_policy_violation' || body?.choices?.[0]?.finish_reason === 'content_filter' || body?.choices?.[0]?.message?.refusal) {
       throw providerError('Meta blocked this request.', 422, 'content_blocked');

@@ -13,6 +13,7 @@ import {
   X,
 } from 'lucide-react';
 import { useState } from 'react';
+import { readJsonResponse } from '../api/readJsonResponse';
 import { localDate, saveFood, type MealType } from '../data/db';
 import { IngredientScannerTrigger } from '../scanner/ScanView';
 import { getRecognitionCredential } from '../settings/secureKeys';
@@ -104,7 +105,7 @@ export function AiRecipeView({
           maxTime,
         }),
       });
-      const data = await response.json();
+      const data = await readJsonResponse<{ error?: string; recipes: AiRecipe[] }>(response, 'Recipe generation');
       if (!response.ok) throw new Error(data.error || 'Recipe generation failed.');
       setRecipes(data.recipes);
     } catch (value) {

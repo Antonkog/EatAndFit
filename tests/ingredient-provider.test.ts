@@ -87,11 +87,18 @@ test('Meta sends the image and strict schema to chat completions and normalizes 
   assert.doesNotMatch(JSON.stringify(await provider.getHealth()), /private-meta-key/);
 });
 
+test('Meta defaults to the hackathon-accessible Muse Spark Contributor model', () => {
+  const provider = new MetaIngredientRecognitionProvider({ apiKey: 'private-meta-key' });
+  assert.equal(provider.getHealth().model, 'muse-spark-1.3-contributor');
+});
+
 test('Meta maps configuration, blocks, rate limits, timeouts, and malformed responses', async (context) => {
   const missing = new MetaIngredientRecognitionProvider();
   await assert.rejects(() => missing.detect(JPEG_DATA_URL), errorStatus(503, 'provider_not_configured'));
 
   const cases: Array<[string, () => Promise<Response>, number, string]> = [
+    ['invalid key', async () => new Response(JSON.stringify({ error: { code: 'invalid_api_key' } }), { status: 401 }), 401, 'invalid_api_key'],
+    ['missing model', async () => new Response(JSON.stringify({ error: { code: 'model_not_found' } }), { status: 404 }), 503, 'model_unavailable'],
     ['block', async () => new Response(JSON.stringify({ choices: [{ finish_reason: 'content_filter' }] }), { status: 200 }), 422, 'content_blocked'],
     ['rate limit', async () => new Response('{}', { status: 429 }), 429, 'rate_limited'],
     ['malformed', async () => new Response(JSON.stringify({ choices: [{ message: { content: '{broken' } }] }), { status: 200 }), 502, 'invalid_response'],

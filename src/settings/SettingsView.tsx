@@ -131,7 +131,7 @@ export function SettingsView() {
           </div>
           {__SMART_SCANNER__ && <section className="ai-disclosure">
             <h4>User-configured AI services</h4>
-            <p>Ingredient recognition and AI recipe generation use the Meta or Google Gemini provider selected by the user. The user supplies the API key and is responsible for provider charges and terms. During a request, the submitted content and selected key leave the device over HTTPS. Eat & Fit forwards them only for that request and does not store them on its server. Generated and recognized results require user review.</p>
+            <p>Ingredient recognition and AI recipe generation use the Meta or Google Gemini provider selected by the user. Meta requests use Muse Spark 1.3 Contributor, where submitted content may be used by Meta to improve its products. The user supplies the API key and is responsible for provider charges and terms. During a request, the submitted content and selected key leave the device over HTTPS. Eat & Fit forwards them only for that request and does not store them on its server. Generated and recognized results require user review.</p>
           </section>}
           <section className="safety">
             <h4>Safety</h4>

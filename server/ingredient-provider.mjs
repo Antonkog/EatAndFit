@@ -1,5 +1,6 @@
 const GEMINI_API_ROOT = 'https://generativelanguage.googleapis.com/v1beta/models';
 const META_API_BASE_URL = 'https://api.meta.ai/v1';
+const DEFAULT_META_MODEL = 'muse-spark-1.3-contributor';
 
 export const RecognitionModelProvider = Object.freeze({
   META: 'META',
@@ -220,10 +221,10 @@ export class GeminiIngredientRecognitionProvider extends IngredientRecognitionPr
 }
 
 export class MetaIngredientRecognitionProvider extends IngredientRecognitionProvider {
-  constructor({ apiKey = '', model = 'muse-spark-1.3', baseUrl = META_API_BASE_URL, fetchImpl = fetch, timeoutMs = 45_000 } = {}) {
+  constructor({ apiKey = '', model = DEFAULT_META_MODEL, baseUrl = META_API_BASE_URL, fetchImpl = fetch, timeoutMs = 45_000 } = {}) {
     super();
     this.apiKey = apiKey;
-    this.model = model || 'muse-spark-1.3';
+    this.model = model || DEFAULT_META_MODEL;
     this.baseUrl = (baseUrl || META_API_BASE_URL).replace(/\/$/, '');
     this.fetch = fetchImpl;
     this.timeoutMs = parseTimeout(timeoutMs);
@@ -263,6 +264,12 @@ export class MetaIngredientRecognitionProvider extends IngredientRecognitionProv
     const body = await response.json().catch(() => ({}));
     const blocked = body?.error?.code === 'content_policy_violation' || body?.choices?.[0]?.finish_reason === 'content_filter';
     if (blocked) throw recognitionError('Meta blocked this image.', 422, 'content_blocked');
+    if (response.status === 401) throw recognitionError('Wrong Meta API key.', 401, 'invalid_api_key');
+    if (response.status === 402) throw recognitionError('Meta billing is not available for this API key.', 402, 'billing_required');
+    if (response.status === 403) throw recognitionError('This Meta API key cannot use ingredient recognition.', 403, 'provider_forbidden');
+    if (response.status === 404 && body?.error?.code === 'model_not_found') {
+      throw recognitionError('The Meta ingredient-recognition model is not available for this API key.', 503, 'model_unavailable');
+    }
     if (response.status === 429) throw recognitionError('Meta rate limit reached.', 429, 'rate_limited');
     if (!response.ok) throw recognitionError('Meta request failed.', 502, 'provider_error');
     const message = body?.choices?.[0]?.message;

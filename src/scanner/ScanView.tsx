@@ -12,6 +12,7 @@ import {
   X,
 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { readJsonResponse } from '../api/readJsonResponse';
 import { localDate } from '../data/db';
 import { getRecognitionCredential, getRecognitionKeyStatus, RECOGNITION_KEYS_CHANGED } from '../settings/secureKeys';
 import { prepareJpeg } from './image';
@@ -137,7 +138,7 @@ function IngredientScannerPanel({
         },
         body: JSON.stringify({ image }),
       });
-      const data = await response.json();
+      const data = await readJsonResponse<{ error?: string; ingredients?: string[] }>(response, 'Ingredient recognition');
       if (!response.ok) throw new Error(data.error || 'Recognition failed.');
       setIngredients(data.ingredients ?? []);
       setStatus((data.ingredients ?? []).length ? 'Review every ingredient before continuing.' : 'No ingredients were recognized. Try another photo.');
