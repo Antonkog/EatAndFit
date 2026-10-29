@@ -195,6 +195,64 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .product-card img { width: 100px; height: 100px; object-fit: contain; border-radius: 10px; background: white; }
 .product-card h3 { margin: 4px 0; }
 
+.balance-view { max-width: 1180px; margin: 0 auto; }
+.balance-heading { display: flex; align-items: end; justify-content: space-between; gap: 20px; margin-bottom: 30px; }
+.balance-heading h1 { margin: 0; font-size: clamp(3rem,6vw,5rem); line-height: .95; letter-spacing: -.06em; }
+.balance-heading > div > p:last-child { margin: 14px 0 0; color: var(--muted-text); }
+.balance-grid { display: grid; grid-template-columns: minmax(0,1.15fr) minmax(320px,.85fr); gap: 16px; }
+.balance-gauge-card, .balance-actions, .balance-chart-card, .balance-totals article { border: 1px solid var(--border); background: rgba(17,25,19,.9); }
+.balance-gauge-card { padding: 22px; border-radius: 25px; }
+.balance-card-title { display: flex; align-items: center; gap: 11px; }
+.balance-card-title > span { display: grid; width: 42px; height: 42px; place-items: center; border-radius: 14px; color: var(--primary-ink); background: var(--primary); box-shadow: 0 0 24px rgba(183,255,79,.13); }
+.balance-card-title strong, .balance-card-title small { display: block; }
+.balance-card-title small { margin-top: 3px; color: var(--muted-text); font-size: 10px; }
+.balance-gauge-card > p { max-width: 520px; margin: 2px auto 0; color: var(--muted-text); font-size: 11px; line-height: 1.6; text-align: center; }
+.balance-gauge { position: relative; max-width: 520px; margin: 8px auto 0; }
+.balance-gauge svg { display: block; width: 100%; overflow: visible; }
+.gauge-track, .gauge-red, .gauge-yellow, .gauge-green { fill: none; stroke-width: 16; stroke-linecap: round; }
+.gauge-track { stroke: rgba(255,255,255,.06); stroke-width: 22; }
+.gauge-red { stroke: #ff6b5f; }
+.gauge-yellow { stroke: #ffd35f; }
+.gauge-green { stroke: var(--primary); }
+.gauge-needle { stroke: var(--text); stroke-width: 4; stroke-linecap: round; filter: drop-shadow(0 2px 5px rgba(0,0,0,.7)); }
+.gauge-pin { fill: var(--text); stroke: var(--surface); stroke-width: 4; }
+.gauge-value { position: absolute; top: 49%; left: 50%; display: grid; transform: translate(-50%,-50%); text-align: center; }
+.gauge-value strong { font-size: clamp(2.2rem,5vw,3.6rem); letter-spacing: -.06em; }
+.gauge-value span { color: var(--muted-text); font-size: 10px; font-weight: 750; text-transform: uppercase; }
+.gauge-labels { position: absolute; inset: auto 1% 3px; display: grid; grid-template-columns: 1fr 1fr 1fr; color: var(--muted-text); font-size: 9px; }
+.gauge-labels span:nth-child(2) { text-align: center; }
+.gauge-labels span:last-child { text-align: right; }
+.balance-side { display: grid; gap: 16px; }
+.balance-totals { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 8px; }
+.balance-totals article { display: grid; min-width: 0; padding: 15px; border-radius: 18px; }
+.balance-totals article > span { display: grid; width: 34px; height: 34px; margin-bottom: 14px; place-items: center; border-radius: 11px; }
+.balance-totals .eaten { color: #ff8f82; background: rgba(255,107,95,.11); }
+.balance-totals .burned { color: var(--primary); background: rgba(183,255,79,.11); }
+.balance-totals .net.red { color: #ff6b5f; background: rgba(255,107,95,.11); }
+.balance-totals .net.yellow { color: #ffd35f; background: rgba(255,211,95,.11); }
+.balance-totals .net.green { color: var(--primary); background: rgba(183,255,79,.11); }
+.balance-totals small { color: var(--muted-text); font-size: 9px; font-weight: 750; text-transform: uppercase; }
+.balance-totals strong { overflow: hidden; margin-top: 5px; font-size: 13px; letter-spacing: -.02em; text-overflow: ellipsis; white-space: nowrap; }
+.balance-actions { display: grid; align-content: center; gap: 10px; padding: 22px; border-radius: 24px; }
+.balance-actions h2 { margin: 0; font-size: 25px; letter-spacing: -.04em; }
+.balance-actions p:not(.eyebrow) { margin: 8px 0 10px; color: var(--muted-text); font-size: 12px; }
+.balance-actions .primary-button, .balance-actions .text-button { justify-content: center; width: 100%; }
+.balance-chart-card { margin-top: 16px; padding: 22px; border-radius: 25px; }
+.balance-chart-card > header { display: flex; align-items: end; justify-content: space-between; gap: 16px; }
+.balance-chart-card h2 { margin: 0; font-size: 24px; letter-spacing: -.04em; }
+.balance-chart-card header small { color: var(--muted-text); font-size: 10px; }
+.balance-chart { display: grid; grid-template-columns: repeat(7,1fr); gap: 9px; height: 220px; margin-top: 20px; }
+.balance-chart > div { display: grid; min-width: 0; grid-template-rows: 18px 1fr 20px; gap: 5px; text-align: center; }
+.balance-chart .chart-value { overflow: hidden; color: var(--muted-text); font-size: 9px; text-overflow: ellipsis; }
+.balance-chart .chart-track { position: relative; overflow: hidden; border-radius: 10px; background: rgba(255,255,255,.025); }
+.balance-chart .chart-track::after { position: absolute; top: 50%; right: 0; left: 0; height: 1px; content: ''; background: rgba(255,255,255,.12); }
+.balance-chart .chart-track i { position: absolute; right: 24%; left: 24%; z-index: 1; min-height: 0; border-radius: 6px; }
+.balance-chart .chart-track i.red { background: #ff6b5f; }
+.balance-chart .chart-track i.yellow { background: #ffd35f; }
+.balance-chart .chart-track i.green { background: var(--primary); }
+.balance-chart strong { color: var(--muted-text); font-size: 10px; }
+.balance-chart .today strong { color: var(--primary); }
+
 .settings { display: grid; gap: 14px; max-width: 980px; margin: 0 auto; }
 .settings-card { padding: 22px; }
 .settings-card > h3 { display: flex; align-items: center; gap: 8px; margin-top: 0; }
@@ -221,7 +279,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   .topbar-inner { height: 66px; grid-template-columns: 1fr auto; }
   .desktop-nav { display: none; }
   .page { padding-top: 34px; padding-bottom: 40px; }
-  .bottom-nav { position: fixed; inset: auto 12px 12px; z-index: 50; display: grid; grid-template-columns: repeat(4,1fr); padding: 6px; border: 1px solid var(--border-strong); border-radius: 18px; background: rgba(23,32,25,.95); box-shadow: 0 18px 45px rgba(0,0,0,.5); backdrop-filter: blur(20px); }
+  .bottom-nav { position: fixed; inset: auto 12px 12px; z-index: 50; display: grid; grid-template-columns: repeat(5,1fr); padding: 6px; border: 1px solid var(--border-strong); border-radius: 18px; background: rgba(23,32,25,.95); box-shadow: 0 18px 45px rgba(0,0,0,.5); backdrop-filter: blur(20px); }
   .bottom-nav button { display: flex; min-width: 0; flex-direction: column; align-items: center; justify-content: center; gap: 4px; padding: 8px 3px; border: 0; border-radius: 12px; color: var(--muted-text); background: transparent; font-size: 10px; cursor: pointer; }
   .bottom-nav button.active { color: var(--primary); background: rgba(183,255,79,.1); }
   .exercise-hero { grid-template-columns: 1fr; }
@@ -586,6 +644,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   .exercise-detail-header { padding-top: 26px; }
   .calendar-layout { grid-template-columns: 1fr; }
   .calendar-sidebar { position: static; }
+  .balance-grid { grid-template-columns: 1fr; }
   .recipe-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
   .recipe-filter-grid { grid-template-columns: repeat(2,1fr); }
   .barcode-start { grid-template-columns: 1fr; }
@@ -614,6 +673,14 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   .exercise-detail-footer label, .exercise-detail-footer .primary-button { width: 100%; flex-basis: 100%; }
   .exercise-facts { grid-template-columns: 1fr; }
   .calendar-sidebar { padding: 15px; }
+  .balance-heading h1 { font-size: 3rem; }
+  .balance-gauge-card, .balance-actions, .balance-chart-card { padding: 16px; }
+  .balance-totals { grid-template-columns: repeat(3,1fr); }
+  .balance-totals article { padding: 11px; }
+  .balance-totals article > span { margin-bottom: 10px; }
+  .balance-totals strong { font-size: 11px; }
+  .balance-chart { gap: 4px; height: 190px; }
+  .balance-chart .chart-track i { right: 18%; left: 18%; }
   .day-heading { align-items: stretch; flex-direction: column; }
   .day-actions > * { flex: 1; }
   .set-labels { display: none; }

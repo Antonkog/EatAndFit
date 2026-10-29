@@ -1,7 +1,8 @@
-import { CalendarDays, Dumbbell, ScanLine, Settings, Utensils } from 'lucide-react';
+import { CalendarDays, Dumbbell, Gauge, ScanLine, Settings, Utensils } from 'lucide-react';
 import { useState } from 'react';
 import { AiRecipeView } from './ai/AiRecipeBuilder';
 import { FirebaseAnalytics } from './analytics/FirebaseAnalytics';
+import { BalanceView } from './balance/BalanceView';
 import { CalendarView } from './calendar/CalendarView';
 import { localDate } from './data/db';
 import { ExerciseLibrary } from './exercises/ExerciseLibrary';
@@ -9,18 +10,19 @@ import { RecipeView } from './recipes/RecipeView';
 import { ScanView, type ScanMode } from './scanner/ScanView';
 import { SettingsView } from './settings/SettingsView';
 
-export type View = 'exercises' | 'calendar' | 'recipes' | 'scan' | 'ai' | 'settings';
+export type View = 'exercises' | 'calendar' | 'balance' | 'recipes' | 'scan' | 'ai' | 'settings';
 type PrimaryView = Exclude<View, 'ai' | 'settings'>;
 
 const navigation: Array<{ id: PrimaryView; label: string; icon: typeof Dumbbell }> = [
   { id: 'exercises', label: 'Muscles', icon: Dumbbell },
   { id: 'calendar', label: 'Calendar', icon: CalendarDays },
+  { id: 'balance', label: 'Balance', icon: Gauge },
   { id: 'recipes', label: 'Recipes', icon: Utensils },
   { id: 'scan', label: 'Scan', icon: ScanLine },
 ];
 
 export function App() {
-  const [view, setView] = useState<View>('exercises');
+  const [view, setView] = useState<View>('balance');
   const [calendarDate, setCalendarDate] = useState(localDate());
   const [calendarMode, setCalendarMode] = useState<'workout' | 'food'>('workout');
   const [recipeIngredients, setRecipeIngredients] = useState<string[]>([]);
@@ -30,6 +32,7 @@ export function App() {
   const [aiReturnView, setAiReturnView] = useState<'recipes' | 'scan'>('recipes');
   const [scanDate, setScanDate] = useState(localDate());
   const [scanMode, setScanMode] = useState<ScanMode>('photo');
+  const [foodReturnView, setFoodReturnView] = useState<'balance' | 'calendar'>('calendar');
 
   const activePrimary: PrimaryView | null = view === 'ai' ? aiReturnView : view === 'settings' ? null : view;
 
@@ -38,7 +41,10 @@ export function App() {
       setCalendarDate(localDate());
       setCalendarMode('workout');
     }
-    if (next === 'recipes') setRecipeIngredients([]);
+    if (next === 'recipes') {
+      setRecipeIngredients([]);
+      setFoodReturnView('calendar');
+    }
     if (next === 'scan') {
       setScanDate(localDate());
       setScanMode('photo');
@@ -54,9 +60,10 @@ export function App() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const showRecipes = (ingredients: string[] = [], date = localDate()) => {
+  const showRecipes = (ingredients: string[] = [], date = localDate(), returnView: 'balance' | 'calendar' = 'calendar') => {
     setRecipeIngredients(ingredients);
     setRecipeDate(date);
+    setFoodReturnView(returnView);
     setView('recipes');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -81,12 +88,21 @@ export function App() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  const handleFoodAdded = (date: string) => {
+    if (foodReturnView === 'balance') {
+      setView('balance');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      return;
+    }
+    showCalendar(date, 'food');
+  };
+
   return (
     <div className="app-shell">
       <FirebaseAnalytics />
       <header className="topbar">
         <div className="topbar-inner">
-          <button className="brand" onClick={() => showView('exercises')} aria-label="Eat and Fit home">
+          <button className="brand" onClick={() => showView('balance')} aria-label="Eat and Fit home">
             <span className="brand-mark"><Dumbbell size={19} /></span>
             <span>EAT AND FIT</span>
           </button>
@@ -106,6 +122,7 @@ export function App() {
 
       <main className="page">
         {view === 'exercises' && <ExerciseLibrary onWorkoutAdded={(date) => showCalendar(date, 'workout')} />}
+        {view === 'balance' && <BalanceView onAddFood={() => showRecipes([], localDate(), 'balance')} onAddExercise={() => showView('exercises')} />}
         {view === 'calendar' && (
           <CalendarView
             initialDate={calendarDate}
@@ -121,7 +138,7 @@ export function App() {
             initialDate={recipeDate}
             initialIngredients={recipeIngredients}
             onOpenAi={() => showAi([], 'recipes', recipeDate)}
-            onAdded={(date) => showCalendar(date, 'food')}
+            onAdded={handleFoodAdded}
           />
         )}
         {view === 'scan' && (
@@ -140,7 +157,7 @@ export function App() {
             initialRequiredIngredients={aiIngredients}
             backDestination={aiReturnView}
             onBack={() => setView(aiReturnView)}
-            onAdded={(date) => showCalendar(date, 'food')}
+            onAdded={(date) => aiReturnView === 'recipes' ? handleFoodAdded(date) : showCalendar(date, 'food')}
           />
         )}
         {view === 'settings' && <SettingsView />}

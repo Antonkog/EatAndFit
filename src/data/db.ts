@@ -1,5 +1,5 @@
 export type WorkoutSet = { id: string; reps: number; weightKg: number; durationSeconds?: number; complete: boolean };
-export type Workout = { id: string; date: string; exerciseId: string; exerciseName: string; sets: WorkoutSet[]; notes: string; completed: boolean };
+export type Workout = { id: string; date: string; exerciseId: string; exerciseName: string; sets: WorkoutSet[]; notes: string; completed: boolean; caloriesBurned?: number; calorieSource?: string };
 export type MealType = 'breakfast' | 'lunch' | 'dinner' | 'snack';
 export type FoodEntry = { id: string; date: string; title: string; calories?: number; protein?: number; carbs?: number; fat?: number; provider: string; mealType?: MealType; quantity?: number; quantityUnit?: 'serving' | 'g' | 'ml'; imageUrl?: string; payload?: unknown };
 export type LocalProduct = { barcode: string; name: string; calories?: number; protein?: number; carbs?: number; fat?: number };
