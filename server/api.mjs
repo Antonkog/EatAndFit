@@ -1,5 +1,6 @@
 import { createServer } from 'node:http';
 import { DatabaseSync } from 'node:sqlite';
+import { aiConfiguration, generateRecipes } from './ai-provider.mjs';
 
 const port = Number(process.env.API_PORT ?? 3000);
 const recipePath = process.env.RECIPE_DB_PATH ?? './data/recipes.sqlite';
@@ -22,11 +23,14 @@ createServer(async (request, response) => {
   try {
     if (url.pathname === '/api/recipes/healthz') return json(response, 200, { ok: true });
     if (url.pathname === '/api/recipes') return json(response, 200, recipes(url));
+    if (url.pathname === '/api/ai/recipes/healthz') return json(response, 200, { ok: true, configured: aiConfiguration().configured });
+    if (url.pathname === '/api/ai/recipes/meta') { const config=aiConfiguration(); return json(response,200,{provider:config.provider,model:config.model,configured:config.configured}); }
+    if (url.pathname === '/api/ai/recipes/generate' && request.method === 'POST') return json(response,200,await generateRecipes(await readBody(request)));
     if (url.pathname === '/api/nutrition/healthz') return json(response, 200, { ok: true });
     if (url.pathname === '/api/nutrition/search') return json(response, 200, nutritionSearch(url));
     if (url.pathname.startsWith('/api/nutrition/foods/')) { const food=nutritionFood(Number(url.pathname.split('/').at(-1))); return json(response,food?200:404,food??{error:'Food not found.'}); }
     if (url.pathname === '/api/nutrition/calculate' && request.method === 'POST') return json(response,200,await calculateNutrition(request));
     return json(response, 404, { error: 'Not found' });
-  } catch (error) { const unavailable=error.code==='SQLITE_CANTOPEN'; return json(response, unavailable?503:error.message==='INVALID'?400:500, { error: unavailable?'Data service is not ready.':'Request failed.' }); }
+  } catch (error) { const unavailable=error.code==='SQLITE_CANTOPEN'; const status=error.message==='INVALID'||error.message==='MODEL_FORMAT'?400:error.message==='AI_NOT_CONFIGURED'?503:error.message==='AI_RATE_LIMIT'?429:unavailable?503:500; const message=error.message==='AI_NOT_CONFIGURED'?'AI generation is not configured.':error.message==='AI_RATE_LIMIT'?'The AI service is busy. Try again shortly.':unavailable?'Data service is not ready.':'Request failed.'; return json(response,status,{error:message}); }
 }).listen(port, '127.0.0.1', () => console.log(`Eat & Fit API listening on ${port}`));
 
