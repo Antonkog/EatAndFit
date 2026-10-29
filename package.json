@@ -4,9 +4,13 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "vite --mode core",
+    "dev:byok": "vite --mode byok",
     "api": "node server/api.mjs",
-    "build": "tsc -b && vite build",
+    "api:byok": "APP_EDITION=byok node server/api.mjs",
+    "build": "tsc -b && vite build --mode core",
+    "build:byok": "tsc -b && vite build --mode byok",
+    "build:editions": "tsc -b && vite build --mode core --outDir dist/core && vite build --mode byok --outDir dist/byok",
     "typecheck": "tsc -b --pretty false",
     "test": "node --import tsx --test tests/*.test.ts"
   },

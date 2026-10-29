@@ -15,6 +15,7 @@ import {
 import { useState } from 'react';
 import { localDate, saveFood, type MealType } from '../data/db';
 import { IngredientScannerTrigger } from '../scanner/ScanView';
+import { getRecognitionCredential } from '../settings/secureKeys';
 import { validateAiFilters, type AiRecipe } from './validation';
 
 type Range = { min: string; max: string };
@@ -35,12 +36,14 @@ export function AiRecipeView({
   initialRequiredIngredients = [],
   backDestination = 'recipes',
   onBack,
+  onOpenSettings,
   onAdded,
 }: {
   initialDate?: string;
   initialRequiredIngredients?: string[];
   backDestination?: 'recipes' | 'scan';
   onBack: () => void;
+  onOpenSettings: () => void;
   onAdded: (date: string) => void;
 }) {
   const [idea, setIdea] = useState('');
@@ -79,9 +82,15 @@ export function AiRecipeView({
     setLoading(true);
     setError('');
     try {
+      const credential = await getRecognitionCredential();
+      if (!credential) throw new Error('Add a Meta or Google Gemini API key in Settings first.');
       const response = await fetch('/api/ai/recipes/generate', {
         method: 'POST',
-        headers: { 'content-type': 'application/json' },
+        headers: {
+          authorization: `Bearer ${credential.apiKey}`,
+          'content-type': 'application/json',
+          'x-recognition-provider': credential.provider,
+        },
         body: JSON.stringify({
           idea,
           cuisine,
@@ -111,7 +120,7 @@ export function AiRecipeView({
       <div className="ai-heading"><p className="eyebrow">AI recipe generator</p><h1>AI Recipes</h1></div>
 
       <div className="scanner-launch-panel">
-        <IngredientScannerTrigger currentIngredients={parseList(required)} onConfirm={(items) => setRequired(items.join(', '))} />
+        <IngredientScannerTrigger currentIngredients={parseList(required)} onConfirm={(items) => setRequired(items.join(', '))} onOpenSettings={onOpenSettings} />
       </div>
 
       <form className="ai-form-card" onSubmit={(event) => { event.preventDefault(); void submit(); }}>
@@ -140,7 +149,7 @@ export function AiRecipeView({
             </div>
           </div>
         </details>
-        {error && <div className="error-state compact"><AlertTriangle /><div><strong>{error}</strong><button type="button" className="text-button" onClick={() => void submit()}><RefreshCw size={15} /> Retry</button></div></div>}
+        {error && <div className="error-state compact"><AlertTriangle /><div><strong>{error}</strong><button type="button" className="text-button" onClick={() => void submit()}><RefreshCw size={15} /> Retry</button><button type="button" className="text-button" onClick={onOpenSettings}>Open settings</button></div></div>}
         <button className="primary-button large full" type="submit" disabled={loading}>{loading ? <LoaderCircle className="spin" /> : <Sparkles size={18} />}{loading ? 'Generating two recipes…' : 'Generate recipes'}</button>
       </form>
 

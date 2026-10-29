@@ -1,28 +1,31 @@
-import { Download, ExternalLink, ShieldCheck, Trash2, Upload } from 'lucide-react';
+import { ChevronDown, Download, ExternalLink, KeyRound, ShieldCheck, Trash2, Upload } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
+import { APP_EDITION_LABEL } from '../config/edition';
 import { clearData, exportBackup, importBackup, isBackup } from '../data/db';
 import { legalSources } from './legal';
-
-type AiHealth = { provider: string; model: string; configured: boolean };
-
-function configurationLabel(value?: AiHealth) {
-  return value ? `${value.provider} · ${value.model}${value.configured ? '' : ' · not configured'}` : 'Unavailable';
-}
+import {
+  getRecognitionKeyStatus,
+  removeRecognitionKey,
+  RECOGNITION_KEYS_CHANGED,
+  saveRecognitionKey,
+  setActiveRecognitionProvider,
+  type RecognitionKeyStatus,
+  type RecognitionProvider,
+} from './secureKeys';
 
 export function SettingsView() {
   const input = useRef<HTMLInputElement>(null);
-  const [recipeAi, setRecipeAi] = useState<AiHealth>();
-  const [recognition, setRecognition] = useState<AiHealth>();
+  const [keyStatus, setKeyStatus] = useState<RecognitionKeyStatus>();
+  const [metaKey, setMetaKey] = useState('');
+  const [geminiKey, setGeminiKey] = useState('');
+  const [keyMessage, setKeyMessage] = useState('');
 
   useEffect(() => {
-    void fetch('/api/ai/recipes/meta')
-      .then((response) => response.ok ? response.json() as Promise<AiHealth> : undefined)
-      .then(setRecipeAi)
-      .catch(() => undefined);
-    void fetch('/api/ai/ingredients/healthz')
-      .then((response) => response.ok ? response.json() as Promise<AiHealth> : undefined)
-      .then(setRecognition)
-      .catch(() => undefined);
+    if (!__SMART_SCANNER__) return;
+    const refresh = () => void getRecognitionKeyStatus().then(setKeyStatus).catch(() => setKeyMessage('Secure key storage is unavailable in this browser.'));
+    refresh();
+    window.addEventListener(RECOGNITION_KEYS_CHANGED, refresh);
+    return () => window.removeEventListener(RECOGNITION_KEYS_CHANGED, refresh);
   }, []);
 
   const download = async () => {
@@ -50,12 +53,63 @@ export function SettingsView() {
     window.alert('Local history deleted.');
   };
 
+  const saveKey = async (provider: RecognitionProvider) => {
+    const value = provider === 'META' ? metaKey : geminiKey;
+    try {
+      await saveRecognitionKey(provider, value);
+      if (provider === 'META') setMetaKey(''); else setGeminiKey('');
+      setKeyMessage('API key set');
+    } catch (error) {
+      setKeyMessage(error instanceof Error ? error.message : 'The key could not be saved.');
+    }
+  };
+
+  const removeKey = async (provider: RecognitionProvider) => {
+    const label = provider === 'META' ? 'Meta' : 'Google Gemini';
+    if (!window.confirm(`Remove the encrypted ${label} key from this device?`)) return;
+    await removeRecognitionKey(provider);
+    setKeyMessage(`${label} key removed.`);
+  };
+
+  const selectProvider = async (provider: RecognitionProvider) => {
+    try {
+      await setActiveRecognitionProvider(provider);
+      setKeyMessage(`${provider === 'META' ? 'Meta' : 'Google Gemini'} selected for AI features.`);
+    } catch (error) {
+      setKeyMessage(error instanceof Error ? error.message : 'The provider could not be selected.');
+    }
+  };
+
+  const hasAnyKey = Boolean(keyStatus?.metaConfigured || keyStatus?.geminiConfigured);
+
   return (
     <section className="settings">
-      <div className="calendar-heading"><div><p className="eyebrow">Your app</p><h2>Settings</h2></div></div>
+      <div className="calendar-heading"><div><p className="eyebrow">{APP_EDITION_LABEL}</p><h2>Settings</h2></div></div>
+      {__SMART_SCANNER__ && (
+        <article className="settings-card api-key-settings">
+          <h3><KeyRound size={20} /> AI provider keys</h3>
+          <p>Smart Scan and AI recipe generation are enabled when the selected provider has a saved key. Your provider may charge your account for API requests.</p>
+          <div className="key-security-note">
+            <ShieldCheck size={20} />
+            <p>Keys are encrypted with AES-GCM using a non-exportable encryption key and stored in this browser’s IndexedDB on your phone or computer. They are not included in backups or analytics. During an AI request, the selected key and submitted content are sent over HTTPS to Eat & Fit’s server, forwarded to that provider, and not stored by Eat & Fit. Local encryption protects the saved value at rest, but it cannot protect an unlocked browser or a compromised device.</p>
+          </div>
+          <div className="provider-key-grid">
+            <ProviderKeyField label="Meta API key" configured={Boolean(keyStatus?.metaConfigured)} value={metaKey} onChange={setMetaKey} onSave={() => void saveKey('META')} onRemove={() => void removeKey('META')} />
+            <ProviderKeyField label="Google Gemini API key" configured={Boolean(keyStatus?.geminiConfigured)} value={geminiKey} onChange={setGeminiKey} onSave={() => void saveKey('GEMINI')} onRemove={() => void removeKey('GEMINI')} />
+          </div>
+          <label className="active-provider">AI provider
+            <select value={hasAnyKey ? keyStatus?.activeProvider : ''} disabled={!hasAnyKey} onChange={(event) => void selectProvider(event.target.value as RecognitionProvider)}>
+              {!hasAnyKey && <option value="">No key configured</option>}
+              <option value="META" disabled={!keyStatus?.metaConfigured}>Meta{keyStatus?.metaConfigured ? '' : ' · add key first'}</option>
+              <option value="GEMINI" disabled={!keyStatus?.geminiConfigured}>Google Gemini{keyStatus?.geminiConfigured ? '' : ' · add key first'}</option>
+            </select>
+          </label>
+          {keyMessage && <p className="key-message" role="status">{keyMessage}</p>}
+        </article>
+      )}
       <article className="settings-card">
         <h3>Local data</h3>
-        <p>Your workout and food history stays in this browser unless you export it.</p>
+        <p>Your workout and food history stays in this browser unless you export it.{__SMART_SCANNER__ ? ' API keys are intentionally excluded from backups.' : ''}</p>
         <div className="settings-actions">
           <button className="text-button" onClick={() => void download()}><Download size={17} /> Export backup</button>
           <button className="text-button" onClick={() => input.current?.click()}><Upload size={17} /> Import backup</button>
@@ -63,28 +117,45 @@ export function SettingsView() {
           <button className="danger-button" onClick={() => void remove()}><Trash2 size={17} /> Delete local history</button>
         </div>
       </article>
-      <article className="settings-card">
-        <h3><ShieldCheck size={20} /> Legal, data sources, and AI</h3>
-        <div className="legal-list">
-          {legalSources.map((source) => (
-            <section key={source.title}>
-              <header><h4>{source.title}</h4><span>{source.license}</span></header>
-              <p>{source.body}</p>
-              <a href={source.href} target="_blank" rel="noreferrer">View source and terms <ExternalLink size={14} /></a>
-            </section>
-          ))}
+      <details className="settings-card legal-disclosure">
+        <summary><span><ShieldCheck size={20} /><strong>Legal, data sources &amp; safety</strong><small>Attributions, licenses, AI processing, and safety information</small></span><ChevronDown size={18} /></summary>
+        <div className="legal-content">
+          <div className="legal-list">
+            {legalSources.map((source) => (
+              <section key={source.title}>
+                <header><h4>{source.title}</h4><span>{source.license}</span></header>
+                <p>{source.body}</p>
+                <a href={source.href} target="_blank" rel="noreferrer">View source and terms <ExternalLink size={14} /></a>
+              </section>
+            ))}
+          </div>
+          {__SMART_SCANNER__ && <section className="ai-disclosure">
+            <h4>User-configured AI services</h4>
+            <p>Ingredient recognition and AI recipe generation use the Meta or Google Gemini provider selected by the user. The user supplies the API key and is responsible for provider charges and terms. During a request, the submitted content and selected key leave the device over HTTPS. Eat & Fit forwards them only for that request and does not store them on its server. Generated and recognized results require user review.</p>
+          </section>}
+          <section className="safety">
+            <h4>Safety</h4>
+            <p>Eat & Fit provides educational exercise and nutrition information, not medical advice. Stop exercising if you experience pain, and consult a qualified healthcare or fitness professional when appropriate.</p>
+          </section>
         </div>
-        <section className="ai-disclosure">
-          <h4>AI services</h4>
-          <p>AI inference costs are paid by the application author. Recipe text is sent to the configured recipe model. Compressed photos leave the app for the selected ingredient-recognition provider. Generated recipes and recognized ingredients require user review.</p>
-          <p><strong>Recipe generation:</strong> {configurationLabel(recipeAi)}</p>
-          <p><strong>Ingredient recognition:</strong> {configurationLabel(recognition)}</p>
-        </section>
-        <section className="safety">
-          <h4>Safety</h4>
-          <p>Eat & Fit provides educational exercise and nutrition information, not medical advice. Stop exercising if you experience pain, and consult a qualified healthcare or fitness professional when appropriate.</p>
-        </section>
-      </article>
+      </details>
+    </section>
+  );
+}
+
+function ProviderKeyField({ label, configured, value, onChange, onSave, onRemove }: {
+  label: string;
+  configured: boolean;
+  value: string;
+  onChange: (value: string) => void;
+  onSave: () => void;
+  onRemove: () => void;
+}) {
+  return (
+    <section className="provider-key-field">
+      <header><strong>{label}</strong><span className={configured ? 'configured' : ''}>{configured ? 'Saved' : 'Not set'}</span></header>
+      <input type="password" value={value} autoComplete="off" spellCheck={false} placeholder={configured ? 'Enter a replacement key' : 'Paste API key'} aria-label={label} onChange={(event) => onChange(event.target.value)} />
+      <div><button className="text-button" disabled={!value.trim()} onClick={onSave}>{configured ? 'Replace key' : 'Save key'}</button>{configured && <button className="danger-button" onClick={onRemove}>Remove</button>}</div>
     </section>
   );
 }

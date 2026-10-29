@@ -34,7 +34,7 @@ export function RecipeView({
 }: {
   initialDate?: string;
   initialIngredients?: string[];
-  onOpenAi: () => void;
+  onOpenAi?: () => void;
   onAdded: (date: string) => void;
 }) {
   const [draft, setDraft] = useState('');
@@ -98,7 +98,7 @@ export function RecipeView({
     <section>
       <div className="recipe-heading">
         <h1>Recipes</h1>
-        <button className="primary-button large" onClick={onOpenAi}><Sparkles size={18} /> Create with AI</button>
+        {__SMART_SCANNER__ && onOpenAi && <button className="primary-button large" onClick={onOpenAi}><Sparkles size={18} /> Generate AI recipe</button>}
       </div>
 
       <form className="recipe-search" onSubmit={(event) => { event.preventDefault(); setQuery(draft.trim()); setPage(1); }}>

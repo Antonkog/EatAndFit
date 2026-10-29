@@ -1,8 +1,15 @@
 # Eat & Fit
 
-Eat & Fit is an English-language, mobile-first workout and nutrition app. It combines a 317-exercise video library, a local workout calendar, 39,447 searchable recipes, USDA nutrition calculations, AI recipe generation, photo ingredient recognition, and packaged-food lookup.
+Eat & Fit is an English-language, mobile-first workout and nutrition app. It combines a 317-exercise video library, a local workout calendar, 39,447 searchable recipes, USDA nutrition calculations, and packaged-food lookup.
 
 Workout and meal history is stored in the browser. There are no user accounts or cloud sync. Settings provides JSON export/import and complete deletion of local history.
+
+## Free editions
+
+- **Core** contains every feature that does not require a private model API key. Barcode lookup remains available, while the ingredient-recognition and AI-recipe controls are hidden.
+- **BYOK AI** adds photo ingredient recognition and AI recipe generation. The user stores either a Meta or Google Gemini key in Settings and chooses the active provider. Saving or removing a key updates the available UI immediately. There is no automatic provider fallback.
+
+BYOK keys are encrypted with AES-GCM using a non-exportable device-local key and stored in browser IndexedDB. They are excluded from backups and analytics. For an AI request, the browser decrypts the selected key and sends it with the submitted content over HTTPS to the Eat & Fit API. The API forwards both to the selected provider for that request and does not persist either value. This protects keys at rest, but it cannot protect an unlocked browser, compromised device, or compromised application origin.
 
 ## Local development
 
@@ -17,27 +24,23 @@ npm run api
 npm run dev
 ```
 
-Recipe generation and ingredient recognition use separate server-only configurations. Configure recipe generation with `AI_BASE_URL`, `AI_MODEL`, and `AI_API_KEY`.
+Use `npm run api` with `npm run dev` for Core. For BYOK AI, run `npm run api:byok` with `npm run dev:byok`. The Core API does not expose AI routes. No model API key belongs in `.env`, Docker configuration, source files, or server environment variables.
 
-Ingredient recognition defaults to Meta and supports exactly two providers:
+Build one edition or both:
 
-```ini
-RECOGNITION_MODEL_PROVIDER=META
-META_MODEL_API_KEY=replace-me
-META_RECOGNITION_MODEL=muse-spark-1.3
-META_MODEL_API_BASE_URL=https://api.meta.ai/v1
-RECOGNITION_TIMEOUT_MS=45000
+```bash
+npm run build          # Core -> dist/
+npm run build:byok     # BYOK -> dist/
+npm run build:editions # Core -> dist/core, BYOK -> dist/byok
 ```
 
-To retain the Gemini scanner instead, switch the selector and provide its key:
+Docker defaults to Core. Select BYOK at build time with the non-secret edition flag:
 
-```ini
-RECOGNITION_MODEL_PROVIDER=GEMINI
-GEMINI_API_KEY=replace-me
-GEMINI_VISION_MODEL=gemini-3.1-flash-lite
+```bash
+APP_EDITION=byok docker compose up -d --build api web
 ```
 
-The server creates only the selected recognition provider. It never retries a failed recognition request with the other provider. Keys remain on the server and must never use a `VITE_` prefix. Firebase Analytics is optional and remains disabled when its public configuration is absent.
+Firebase Analytics is optional and remains disabled when its public configuration is absent.
 
 ## Verification
 
@@ -46,6 +49,7 @@ python3 scripts/validate_exercise_catalog.py
 npm test
 npm run typecheck
 npm run build
+npm run build:byok
 docker compose config
 ```
 
@@ -57,7 +61,7 @@ For containers, first import the external datasets with `docker compose --profil
 - The [DataHive recipes-with-nutrition dataset](https://huggingface.co/datasets/datahiveai/recipes-with-nutrition) is licensed CC BY-NC 4.0. Its 39,447 recipes are used only for this non-commercial project. Linked source pages and images can have separate owners and terms.
 - [USDA FoodData Central](https://fdc.nal.usda.gov/) data is public domain and published under CC0 1.0.
 - Packaged-product data comes from [Open Food Facts](https://world.openfoodfacts.org/terms-of-use) and can be incomplete or outdated.
-- AI inference is paid by the application author. Submitted recipe text is processed by the configured recipe provider. Compressed ingredient photos leave the app for the selected Meta or Gemini recognition provider. Generated and recognized results require review.
+- In the BYOK edition, ingredient recognition and AI recipe generation are billed under the user-supplied Meta or Google Gemini key. Submitted content and the selected key are transmitted for processing; Eat & Fit does not persist them. Generated results require review.
 - Exercise and nutrition information is educational and not medical advice. Stop exercising if you experience pain and consult a qualified professional when appropriate.
 
 Source datasets, downloaded media, credentials, environment files, and generated SQLite databases are intentionally excluded from Git.

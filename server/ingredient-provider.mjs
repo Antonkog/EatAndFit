@@ -275,29 +275,30 @@ export class MetaIngredientRecognitionProvider extends IngredientRecognitionProv
   }
 }
 
-export function createIngredientRecognitionProvider(env = process.env, options = {}) {
-  const selected = String(env.RECOGNITION_MODEL_PROVIDER || RecognitionModelProvider.META).trim().toUpperCase();
-  const common = { fetchImpl: options.fetchImpl, timeoutMs: env.RECOGNITION_TIMEOUT_MS };
+export function createIngredientRecognitionProvider(credentials = {}, options = {}) {
+  const selected = String(credentials.provider || '').trim().toUpperCase();
+  const apiKey = String(credentials.apiKey || '').trim();
+  const common = { fetchImpl: options.fetchImpl, timeoutMs: options.timeoutMs };
   if (selected === RecognitionModelProvider.META) {
     return new MetaIngredientRecognitionProvider({
       ...common,
-      apiKey: env.META_MODEL_API_KEY,
-      model: env.META_RECOGNITION_MODEL,
-      baseUrl: env.META_MODEL_API_BASE_URL,
+      apiKey,
+      model: options.metaModel,
+      baseUrl: options.metaBaseUrl,
     });
   }
   if (selected === RecognitionModelProvider.GEMINI) {
     return new GeminiIngredientRecognitionProvider({
       ...common,
-      apiKey: env.GEMINI_API_KEY,
-      model: env.GEMINI_VISION_MODEL,
+      apiKey,
+      model: options.geminiModel,
     });
   }
-  throw recognitionError('RECOGNITION_MODEL_PROVIDER must be META or GEMINI.', 500, 'invalid_provider');
+  throw recognitionError('Select Meta or Google Gemini in Settings.', 400, 'invalid_provider');
 }
 
-export async function detectIngredients(payload, provider) {
+export async function detectIngredients(payload, provider, credentials) {
   const image = validateIngredientImage(payload);
-  const activeProvider = provider ?? createIngredientRecognitionProvider();
+  const activeProvider = provider ?? createIngredientRecognitionProvider(credentials);
   return { ingredients: await activeProvider.detect(image) };
 }

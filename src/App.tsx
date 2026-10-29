@@ -1,13 +1,13 @@
 import { CalendarDays, Dumbbell, Gauge, ScanLine, Settings, Utensils } from 'lucide-react';
-import { useState } from 'react';
-import { AiRecipeView } from './ai/AiRecipeBuilder';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { FirebaseAnalytics } from './analytics/FirebaseAnalytics';
 import { BalanceView } from './balance/BalanceView';
 import { CalendarView } from './calendar/CalendarView';
 import { localDate } from './data/db';
 import { ExerciseLibrary } from './exercises/ExerciseLibrary';
 import { RecipeView } from './recipes/RecipeView';
-import { ScanView, type ScanMode } from './scanner/ScanView';
+import { CoreScanView } from './scanner/CoreScanView';
+import type { ScanMode } from './scanner/types';
 import { SettingsView } from './settings/SettingsView';
 
 export type View = 'exercises' | 'calendar' | 'balance' | 'recipes' | 'scan' | 'ai' | 'settings';
@@ -21,6 +21,13 @@ const navigation: Array<{ id: PrimaryView; label: string; icon: typeof Dumbbell 
   { id: 'scan', label: 'Scan', icon: ScanLine },
 ];
 
+const SmartScanView = __SMART_SCANNER__
+  ? lazy(() => import('./scanner/ScanView').then((module) => ({ default: module.ScanView })))
+  : null;
+const AiRecipeView = __SMART_SCANNER__
+  ? lazy(() => import('./ai/AiRecipeBuilder').then((module) => ({ default: module.AiRecipeView })))
+  : null;
+
 export function App() {
   const [view, setView] = useState<View>('balance');
   const [calendarDate, setCalendarDate] = useState(localDate());
@@ -33,6 +40,21 @@ export function App() {
   const [scanDate, setScanDate] = useState(localDate());
   const [scanMode, setScanMode] = useState<ScanMode>('photo');
   const [foodReturnView, setFoodReturnView] = useState<'balance' | 'calendar'>('calendar');
+  const [aiFeaturesEnabled, setAiFeaturesEnabled] = useState(false);
+
+  useEffect(() => {
+    if (!__SMART_SCANNER__) return;
+    let disposed = false;
+    const refresh = () => void import('./settings/secureKeys').then(({ getRecognitionKeyStatus }) => getRecognitionKeyStatus()).then((status) => {
+      if (!disposed) setAiFeaturesEnabled(status.activeProvider === 'META' ? status.metaConfigured : status.geminiConfigured);
+    }).catch(() => { if (!disposed) setAiFeaturesEnabled(false); });
+    refresh();
+    window.addEventListener('eatfit-recognition-keys-change', refresh);
+    return () => {
+      disposed = true;
+      window.removeEventListener('eatfit-recognition-keys-change', refresh);
+    };
+  }, []);
 
   const activePrimary: PrimaryView | null = view === 'ai' ? aiReturnView : view === 'settings' ? null : view;
 
@@ -47,7 +69,7 @@ export function App() {
     }
     if (next === 'scan') {
       setScanDate(localDate());
-      setScanMode('photo');
+      setScanMode(aiFeaturesEnabled ? 'photo' : 'barcode');
     }
     setView(next);
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -68,18 +90,22 @@ export function App() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const showAi = (ingredients: string[] = [], returnView: 'recipes' | 'scan' = 'recipes', date = localDate()) => {
-    setAiIngredients(ingredients);
-    setAiDate(date);
-    setAiReturnView(returnView);
-    setView('ai');
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
-
   const showProductScanner = (date: string) => {
     setScanDate(date);
     setScanMode('barcode');
     setView('scan');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const showAi = (ingredients: string[] = [], returnView: 'recipes' | 'scan' = 'recipes', date = localDate()) => {
+    if (!aiFeaturesEnabled) {
+      showSettings();
+      return;
+    }
+    setAiIngredients(ingredients);
+    setAiDate(date);
+    setAiReturnView(returnView);
+    setView('ai');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -137,28 +163,28 @@ export function App() {
             key={recipeIngredients.join('\0')}
             initialDate={recipeDate}
             initialIngredients={recipeIngredients}
-            onOpenAi={() => showAi([], 'recipes', recipeDate)}
+            onOpenAi={aiFeaturesEnabled ? () => showAi([], 'recipes', recipeDate) : undefined}
             onAdded={handleFoodAdded}
           />
         )}
         {view === 'scan' && (
-          <ScanView
-            key={`${scanDate}-${scanMode}`}
-            initialDate={scanDate}
-            initialMode={scanMode}
-            onChooseRecipes={showRecipes}
-            onOpenAi={(ingredients) => showAi(ingredients, 'scan', scanDate)}
-            onAdded={(date) => showCalendar(date, 'food')}
-          />
+          __SMART_SCANNER__ && SmartScanView ? (
+            <Suspense fallback={<div className="loading-state">Loading Smart Scan…</div>}>
+              <SmartScanView key={`${scanDate}-${scanMode}`} initialDate={scanDate} initialMode={scanMode} onChooseRecipes={showRecipes} onOpenAi={(ingredients) => showAi(ingredients, 'scan', scanDate)} onOpenSettings={showSettings} onAdded={(date) => showCalendar(date, 'food')} />
+            </Suspense>
+          ) : <CoreScanView key={scanDate} initialDate={scanDate} onChooseRecipes={showRecipes} onAdded={(date) => showCalendar(date, 'food')} />
         )}
-        {view === 'ai' && (
-          <AiRecipeView
-            initialDate={aiDate}
-            initialRequiredIngredients={aiIngredients}
-            backDestination={aiReturnView}
-            onBack={() => setView(aiReturnView)}
-            onAdded={(date) => aiReturnView === 'recipes' ? handleFoodAdded(date) : showCalendar(date, 'food')}
-          />
+        {view === 'ai' && __SMART_SCANNER__ && AiRecipeView && (
+          <Suspense fallback={<div className="loading-state">Loading AI recipes…</div>}>
+            <AiRecipeView
+              initialDate={aiDate}
+              initialRequiredIngredients={aiIngredients}
+              backDestination={aiReturnView}
+              onBack={() => setView(aiReturnView)}
+              onOpenSettings={showSettings}
+              onAdded={(date) => aiReturnView === 'recipes' ? handleFoodAdded(date) : showCalendar(date, 'food')}
+            />
+          </Suspense>
         )}
         {view === 'settings' && <SettingsView />}
       </main>

@@ -17,10 +17,7 @@ services:
     cap_drop: [ALL]
   api:
     build: { context: ., dockerfile: server/Dockerfile }
-    env_file:
-      - path: .env
-        required: false
-    environment: { RECIPE_DB_PATH: /data/recipes/recipes.sqlite, NUTRITION_DB_PATH: /data/nutrition/nutrition.sqlite }
+    environment: { APP_EDITION: '${APP_EDITION:-core}', RECIPE_DB_PATH: /data/recipes/recipes.sqlite, NUTRITION_DB_PATH: /data/nutrition/nutrition.sqlite }
     volumes: ['recipe-data:/data/recipes:ro', 'nutrition-data:/data/nutrition:ro']
     read_only: true
     tmpfs: [/tmp]
@@ -29,7 +26,7 @@ services:
   web:
     build:
       context: .
-      args: { VITE_FIREBASE_API_KEY: '${VITE_FIREBASE_API_KEY:-}', VITE_FIREBASE_AUTH_DOMAIN: '${VITE_FIREBASE_AUTH_DOMAIN:-}', VITE_FIREBASE_PROJECT_ID: '${VITE_FIREBASE_PROJECT_ID:-}', VITE_FIREBASE_APP_ID: '${VITE_FIREBASE_APP_ID:-}', VITE_FIREBASE_MEASUREMENT_ID: '${VITE_FIREBASE_MEASUREMENT_ID:-}' }
+      args: { APP_EDITION: '${APP_EDITION:-core}', VITE_FIREBASE_API_KEY: '${VITE_FIREBASE_API_KEY:-}', VITE_FIREBASE_AUTH_DOMAIN: '${VITE_FIREBASE_AUTH_DOMAIN:-}', VITE_FIREBASE_PROJECT_ID: '${VITE_FIREBASE_PROJECT_ID:-}', VITE_FIREBASE_APP_ID: '${VITE_FIREBASE_APP_ID:-}', VITE_FIREBASE_MEASUREMENT_ID: '${VITE_FIREBASE_MEASUREMENT_ID:-}' }
     depends_on: [api]
     ports: ['${HTTP_BIND_IP:-0.0.0.0}:${HTTP_PORT:-8080}:80']
     read_only: true

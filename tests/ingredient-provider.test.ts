@@ -23,10 +23,10 @@ function metaResponse(ingredients: unknown = ['tomato']) {
   return new Response(JSON.stringify({ choices: [{ finish_reason: 'stop', message: { content: JSON.stringify({ ingredients }) } }] }), { status: 200 });
 }
 
-test('selects Meta by default, supports Gemini explicitly, and rejects unknown providers', () => {
-  assert.ok(createIngredientRecognitionProvider({}) instanceof MetaIngredientRecognitionProvider);
-  assert.ok(createIngredientRecognitionProvider({ RECOGNITION_MODEL_PROVIDER: 'GEMINI' }) instanceof GeminiIngredientRecognitionProvider);
-  assert.throws(() => createIngredientRecognitionProvider({ RECOGNITION_MODEL_PROVIDER: 'FIREWORKS' }), errorStatus(500, 'invalid_provider'));
+test('creates exactly the user-selected provider from transient credentials', () => {
+  assert.ok(createIngredientRecognitionProvider({ provider: 'META', apiKey: 'meta-key' }) instanceof MetaIngredientRecognitionProvider);
+  assert.ok(createIngredientRecognitionProvider({ provider: 'GEMINI', apiKey: 'gemini-key' }) instanceof GeminiIngredientRecognitionProvider);
+  assert.throws(() => createIngredientRecognitionProvider({ provider: 'FIREWORKS', apiKey: 'key' }), errorStatus(400, 'invalid_provider'));
 });
 
 test('validates JPEG data URLs and decoded size before provider dispatch', async () => {
@@ -142,7 +142,7 @@ test('ingredient HTTP contract reports health, accepts Base64 capacity, and maps
     getHealth: () => ({ provider: 'meta', model: 'muse-spark-1.3', configured: true }),
     detect: async (image: string) => { received = image; return ['Tomato']; },
   };
-  const server = createApiServer({ ingredientProvider: provider });
+  const server = createApiServer({ edition: 'byok', ingredientProvider: provider });
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
   const address = server.address();
   assert.ok(address && typeof address === 'object');
@@ -151,9 +151,9 @@ test('ingredient HTTP contract reports health, accepts Base64 capacity, and maps
   try {
     assert.deepEqual(await fetch(`${base}/api/ai/ingredients/healthz`).then((response) => response.json()), {
       ok: true,
-      provider: 'meta',
-      model: 'muse-spark-1.3',
-      configured: true,
+      keySource: 'user-device',
+      configured: false,
+      supportedProviders: ['meta', 'gemini'],
     });
 
     const imageBytes = Buffer.alloc(300_000, 1);
@@ -179,7 +179,19 @@ test('ingredient HTTP contract reports health, accepts Base64 capacity, and maps
     await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
   }
 
+  const coreServer = createApiServer({ edition: 'core' });
+  await new Promise<void>((resolve) => coreServer.listen(0, '127.0.0.1', resolve));
+  const coreAddress = coreServer.address();
+  assert.ok(coreAddress && typeof coreAddress === 'object');
+  try {
+    const unavailable = await fetch(`http://127.0.0.1:${coreAddress.port}/api/ai/ingredients/healthz`);
+    assert.equal(unavailable.status, 404);
+  } finally {
+    await new Promise<void>((resolve, reject) => coreServer.close((error) => error ? reject(error) : resolve()));
+  }
+
   const limitedServer = createApiServer({
+    edition: 'byok',
     ingredientProvider: {
       getHealth: provider.getHealth,
       detect: async () => { throw new IngredientRecognitionError('Meta rate limit reached.', 429, 'rate_limited'); },
@@ -199,20 +211,50 @@ test('ingredient HTTP contract reports health, accepts Base64 capacity, and maps
   } finally {
     await new Promise<void>((resolve, reject) => limitedServer.close((error) => error ? reject(error) : resolve()));
   }
+
+  const byokServer = createApiServer({ edition: 'byok' });
+  await new Promise<void>((resolve) => byokServer.listen(0, '127.0.0.1', resolve));
+  const byokAddress = byokServer.address();
+  assert.ok(byokAddress && typeof byokAddress === 'object');
+  try {
+    const missingKey = await fetch(`http://127.0.0.1:${byokAddress.port}/api/ai/ingredients/detect`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ image: JPEG_DATA_URL }),
+    });
+    assert.equal(missingKey.status, 401);
+    assert.deepEqual(await missingKey.json(), { error: 'Add an API key in Settings before using Smart Scan.' });
+
+    const invalidProvider = await fetch(`http://127.0.0.1:${byokAddress.port}/api/ai/ingredients/detect`, {
+      method: 'POST',
+      headers: { Authorization: 'Bearer user-key', 'Content-Type': 'application/json', 'X-Recognition-Provider': 'FIREWORKS' },
+      body: JSON.stringify({ image: JPEG_DATA_URL }),
+    });
+    assert.equal(invalidProvider.status, 400);
+  } finally {
+    await new Promise<void>((resolve, reject) => byokServer.close((error) => error ? reject(error) : resolve()));
+  }
 });
 
-test('Settings presents recipe and recognition configurations separately', () => {
+test('BYOK settings explain encrypted local keys and both recognition providers', () => {
   const source = readFileSync(new URL('../src/settings/SettingsView.tsx', import.meta.url), 'utf8');
-  assert.match(source, /Recipe generation:/);
-  assert.match(source, /Ingredient recognition:/);
-  assert.match(source, /\/api\/ai\/ingredients\/healthz/);
-  assert.match(source, /Compressed photos leave the app/);
+  assert.match(source, /Meta API key/);
+  assert.match(source, /Google Gemini API key/);
+  assert.match(source, /AES-GCM/);
+  assert.match(source, /non-exportable encryption key/);
+  assert.match(source, /not stored by Eat & Fit/);
+  assert.match(source, /Legal, data sources &amp; safety/);
 });
 
-test('ingredient scanner always uses cloud recognition without an on-device mode', () => {
+test('smart scanner sends the selected device key only with a cloud request', () => {
   const source = readFileSync(new URL('../src/scanner/ScanView.tsx', import.meta.url), 'utf8');
+  const coreSource = readFileSync(new URL('../src/scanner/CoreScanView.tsx', import.meta.url), 'utf8');
   assert.match(source, /fetch\('\/api\/ai\/ingredients\/detect'/);
+  assert.match(source, /authorization: `Bearer \$\{recognition\.apiKey\}`/);
+  assert.match(source, /x-recognition-provider/);
   assert.doesNotMatch(source, /Recognition mode|recognitionMode|On-device|YOLOE/);
   assert.match(source, /title="Photo"/);
   assert.match(source, /title="Barcode"/);
+  assert.doesNotMatch(coreSource, /Photo|ingredients\/detect|secureKeys/);
+  assert.match(coreSource, /ProductScanner/);
 });
