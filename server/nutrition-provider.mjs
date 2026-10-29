@@ -132,7 +132,7 @@ export class NutritionProvider {
       food.portions = this.database
         .prepare(
           `SELECT p.amount, COALESCE(u.name, p.modifier, p.portion_description, 'portion') AS unit,
-                  p.gram_weight AS grams
+                  p.gram_weight AS grams, p.portion_description AS description, p.modifier
            FROM food_portions p
            LEFT JOIN measure_units u
              ON u.dataset_key = p.dataset_key AND u.source_id = p.measure_unit_id

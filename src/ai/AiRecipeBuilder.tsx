@@ -15,6 +15,7 @@ import {
 import { useState } from 'react';
 import { readJsonResponse } from '../api/readJsonResponse';
 import { localDate, saveFood, type MealType } from '../data/db';
+import { ingredientSearchQuery, nutritionPerServing, suggestIngredientGrams, type UsdaNutrient, type UsdaPortion } from '../nutrition/recipeNutrition';
 import { IngredientScannerTrigger } from '../scanner/ScanView';
 import { getRecognitionCredential } from '../settings/secureKeys';
 import { generateRecipesWithMeta } from './metaRecipeGeneration';
@@ -22,6 +23,8 @@ import { validateAiFilters, type AiRecipe } from './validation';
 
 type Range = { min: string; max: string };
 type Food = { fdcId: number; description: string; dataType: string };
+type FoodDetails = Food & { portions?: UsdaPortion[] };
+type IngredientMatch = { fdcId: number; grams: number };
 
 const diets = ['balanced', 'high-fiber', 'high-protein', 'low-carb', 'low-fat', 'low-sodium', 'vegan', 'vegetarian'];
 const allergens = ['celery', 'crustacean', 'dairy', 'egg', 'fish', 'gluten', 'mustard', 'peanut', 'sesame', 'shellfish', 'soy', 'tree-nut', 'wheat'];
@@ -225,24 +228,84 @@ function AiRecipeDetail({ recipe, initialDate, onClose, onAdded }: { recipe: AiR
 }
 
 function UsdaMatchDialog({ recipe, onClose, onUse }: { recipe: AiRecipe; onClose: () => void; onUse: (value: AiRecipe['nutrition']) => void }) {
-  const [query, setQuery] = useState(parseList(recipe.ingredients[0] ?? '')[0] ?? '');
+  const [ingredientIndex, setIngredientIndex] = useState(0);
+  const [matches, setMatches] = useState<IngredientMatch[]>([]);
+  const [query, setQuery] = useState(ingredientSearchQuery(recipe.ingredients[0] ?? ''));
   const [foods, setFoods] = useState<Food[]>([]);
-  const [selected, setSelected] = useState<Food>();
+  const [selected, setSelected] = useState<FoodDetails>();
+  const [grams, setGrams] = useState('100');
+  const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState('Choose the closest USDA food for each ingredient, then calculate the recipe.');
+  const ingredient = recipe.ingredients[ingredientIndex] ?? '';
+
   const search = async () => {
-    const response = await fetch(`/api/nutrition/search?q=${encodeURIComponent(query)}`);
-    const data = await response.json();
-    setFoods(data.items ?? []);
+    setBusy(true);
+    setStatus(`Searching USDA for ingredient ${ingredientIndex + 1}…`);
+    try {
+      const response = await fetch(`/api/nutrition/search?q=${encodeURIComponent(query)}`);
+      const data = await readJsonResponse<{ error?: string; items?: Food[] }>(response, 'USDA search');
+      if (!response.ok) throw new Error(data.error || 'USDA search failed.');
+      setFoods(data.items ?? []);
+      setStatus((data.items ?? []).length ? 'Select the closest food, then confirm the amount used in the whole recipe.' : 'No matches found. Edit the search or skip this ingredient.');
+    } catch (value) {
+      setStatus(value instanceof Error ? value.message : 'USDA search failed.');
+    } finally {
+      setBusy(false);
+    }
   };
-  const calculate = async () => {
-    if (!selected) return;
-    setStatus('Calculating nutrition…');
-    const response = await fetch(`/api/nutrition/foods/${selected.fdcId}`);
-    const details = await response.json();
-    const amount = (term: string) => Number(details.nutrients?.find((item: { name: string }) => item.name.toLowerCase().includes(term))?.amount ?? 0);
-    onUse({ calories: Math.round(amount('energy')), protein: amount('protein'), carbs: amount('carbohydrate'), fat: amount('fat') });
+
+  const choose = async (food: Food) => {
+    setBusy(true);
+    setStatus('Loading portions…');
+    try {
+      const response = await fetch(`/api/nutrition/foods/${food.fdcId}`);
+      const details = await readJsonResponse<FoodDetails & { error?: string }>(response, 'USDA food');
+      if (!response.ok) throw new Error(details.error || 'USDA food could not be loaded.');
+      setSelected(details);
+      setGrams(String(suggestIngredientGrams(ingredient, details.portions)));
+      setStatus('Confirm the gram amount for the whole recipe.');
+    } catch (value) {
+      setStatus(value instanceof Error ? value.message : 'USDA food could not be loaded.');
+    } finally {
+      setBusy(false);
+    }
   };
-  return <div className="dialog-backdrop"><section className="match-dialog" role="dialog" aria-modal="true"><button className="sheet-close" onClick={onClose}><X /></button><h2>Match ingredients to nutrition data</h2><p>{status}</p><div className="usda-search"><input value={query} onChange={(event) => setQuery(event.target.value)} /><button className="text-button" onClick={() => void search()}><Search size={16} /> Search USDA</button></div><div className="usda-results">{foods.map((food) => <button className={selected?.fdcId === food.fdcId ? 'active' : ''} key={food.fdcId} onClick={() => setSelected(food)}><strong>{food.description}</strong><small>{food.dataType}</small></button>)}</div><footer><button className="text-button" onClick={onClose}>Cancel</button><button className="primary-button" disabled={!selected} onClick={() => void calculate()}><RefreshCw size={16} /> Calculate and use</button></footer></section></div>;
+
+  const calculate = async (items: IngredientMatch[]) => {
+    if (!items.length) { setStatus('Match at least one ingredient before calculating.'); return; }
+    setBusy(true);
+    setStatus(`Calculating all ${items.length} matched ingredients…`);
+    try {
+      const response = await fetch('/api/nutrition/calculate', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ items }) });
+      const data = await readJsonResponse<{ error?: string; nutrients?: UsdaNutrient[] }>(response, 'USDA calculation');
+      if (!response.ok) throw new Error(data.error || 'USDA calculation failed.');
+      onUse(nutritionPerServing(data.nutrients ?? [], recipe.servings));
+    } catch (value) {
+      setStatus(value instanceof Error ? value.message : 'USDA calculation failed.');
+      setBusy(false);
+    }
+  };
+
+  const continueToNext = (match?: IngredientMatch) => {
+    const nextMatches = match ? [...matches, match] : matches;
+    if (ingredientIndex === recipe.ingredients.length - 1) { void calculate(nextMatches); return; }
+    const nextIndex = ingredientIndex + 1;
+    setMatches(nextMatches);
+    setIngredientIndex(nextIndex);
+    setQuery(ingredientSearchQuery(recipe.ingredients[nextIndex] ?? ''));
+    setFoods([]);
+    setSelected(undefined);
+    setGrams('100');
+    setStatus('Choose the closest USDA food for this ingredient.');
+  };
+
+  const useMatch = () => {
+    const amount = Number(grams);
+    if (!selected || !Number.isFinite(amount) || amount <= 0) { setStatus('Enter a gram amount greater than zero.'); return; }
+    continueToNext({ fdcId: selected.fdcId, grams: amount });
+  };
+
+  return <div className="dialog-backdrop"><section className="match-dialog" role="dialog" aria-modal="true"><button className="sheet-close" onClick={onClose}><X /></button><h2>Match ingredients to nutrition data</h2><div className="match-progress"><span>Ingredient {ingredientIndex + 1} of {recipe.ingredients.length}</span><strong>{ingredient}</strong></div><p>{status}</p><div className="usda-search"><input value={query} aria-label="USDA search" onChange={(event) => setQuery(event.target.value)} /><button className="text-button" disabled={busy || !query.trim()} onClick={() => void search()}><Search size={16} /> Search USDA</button></div><div className="usda-results">{foods.map((food) => <button className={selected?.fdcId === food.fdcId ? 'active' : ''} disabled={busy} key={food.fdcId} onClick={() => void choose(food)}><strong>{food.description}</strong><small>{food.dataType}</small></button>)}</div>{selected && <label className="usda-amount"><span>Amount used in the whole recipe</span><span><input type="number" min="0.1" step="0.1" value={grams} onChange={(event) => setGrams(event.target.value)} /> g</span><small>{selected.description}</small></label>}<footer><button className="text-button" onClick={onClose}>Cancel</button><button className="text-button" disabled={busy} onClick={() => continueToNext()}>Skip ingredient</button><button className="primary-button" disabled={!selected || busy} onClick={useMatch}>{busy ? <LoaderCircle className="spin" size={16} /> : <RefreshCw size={16} />} {ingredientIndex === recipe.ingredients.length - 1 ? 'Calculate and use' : 'Use match and continue'}</button></footer></section></div>;
 }
 
 function MacroGrid({ values }: { values: { calories: number; protein: number; carbs: number; fat: number } }) {

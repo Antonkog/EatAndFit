@@ -91,7 +91,7 @@ export function SettingsView() {
           <p>Smart Scan and AI recipe generation are enabled when the selected provider has a saved key. Your provider may charge your account for API requests.</p>
           <div className="key-security-note">
             <ShieldCheck size={20} />
-            <p>Keys are encrypted with AES-GCM using a non-exportable encryption key and stored in this browser’s IndexedDB on your phone or computer. They are not included in backups or analytics. Meta Smart Scan and recipe-generation requests go directly from this browser to Meta. Gemini AI requests are sent over HTTPS through Eat & Fit’s server. Request keys and submitted content are not stored by Eat & Fit. Local encryption protects the saved value at rest, but it cannot protect an unlocked browser or a compromised device.</p>
+            <p>Keys are encrypted.</p>
           </div>
           <div className="provider-key-grid">
             <ProviderKeyField label="Meta API key" configured={Boolean(keyStatus?.metaConfigured)} value={metaKey} onChange={setMetaKey} onSave={() => void saveKey('META')} onRemove={() => void removeKey('META')} />
@@ -129,10 +129,6 @@ export function SettingsView() {
               </section>
             ))}
           </div>
-          {__SMART_SCANNER__ && <section className="ai-disclosure">
-            <h4>User-configured AI services</h4>
-            <p>Ingredient recognition and AI recipe generation use the Meta or Google Gemini provider selected by the user. Meta requests use Muse Spark 1.3 directly from the browser, where Contributor-model content may be used by Meta to improve its products. The user supplies the API key and is responsible for provider charges and terms. Gemini requests may be forwarded by Eat & Fit only for that request and are not stored on its server. Generated and recognized results require user review.</p>
-          </section>}
           <section className="safety">
             <h4>Safety</h4>
             <p>Eat & Fit provides educational exercise and nutrition information, not medical advice. Stop exercising if you experience pain, and consult a qualified healthcare or fitness professional when appropriate.</p>

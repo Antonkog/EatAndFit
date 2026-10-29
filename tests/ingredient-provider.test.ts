@@ -242,13 +242,12 @@ test('ingredient HTTP contract reports health, accepts Base64 capacity, and maps
   }
 });
 
-test('BYOK settings explain encrypted local keys and both recognition providers', () => {
+test('BYOK settings show concise key security text and both recognition providers', () => {
   const source = readFileSync(new URL('../src/settings/SettingsView.tsx', import.meta.url), 'utf8');
   assert.match(source, /Meta API key/);
   assert.match(source, /Google Gemini API key/);
-  assert.match(source, /AES-GCM/);
-  assert.match(source, /non-exportable encryption key/);
-  assert.match(source, /not stored by Eat & Fit/);
+  assert.match(source, /Keys are encrypted\./);
+  assert.doesNotMatch(source, /AES-GCM|non-exportable encryption key|User-configured AI services/);
   assert.match(source, /Legal, data sources &amp; safety/);
 });
 

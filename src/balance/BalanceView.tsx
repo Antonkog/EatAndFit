@@ -21,6 +21,11 @@ function signed(value: number) {
   return `${rounded > 0 ? '+' : ''}${rounded.toLocaleString('en-US')}`;
 }
 
+function directionalAmount(value: number, sign: '+' | '−') {
+  const rounded = Math.round(value);
+  return rounded === 0 ? '0' : `${sign}${rounded.toLocaleString('en-US')}`;
+}
+
 function dayLabel(date: string, today: string) {
   if (date === today) return 'Today';
   return new Intl.DateTimeFormat('en-US', { weekday: 'short' }).format(new Date(`${date}T12:00:00`));
@@ -37,6 +42,8 @@ function BalanceGauge({ value }: { value: number }) {
         <path className="gauge-red" d={arc(180, 261)} />
         <path className="gauge-yellow" d={arc(261, 279)} />
         <path className="gauge-green" d={arc(279, 360)} />
+        <circle className="gauge-red-cap" cx={point(180, 110).x} cy={point(180, 110).y} r="8" />
+        <circle className="gauge-green-cap" cx={point(360, 110).x} cy={point(360, 110).y} r="8" />
         <line className="gauge-needle" x1="160" y1="150" x2={needle.x} y2={needle.y} />
         <circle className="gauge-pin" cx="160" cy="150" r="9" />
       </svg>
@@ -99,12 +106,11 @@ export function BalanceView({ onAddFood, onAddExercise }: { onAddFood: () => voi
         <article className="balance-gauge-card">
           <div className="balance-card-title"><span><Flame size={18} /></span><strong>Calorie balance</strong></div>
           <BalanceGauge value={totals.balance} />
-          <p>Food moves the needle left. Calories from completed exercise move it right.</p>
         </article>
         <div className="balance-side">
           <section className="balance-totals">
-            <article><span className="eaten"><Utensils size={18} /></span><small>Eaten</small><strong>+{Math.round(totals.eaten).toLocaleString('en-US')} kcal</strong></article>
-            <article><span className="burned"><Flame size={18} /></span><small>Burned</small><strong>−{Math.round(totals.burned).toLocaleString('en-US')} kcal</strong></article>
+            <article><span className="eaten"><Utensils size={18} /></span><small>Eaten</small><strong>{directionalAmount(totals.eaten, '+')} kcal</strong></article>
+            <article><span className="burned"><Flame size={18} /></span><small>Burned</small><strong>{directionalAmount(totals.burned, '−')} kcal</strong></article>
             <article><span className={`net ${balanceBand(totals.balance)}`}><Flame size={18} /></span><small>Balance</small><strong>{signed(totals.balance)} kcal</strong></article>
           </section>
           <section className="balance-actions">
