@@ -23,21 +23,26 @@ export function App() {
     <div className="app-shell">
       <FirebaseAnalytics />
       <header className="topbar">
-        <button className="brand" onClick={() => setView('exercises')} aria-label="Eat and Fit home">
-          <span className="brand-mark">E&F</span>
-          <span>Eat & Fit</span>
-        </button>
-        <button className="icon-button" onClick={() => setView('settings')} aria-label="Open settings">
-          <Settings size={21} />
-        </button>
+        <div className="topbar-inner">
+          <button className="brand" onClick={() => setView('exercises')} aria-label="Eat and Fit home">
+            <span className="brand-mark"><Dumbbell size={19} /></span>
+            <span>EAT AND FIT</span>
+          </button>
+          <nav className="desktop-nav" aria-label="Primary navigation">
+            {navigation.map(({ id, label, icon: Icon }) => (
+              <button key={id} className={view === id ? 'active' : ''} onClick={() => setView(id)}>
+                <Icon size={16} />
+                <span>{id === 'exercises' ? 'Muscles' : label}</span>
+              </button>
+            ))}
+          </nav>
+          <button className={`icon-button settings-button ${view === 'settings' ? 'active' : ''}`} onClick={() => setView('settings')} aria-label="Open settings">
+            <Settings size={19} />
+          </button>
+        </div>
       </header>
 
       <main className="page">
-        {view !== 'settings' && <section className="hero">
-          <p className="eyebrow">MOVE WELL · EAT WELL</p>
-          <h1>{view === 'exercises' ? 'Build a stronger routine' : navigation.find((item) => item.id === view)?.label ?? 'Settings'}</h1>
-          <p>Simple tools for thoughtful training and everyday nutrition.</p>
-        </section>}
         {view === 'exercises' ? <ExerciseLibrary /> : view === 'calendar' ? <CalendarView /> : view === 'recipes' ? <RecipeView /> : view === 'scan' ? <ScanView onRecipes={() => setView('recipes')} /> : <SettingsView />}
       </main>
 
@@ -45,7 +50,7 @@ export function App() {
         {navigation.map(({ id, label, icon: Icon }) => (
           <button key={id} className={view === id ? 'active' : ''} onClick={() => setView(id)}>
             <Icon size={20} />
-            <span>{label}</span>
+            <span>{id === 'exercises' ? 'Muscles' : label}</span>
           </button>
         ))}
       </nav>
