@@ -208,3 +208,11 @@ test('Settings presents recipe and recognition configurations separately', () =>
   assert.match(source, /\/api\/ai\/ingredients\/healthz/);
   assert.match(source, /Compressed photos leave the app/);
 });
+
+test('ingredient scanner always uses cloud recognition without an on-device mode', () => {
+  const source = readFileSync(new URL('../src/scanner/ScanView.tsx', import.meta.url), 'utf8');
+  assert.match(source, /fetch\('\/api\/ai\/ingredients\/detect'/);
+  assert.doesNotMatch(source, /Recognition mode|recognitionMode|On-device|YOLOE/);
+  assert.match(source, /title="Photo"/);
+  assert.match(source, /title="Barcode"/);
+});

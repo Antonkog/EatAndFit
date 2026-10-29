@@ -507,15 +507,15 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .scan-heading { margin-bottom: 28px; }
 .scan-heading .eyebrow { margin-bottom: 8px; text-transform: uppercase; }
 .scan-heading > p:last-child { max-width: 680px; margin: 13px 0 0; color: var(--muted-text); }
-.scan-type, .recognition-mode { margin: 0 0 18px; padding: 0; border: 0; }
-.scan-type > legend, .recognition-mode > legend { margin-bottom: 8px; font-size: 12px; font-weight: 750; }
-.scan-type > div, .recognition-mode > div { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-.scan-type label, .recognition-mode label { display: flex; align-items: start; gap: 10px; padding: 14px; border: 1px solid var(--border); border-radius: 15px; color: var(--muted-text); background: rgba(255,255,255,.022); cursor: pointer; }
-.scan-type label.active, .recognition-mode label.active { border-color: rgba(183,255,79,.45); color: var(--text); background: rgba(183,255,79,.085); }
-.scan-type label input, .recognition-mode label input { width: 16px; height: 16px; margin-top: 3px; accent-color: var(--primary); }
-.scan-type label span, .recognition-mode label span { display: grid; gap: 4px; }
-.scan-type label strong, .recognition-mode label strong { display: flex; align-items: center; gap: 7px; font-size: 13px; }
-.scan-type label small, .recognition-mode label small { font-size: 10px; opacity: .75; }
+.scan-type { margin: 0 0 18px; padding: 0; border: 0; }
+.scan-type > legend { margin-bottom: 8px; font-size: 12px; font-weight: 750; }
+.scan-type > div { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.scan-type label { display: flex; align-items: start; gap: 10px; padding: 14px; border: 1px solid var(--border); border-radius: 15px; color: var(--muted-text); background: rgba(255,255,255,.022); cursor: pointer; }
+.scan-type label.active { border-color: rgba(183,255,79,.45); color: var(--text); background: rgba(183,255,79,.085); }
+.scan-type label input { width: 16px; height: 16px; margin-top: 3px; accent-color: var(--primary); }
+.scan-type label span { display: grid; gap: 4px; }
+.scan-type label strong { display: flex; align-items: center; gap: 7px; font-size: 13px; }
+.scan-type label small { font-size: 10px; opacity: .75; }
 .ingredient-scanner-card { padding: 20px; border: 1px solid var(--border); border-radius: 24px; background: var(--surface); }
 .ingredient-sheet { width: min(580px,100%); }
 .ingredient-sheet .ingredient-scanner-card { border: 0; border-radius: 0; }
@@ -638,7 +638,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   .three-fields, .range-grid, .two-fields { grid-template-columns: 1fr; }
   .ai-results-grid { grid-template-columns: 1fr; }
   .usda-search { flex-direction: column; }
-  .scan-type > div, .recognition-mode > div { grid-template-columns: 1fr; }
+  .scan-type > div { grid-template-columns: 1fr; }
   .ingredient-scanner-card { padding: 15px; }
   .photo-preview > img { height: 240px; }
   .ingredient-actions { grid-template-columns: 1fr; }

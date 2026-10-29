@@ -19,7 +19,6 @@ import { localDate, saveFood, saveProduct, type MealType } from '../data/db';
 import { prepareJpeg } from './image';
 
 export type ScanMode = 'photo' | 'barcode';
-type RecognitionMode = 'cloud' | 'device';
 type Product = { barcode: string; name: string; brand: string; imageUrl: string; calories?: number; protein?: number; carbs?: number; fat?: number; basis: string };
 const meals: MealType[] = ['breakfast', 'lunch', 'dinner', 'snack'];
 
@@ -76,7 +75,6 @@ function IngredientScannerPanel({
 }) {
   const cameraRef = useRef<HTMLInputElement>(null);
   const galleryRef = useRef<HTMLInputElement>(null);
-  const [recognitionMode, setRecognitionMode] = useState<RecognitionMode>('cloud');
   const [file, setFile] = useState<File>();
   const [ingredients, setIngredients] = useState<string[]>([]);
   const [draft, setDraft] = useState('');
@@ -95,10 +93,6 @@ function IngredientScannerPanel({
 
   const scan = async () => {
     if (!file) return;
-    if (recognitionMode === 'device') {
-      setStatus('The on-device YOLOE baseline is not fine-tuned. Review and add ingredients manually.');
-      return;
-    }
     setScanning(true);
     setStatus('Recognizing ingredients…');
     try {
@@ -124,10 +118,6 @@ function IngredientScannerPanel({
 
   return (
     <section className="ingredient-scanner-card">
-      <fieldset className="recognition-mode"><legend>Recognition mode</legend><div>
-        <ModeRadio active={recognitionMode === 'cloud'} name="recognition-mode" value="cloud" icon={<Sparkles />} title="Cloud" hint="Most accurate · internet required" onClick={() => setRecognitionMode('cloud')} />
-        <ModeRadio active={recognitionMode === 'device'} name="recognition-mode" value="device" icon={<ScanLine />} title="On-device" hint="Pretrained YOLOE baseline · not fine-tuned" onClick={() => setRecognitionMode('device')} />
-      </div></fieldset>
       <input ref={cameraRef} className="visually-hidden" type="file" accept="image/*" capture="environment" onChange={(event) => choose(event.target.files?.[0])} />
       <input ref={galleryRef} className="visually-hidden" type="file" accept="image/*" onChange={(event) => choose(event.target.files?.[0])} />
       {preview ? <div className="photo-preview"><img src={preview} alt="Ingredient preview" /><div><button className="text-button" onClick={() => cameraRef.current?.click()}><Camera size={17} /> Take photo</button><button className="text-button" onClick={() => galleryRef.current?.click()}><Images size={17} /> Choose photo</button></div><button className="primary-button full" disabled={scanning} onClick={() => void scan()}>{scanning ? <LoaderCircle className="spin" /> : <ScanLine size={17} />}{scanning ? 'Recognizing…' : 'Recognize ingredients'}</button></div> : <div className="photo-drop"><Camera /><button className="primary-button" onClick={() => cameraRef.current?.click()}><Camera size={17} /> Take photo</button><button className="text-button" onClick={() => galleryRef.current?.click()}><Images size={17} /> Choose photo</button></div>}
