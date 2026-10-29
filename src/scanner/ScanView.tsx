@@ -16,6 +16,7 @@ import { readJsonResponse } from '../api/readJsonResponse';
 import { localDate } from '../data/db';
 import { getRecognitionCredential, getRecognitionKeyStatus, RECOGNITION_KEYS_CHANGED } from '../settings/secureKeys';
 import { prepareJpeg } from './image';
+import { recognizeIngredientsWithMeta } from './metaRecognition';
 import { ProductScanner } from './ProductScanner';
 import type { ScanMode } from './types';
 
@@ -129,6 +130,12 @@ function IngredientScannerPanel({
       const recognition = await getRecognitionCredential();
       if (!recognition) throw new Error('Add a Meta or Google Gemini API key in Settings first.');
       const image = await prepareJpeg(file);
+      if (recognition.provider === 'META') {
+        const recognized = await recognizeIngredientsWithMeta(image, recognition.apiKey);
+        setIngredients(recognized);
+        setStatus(recognized.length ? 'Review every ingredient before continuing.' : 'No ingredients were recognized. Try another photo.');
+        return;
+      }
       const response = await fetch('/api/ai/ingredients/detect', {
         method: 'POST',
         headers: {

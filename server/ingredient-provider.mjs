@@ -15,19 +15,6 @@ export const INGREDIENT_REQUEST_BODY_LIMIT = 1450 * 1024;
 const recognitionPrompt =
   'Identify only the distinct edible ingredients clearly visible in this image. Return concise common English names without quantities, recipes, confidence scores, or ingredients that are hidden or merely implied. Return an empty list when none are identifiable.';
 
-const metaResponseSchema = {
-  type: 'object',
-  additionalProperties: false,
-  required: ['ingredients'],
-  properties: {
-    ingredients: {
-      type: 'array',
-      maxItems: MAX_INGREDIENTS,
-      items: { type: 'string', maxLength: MAX_INGREDIENT_NAME_LENGTH },
-    },
-  },
-};
-
 export const geminiResponseSchema = {
   type: 'object',
   additionalProperties: false,
@@ -250,10 +237,7 @@ export class MetaIngredientRecognitionProvider extends IngredientRecognitionProv
             { role: 'system', content: 'You identify visible food ingredients and return strict JSON only.' },
             { role: 'user', content: [{ type: 'text', text: recognitionPrompt }, { type: 'image_url', image_url: { url: image } }] },
           ],
-          response_format: {
-            type: 'json_schema',
-            json_schema: { name: 'visible_ingredients', strict: true, schema: metaResponseSchema },
-          },
+          response_format: { type: 'json_object' },
         }),
         signal: AbortSignal.timeout(this.timeoutMs),
       });

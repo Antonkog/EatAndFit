@@ -60,7 +60,7 @@ test('normalizes English ingredient names, duplicates, limits, and empty results
   assert.throws(() => normalizeIngredientNames([{}]), errorStatus(502, 'invalid_response'));
 });
 
-test('Meta sends the image and strict schema to chat completions and normalizes output', async () => {
+test('Meta sends the image with JSON output to chat completions and normalizes output', async () => {
   let requestedUrl = '';
   let requestedHeaders: Record<string, string> = {};
   let requestedBody: Record<string, any> = {};
@@ -82,8 +82,7 @@ test('Meta sends the image and strict schema to chat completions and normalizes 
   assert.equal(requestedBody.model, 'muse-spark-1.3');
   assert.equal(requestedBody.messages[1].content[1].type, 'image_url');
   assert.equal(requestedBody.messages[1].content[1].image_url.url, JPEG_DATA_URL);
-  assert.equal(requestedBody.response_format.type, 'json_schema');
-  assert.equal(requestedBody.response_format.json_schema.strict, true);
+  assert.equal(requestedBody.response_format.type, 'json_object');
   assert.doesNotMatch(JSON.stringify(await provider.getHealth()), /private-meta-key/);
 });
 

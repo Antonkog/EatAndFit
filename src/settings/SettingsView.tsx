@@ -91,7 +91,7 @@ export function SettingsView() {
           <p>Smart Scan and AI recipe generation are enabled when the selected provider has a saved key. Your provider may charge your account for API requests.</p>
           <div className="key-security-note">
             <ShieldCheck size={20} />
-            <p>Keys are encrypted with AES-GCM using a non-exportable encryption key and stored in this browser’s IndexedDB on your phone or computer. They are not included in backups or analytics. During an AI request, the selected key and submitted content are sent over HTTPS to Eat & Fit’s server, forwarded to that provider, and not stored by Eat & Fit. Local encryption protects the saved value at rest, but it cannot protect an unlocked browser or a compromised device.</p>
+            <p>Keys are encrypted with AES-GCM using a non-exportable encryption key and stored in this browser’s IndexedDB on your phone or computer. They are not included in backups or analytics. Meta Smart Scan requests go directly from this browser to Meta. Other AI requests are sent over HTTPS through Eat & Fit’s server. Request keys and submitted content are not stored by Eat & Fit. Local encryption protects the saved value at rest, but it cannot protect an unlocked browser or a compromised device.</p>
           </div>
           <div className="provider-key-grid">
             <ProviderKeyField label="Meta API key" configured={Boolean(keyStatus?.metaConfigured)} value={metaKey} onChange={setMetaKey} onSave={() => void saveKey('META')} onRemove={() => void removeKey('META')} />
@@ -131,7 +131,7 @@ export function SettingsView() {
           </div>
           {__SMART_SCANNER__ && <section className="ai-disclosure">
             <h4>User-configured AI services</h4>
-            <p>Ingredient recognition and AI recipe generation use the Meta or Google Gemini provider selected by the user. Meta requests use Muse Spark 1.3 Contributor, where submitted content may be used by Meta to improve its products. The user supplies the API key and is responsible for provider charges and terms. During a request, the submitted content and selected key leave the device over HTTPS. Eat & Fit forwards them only for that request and does not store them on its server. Generated and recognized results require user review.</p>
+            <p>Ingredient recognition and AI recipe generation use the Meta or Google Gemini provider selected by the user. Meta Smart Scan uses Muse Spark 1.3 Contributor directly from the browser, where submitted content may be used by Meta to improve its products. The user supplies the API key and is responsible for provider charges and terms. Other AI requests may be forwarded by Eat & Fit only for that request and are not stored on its server. Generated and recognized results require user review.</p>
           </section>}
           <section className="safety">
             <h4>Safety</h4>
