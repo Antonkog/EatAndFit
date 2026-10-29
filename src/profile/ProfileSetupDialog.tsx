@@ -1,0 +1,23 @@
+import { Activity } from 'lucide-react';
+import { ProfileForm } from './ProfileForm';
+import { dismissProfileSetup } from './userProfile';
+
+export function ProfileSetupDialog({ onFinished }: { onFinished: () => void }) {
+  const skip = () => {
+    dismissProfileSetup();
+    onFinished();
+  };
+
+  return (
+    <div className="profile-setup-backdrop">
+      <section className="profile-setup-dialog" role="dialog" aria-modal="true" aria-labelledby="profile-setup-title">
+        <span className="profile-setup-icon"><Activity /></span>
+        <p className="eyebrow">A quick setup</p>
+        <h2 id="profile-setup-title">Personalize Eat &amp; Fit</h2>
+        <p>Sex, weight, and height are needed for more accurate calorie calculations. Your sex also selects the matching exercise demonstration images. These details stay in this browser and can be edited later in Settings.</p>
+        <ProfileForm submitLabel="Save and continue" onSaved={onFinished} />
+        <button className="profile-skip" type="button" onClick={skip}>Skip for this session</button>
+      </section>
+    </div>
+  );
+}

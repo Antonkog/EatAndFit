@@ -5,6 +5,8 @@ import { BalanceView } from './balance/BalanceView';
 import { CalendarView } from './calendar/CalendarView';
 import { localDate } from './data/db';
 import { ExerciseLibrary } from './exercises/ExerciseLibrary';
+import { ProfileSetupDialog } from './profile/ProfileSetupDialog';
+import { shouldShowProfileSetup } from './profile/userProfile';
 import { RecipeView } from './recipes/RecipeView';
 import { CoreScanView } from './scanner/CoreScanView';
 import type { ScanMode } from './scanner/types';
@@ -41,6 +43,7 @@ export function App() {
   const [scanMode, setScanMode] = useState<ScanMode>('photo');
   const [foodReturnView, setFoodReturnView] = useState<'balance' | 'calendar'>('calendar');
   const [aiFeaturesEnabled, setAiFeaturesEnabled] = useState(false);
+  const [profileSetupOpen, setProfileSetupOpen] = useState(shouldShowProfileSetup);
 
   useEffect(() => {
     if (!__SMART_SCANNER__) return;
@@ -199,6 +202,7 @@ export function App() {
           </button>
         ))}
       </nav>
+      {profileSetupOpen && <ProfileSetupDialog onFinished={() => setProfileSetupOpen(false)} />}
     </div>
   );
 }

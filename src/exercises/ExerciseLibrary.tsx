@@ -10,10 +10,11 @@ import {
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { localDate, scheduleWorkout } from '../data/db';
+import { preferredExerciseSex, setExerciseModelPreference, type ProfileSex } from '../profile/userProfile';
 import { exerciseMatches } from './search';
 import type { Exercise, ExerciseCatalog } from './types';
 
-type Gender = 'female' | 'male';
+type Gender = ProfileSex;
 type MuscleGroup = { name: string; targets: string[] };
 
 export const muscleGroups: MuscleGroup[] = [
@@ -41,10 +42,8 @@ export const muscleGroups: MuscleGroup[] = [
   { name: 'Full body & mobility', targets: ['cardiovascular system', 'full body'] },
 ];
 
-const MODEL_STORAGE_KEY = 'eat-and-fit-white:exercise-model';
-
 function preferredGender(): Gender {
-  return localStorage.getItem(MODEL_STORAGE_KEY) === 'male' ? 'male' : 'female';
+  return preferredExerciseSex();
 }
 
 function titleCase(value: string) {
@@ -97,7 +96,7 @@ function ExerciseDetail({
   const chooseGender = (value: Gender) => {
     if (!available.has(value)) return;
     setGender(value);
-    localStorage.setItem(MODEL_STORAGE_KEY, value);
+    setExerciseModelPreference(value);
   };
 
   const add = async () => {

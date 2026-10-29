@@ -1,7 +1,8 @@
-import { ChevronDown, Download, ExternalLink, KeyRound, ShieldCheck, Trash2, Upload } from 'lucide-react';
+import { ChevronDown, Download, ExternalLink, KeyRound, ShieldCheck, Trash2, Upload, UserRound } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { APP_EDITION_LABEL } from '../config/edition';
 import { clearData, exportBackup, importBackup, isBackup } from '../data/db';
+import { ProfileForm } from '../profile/ProfileForm';
 import { legalSources } from './legal';
 import {
   getRecognitionKeyStatus,
@@ -19,6 +20,7 @@ export function SettingsView() {
   const [metaKey, setMetaKey] = useState('');
   const [geminiKey, setGeminiKey] = useState('');
   const [keyMessage, setKeyMessage] = useState('');
+  const [profileMessage, setProfileMessage] = useState('');
 
   useEffect(() => {
     if (!__SMART_SCANNER__) return;
@@ -85,6 +87,12 @@ export function SettingsView() {
   return (
     <section className="settings">
       <div className="calendar-heading"><div><p className="eyebrow">{APP_EDITION_LABEL}</p><h2>Settings</h2></div></div>
+      <article className="settings-card profile-settings">
+        <h3><UserRound size={20} /> Personal profile</h3>
+        <p>Sex selects matching exercise demonstrations. Weight and height are used for more accurate calorie calculations. This profile stays in this browser.</p>
+        <ProfileForm onSaved={() => setProfileMessage('Profile saved.')} />
+        {profileMessage && <p className="key-message" role="status">{profileMessage}</p>}
+      </article>
       {__SMART_SCANNER__ && (
         <article className="settings-card api-key-settings">
           <h3><KeyRound size={20} /> AI provider keys</h3>
