@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
-import { normalizeUserProfile, profileIssue } from '../src/profile/userProfile';
+import { normalizeUserProfile, PROFILE_SETUP_REMINDER_MS, profileIssue, shouldPromptForProfile } from '../src/profile/userProfile';
 
 test('profile validation accepts supported sex, age, goal, and realistic metric values', () => {
   assert.equal(profileIssue({ sex: 'female', age: 18, weightKg: 62.5, heightCm: 168 }), '');
@@ -30,10 +30,20 @@ test('first-launch profile, Settings editing, and exercise media are integrated'
   assert.match(exercises, /preferredExerciseSex/);
 });
 
-test('skipping profile setup lasts only for the current browser session', () => {
+test('incomplete profile returns after the two-hour dismissal window', () => {
   const source = readFileSync(new URL('../src/profile/userProfile.ts', import.meta.url), 'utf8');
-  assert.match(source, /sessionStorage\.setItem\(PROFILE_SETUP_SESSION_KEY/);
-  assert.doesNotMatch(source, /localStorage\.setItem\(PROFILE_SETUP_SESSION_KEY/);
+  const incomplete = { sex: 'male' as const };
+  const complete = { sex: 'male' as const, age: 35, weightKg: 80, heightCm: 180, trainingGoal: 'stay_fit' as const };
+  const now = 1_000_000_000;
+  assert.equal(shouldPromptForProfile(incomplete, null, now), true);
+  assert.equal(shouldPromptForProfile(incomplete, String(now - PROFILE_SETUP_REMINDER_MS + 1), now), false);
+  assert.equal(shouldPromptForProfile(incomplete, String(now - PROFILE_SETUP_REMINDER_MS), now), true);
+  assert.equal(shouldPromptForProfile(incomplete, 'invalid', now), true);
+  assert.equal(shouldPromptForProfile(incomplete, String(now + 1), now), true);
+  assert.equal(shouldPromptForProfile(complete, null, now), false);
+  assert.match(source, /localStorage\.setItem\(PROFILE_SETUP_DISMISSED_KEY/);
+  assert.doesNotMatch(source, /sessionStorage/);
+  assert.match(source, /localStorage\.removeItem\(PROFILE_SETUP_DISMISSED_KEY\)/);
 });
 
 test('profile copy explains that personal data remains in the browser', () => {
@@ -41,4 +51,6 @@ test('profile copy explains that personal data remains in the browser', () => {
   const setup = readFileSync(new URL('../src/profile/ProfileSetupDialog.tsx', import.meta.url), 'utf8');
   assert.match(settings, /We don’t save your personal data, it stays in your own browser/);
   assert.match(setup, /We don’t save your personal data, it stays in your own browser/);
+  assert.match(setup, /return after two hours/);
+  assert.match(setup, />Not now</);
 });

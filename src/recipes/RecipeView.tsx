@@ -6,6 +6,7 @@ import {
   ExternalLink,
   LoaderCircle,
   Plus,
+  RefreshCw,
   RotateCcw,
   Search,
   SlidersHorizontal,
@@ -16,6 +17,7 @@ import {
 import { useEffect, useMemo, useState } from 'react';
 import { localDate, saveFood, type MealType } from '../data/db';
 import { recipeSearchParams } from './filters';
+import { getCuisineLocation, type CuisineLocation } from './location';
 import type { RecipeDetail, RecipePage, RecipeSummary } from './types';
 
 const DATASET_URL = 'https://huggingface.co/datasets/datahiveai/recipes-with-nutrition';
@@ -53,11 +55,27 @@ export function RecipeView({
   const [suggestions, setSuggestions] = useState<RecipeSummary[]>([]);
   const [suggestionsOpen, setSuggestionsOpen] = useState(false);
   const [suggestionIndex, setSuggestionIndex] = useState(-1);
+  const [recommendationLocation, setRecommendationLocation] = useState<CuisineLocation>();
+  const [recommendationVariation, setRecommendationVariation] = useState(0);
+  const recommendationsEnabled = !draft.trim() && !query && ingredients.length === 0 && Object.values(filters).every((value) => !value);
 
   useEffect(() => {
+    let disposed = false;
+    void getCuisineLocation().then((location) => { if (!disposed) setRecommendationLocation(location); });
+    return () => { disposed = true; };
+  }, []);
+
+  useEffect(() => {
+    if (recommendationsEnabled && !recommendationLocation) return;
     const timer = setTimeout(() => {
       setLoading(true);
       const params = recipeSearchParams({ query, page: String(page), pageSize: '12', ...filters }, ingredients);
+      if (recommendationsEnabled && recommendationLocation) {
+        params.set('recommendations', 'daily');
+        params.set('recommendationCuisine', recommendationLocation.cuisine);
+        params.set('recommendationDate', localDate());
+        params.set('recommendationVariation', String(recommendationVariation));
+      }
       fetch(`/api/recipes?${params}`)
         .then((response) => {
           if (!response.ok) throw new Error('Recipe catalog is unavailable. Import the DataHive dataset to enable it.');
@@ -68,7 +86,7 @@ export function RecipeView({
         .finally(() => setLoading(false));
     }, 250);
     return () => clearTimeout(timer);
-  }, [filters, ingredients, page, query, refresh]);
+  }, [filters, ingredients, page, query, recommendationLocation, recommendationVariation, recommendationsEnabled, refresh]);
 
   useEffect(() => {
     const search = draft.trim();
@@ -131,6 +149,7 @@ export function RecipeView({
     setSuggestionsOpen(false);
     setSuggestionIndex(-1);
     setPage(1);
+    setRecommendationVariation(0);
   };
 
   const chooseSuggestion = (recipe: RecipeSummary) => {
@@ -143,7 +162,10 @@ export function RecipeView({
     <section>
       <div className="recipe-heading">
         <h1>Recipes</h1>
-        {__SMART_SCANNER__ && onOpenAi && <button className="primary-button large recipe-action-button" onClick={onOpenAi}><Sparkles size={18} /> Generate AI recipe</button>}
+        <div className="recipe-heading-actions">
+          {recommendationsEnabled && <button className="text-button recipe-refresh-button" type="button" onClick={() => { setRecommendationVariation((value) => value + 1); setPage(1); }}><RefreshCw size={17} /> Refresh suggestions</button>}
+          {__SMART_SCANNER__ && onOpenAi && <button className="primary-button large recipe-action-button" onClick={onOpenAi}><Sparkles size={18} /> Generate AI recipe</button>}
+        </div>
       </div>
 
       <form className="recipe-search" onSubmit={(event) => { event.preventDefault(); setSuggestionsOpen(false); setQuery(draft.trim()); setPage(1); }}>
@@ -259,7 +281,7 @@ function RecipeCard({ recipe, loading, onClick }: { recipe: RecipeSummary; loadi
     <button className="recipe-card" disabled={loading} onClick={onClick}>
       <RecipeImage src={recipe.imageUrl} loading="lazy" fallbackClass="recipe-placeholder" />
       <span className="recipe-card-body">
-        <span className="badge-row">{[...recipe.dish, ...recipe.meal].slice(0, 2).map((item) => <i className="badge outline" key={item}>{item}</i>)}</span>
+        <span className="badge-row">{recipe.recommendationSlot && <i className="badge solid recommendation-badge">{titleCase(recipe.recommendationSlot)}</i>}{[...recipe.dish, ...recipe.meal].slice(0, recipe.recommendationSlot ? 1 : 2).map((item) => <i className="badge outline" key={item}>{item}</i>)}</span>
         <strong>{loading ? 'Loading…' : recipe.title}</strong>
         <small>{recipe.source}</small>
         <em>{Math.round(nutrition.calories)} kcal · Protein {nutrition.protein.toFixed(1)}g · Fat {nutrition.fat.toFixed(1)}g</em>
@@ -276,7 +298,7 @@ function RecipeImage({ src, className, fallbackClass, loading }: { src?: string;
 
 function RecipeDetail({ recipe, initialDate, onClose, onAdded }: { recipe: RecipeDetail; initialDate: string; onClose: () => void; onAdded: (date: string) => void }) {
   const [date, setDate] = useState(initialDate);
-  const [meal, setMeal] = useState<MealType>('dinner');
+  const [meal, setMeal] = useState<MealType>(recipe.recommendationSlot === 'morning' ? 'breakfast' : recipe.recommendationSlot === 'afternoon' ? 'lunch' : 'dinner');
   const [servings, setServings] = useState(1);
   const [added, setAdded] = useState(false);
   const nutrition = useMemo(() => recipe.nutrition, [recipe]);

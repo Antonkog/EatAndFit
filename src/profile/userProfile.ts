@@ -11,8 +11,9 @@ export type UserProfile = {
 
 export const PROFILE_CHANGED = 'eatfit-profile-change';
 const PROFILE_STORAGE_KEY = 'eat-and-fit:user-profile';
-const PROFILE_SETUP_SESSION_KEY = 'eat-and-fit:profile-setup-skipped';
+const PROFILE_SETUP_DISMISSED_KEY = 'eat-and-fit:profile-setup-dismissed-at';
 const EXERCISE_MODEL_STORAGE_KEY = 'eat-and-fit-white:exercise-model';
+export const PROFILE_SETUP_REMINDER_MS = 2 * 60 * 60 * 1000;
 
 function finiteNumber(value: unknown) {
   const number = Number(value);
@@ -61,18 +62,27 @@ export function saveUserProfile(profile: UserProfile) {
   if (issue) throw new Error(issue);
   const normalized = normalizeUserProfile(profile);
   localStorage.setItem(PROFILE_STORAGE_KEY, JSON.stringify(normalized));
+  localStorage.removeItem(PROFILE_SETUP_DISMISSED_KEY);
   if (normalized.sex) localStorage.setItem(EXERCISE_MODEL_STORAGE_KEY, normalized.sex);
   window.dispatchEvent(new Event(PROFILE_CHANGED));
   return normalized;
 }
 
-export function shouldShowProfileSetup() {
-  if (typeof sessionStorage === 'undefined') return false;
-  return sessionStorage.getItem(PROFILE_SETUP_SESSION_KEY) !== 'true' && Boolean(profileIssue(readUserProfile()));
+export function shouldPromptForProfile(profile: UserProfile, dismissedAt: string | null, now = Date.now()) {
+  if (!profileIssue(profile)) return false;
+  if (!dismissedAt) return true;
+  const timestamp = Number(dismissedAt);
+  if (!Number.isFinite(timestamp) || timestamp <= 0 || timestamp > now) return true;
+  return now - timestamp >= PROFILE_SETUP_REMINDER_MS;
 }
 
-export function dismissProfileSetup() {
-  sessionStorage.setItem(PROFILE_SETUP_SESSION_KEY, 'true');
+export function shouldShowProfileSetup(now = Date.now()) {
+  if (typeof localStorage === 'undefined') return false;
+  return shouldPromptForProfile(readUserProfile(), localStorage.getItem(PROFILE_SETUP_DISMISSED_KEY), now);
+}
+
+export function dismissProfileSetup(now = Date.now()) {
+  localStorage.setItem(PROFILE_SETUP_DISMISSED_KEY, String(now));
 }
 
 export function preferredExerciseSex(): ProfileSex {

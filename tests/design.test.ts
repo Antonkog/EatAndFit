@@ -67,3 +67,21 @@ test('calendar workout, food, and scanned-product entries open stored details', 
   assert.match(details, /Ingredients/);
   assert.match(exercises, /export function ExerciseDetail/);
 });
+
+test('browser tab uses the same lime dumbbell brand mark as the application', () => {
+  const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  const icon = readFileSync(new URL('../public/eat-and-fit-mark.svg', import.meta.url), 'utf8');
+  assert.match(html, /eat-and-fit-mark\.svg\?v=2/);
+  assert.match(icon, /fill="#B7FF4F"/);
+  assert.match(icon, /stroke="#101712"/);
+  assert.doesNotMatch(icon, />EF</);
+  assert.doesNotMatch(html, /favicon\.svg/);
+});
+
+test('localized meal suggestions stay inside the existing recipe grid', () => {
+  const recipes = readFileSync(new URL('../src/recipes/RecipeView.tsx', import.meta.url), 'utf8');
+  assert.match(recipes, /Refresh suggestions/);
+  assert.match(recipes, /recommendationSlot/);
+  assert.match(recipes, /recommendations', 'daily'/);
+  assert.equal((recipes.match(/className="recipe-grid"/g) ?? []).length, 1);
+});

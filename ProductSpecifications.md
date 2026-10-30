@@ -3,7 +3,7 @@
 ## Document status
 
 - Product: Eat & Fit web application
-- Specification version: 1.4
+- Specification version: 1.5
 - Implementation baseline: `main` as of October 30, 2026
 - Language: English only
 - Platforms: responsive web application for desktop and mobile browsers
@@ -64,18 +64,22 @@ Desktop uses a translucent top header with centered navigation. Mobile uses a fi
 - Lime-green `#B7FF4F` accent, off-white text, dark translucent cards, green borders/glow, and Manrope typography.
 - Responsive cards, sheets, dialogs, grids, forms, and navigation.
 - Standard action buttons use a dark appearance with green text/border and a brief green press flash. Destructive controls retain red styling.
-- The brand uses the lime dumbbell mark, uppercase `EAT AND FIT`, and the dark `EF` favicon.
+- The brand uses the lime rounded-square dumbbell mark in the header, Exercises navigation, and browser-tab favicon, with uppercase `EAT AND FIT` in the header.
 - English is the only supported UI and catalog language. There is no language selector or localization workflow.
 
 ### 3.3 Local dates and updates
 
 Dates use the browser's local timezone and the `YYYY-MM-DD` storage format. Data-changing actions emit an in-browser change event so Balance and Calendar refresh without a page reload.
 
+### 3.4 Numeric input behavior
+
+When any enabled, editable number input contains exactly zero, focusing or tapping it selects the complete zero. The first typed digit replaces the zero instead of producing values such as `01` or `02`. Mobile pointer placement reselects zero after the native caret update. Empty-draft and field-specific validation rules remain unchanged, and nonzero values are not automatically selected.
+
 ## 4. First launch and personal profile
 
 ### 4.1 Setup dialog
 
-When the locally stored profile is incomplete, the application opens a small welcome form. The form can be completed or skipped for the current browser session. If it is skipped, it appears again in a future browser session until the profile is complete. The same profile can be edited later in Settings.
+When the locally stored profile is incomplete, the application opens a small welcome form. Choosing `Not now` stores the dismissal time locally. The application checks only when a page is loaded and opens the form again when at least two hours have elapsed. Saving a complete profile clears the dismissal time. The same profile can be edited later in Settings.
 
 ### 4.2 Profile fields and validation
 
@@ -351,13 +355,27 @@ The production catalog contains exactly 39,447 DataHive `recipes-with-nutrition`
 - Results are ordered by title and stable recipe ID.
 - Typing in the recipe search field requests up to five matching database recipes after a short debounce. The dropdown shows recipe title, source, calories, and image or fallback. Mouse/touch selection opens that recipe's detail directly; Arrow Up/Down, Enter, and Escape provide keyboard control. Submitting the search form still loads the normal paginated results.
 
-### 11.3 Recipe detail and food handoff
+### 11.3 Daily localized suggestions
+
+When Recipes opens with no submitted search, typed query, ingredient handoff, or active filter, the first three positions in the existing recipe grid are daily catalog suggestions:
+
+- Morning: a healthy breakfast or brunch with 150–500 kcal, no more than 10 ingredients, and no more than 20 g fat. Dessert/alcohol dish labels and obvious dessert/cocktail title terms are excluded.
+- Afternoon: a healthy lunch/dinner main course with 250–600 kcal, at least 20 g protein, no more than 12 ingredients, and chicken, turkey, beef, pork, lamb, veal, or duck.
+- Evening: a healthy lunch/dinner main course, soup, or salad with 200–550 kcal, at least 12 g protein, no more than 10 ingredients, and no more than 25 g fat.
+
+Strict suggestions require one of the DataHive diet labels Balanced, High-Fiber, High-Protein, Low-Fat, or Low-Sodium. The service prefers the mapped local cuisine, then the same strict criteria across the catalog, then relaxes diet-label, ingredient-count, protein, and fat constraints while retaining meal role and calorie bounds. Suggestions are unique and identified by Morning/Afternoon/Evening badges.
+
+Selection is deterministic from the browser-local date, mapped cuisine, refresh variation, meal role, and stable recipe ID. `Refresh suggestions` advances the variation. Recommended IDs are excluded from the remaining results so pagination contains every catalog recipe exactly once. Opening a suggestion uses the normal detail view and defaults its Calendar meal selector to breakfast, lunch, or dinner for the suggestion role. Search, filters, autocomplete, and ingredient handoff use normal catalog ordering without suggestion injection.
+
+The web server forwards the client address to the internal API. The API sends a public client IP to Country.is for a country code, maps it to an existing DataHive cuisine, and returns only country code, cuisine, and resolution source. Georgia maps to `middle eastern`. Private addresses and failed lookups fall back to the `Accept-Language` country, then `world`. The browser caches only the returned country/cuisine result for 24 hours; Eat & Fit does not persist the raw IP.
+
+### 11.4 Recipe detail and food handoff
 
 Recipe cards show image fallback, classifications, source, calories, protein, and fat. Detail includes source link, ingredients, cuisine/dish/meal labels, diet and health labels, cautions, all available nutrients, and the external cooking-instructions URL.
 
 Nutrition is stored per serving. When adding a recipe to Calendar, calories and macros are multiplied by the chosen serving count. The user also chooses date and meal type.
 
-### 11.4 Import safety
+### 11.5 Import safety
 
 The importer validates the exact CSV columns, required fields, numeric and JSON values, expected 39,447 rows, source SHA-256, and final SQLite integrity. It builds a temporary database and atomically replaces the production database only after validation. A failed import removes the temporary file and leaves the existing catalog untouched.
 
@@ -467,7 +485,7 @@ Settings contains:
 - Deletion of locally stored workouts, food, and products.
 - A collapsed `Legal, data sources & safety` disclosure.
 
-The legal disclosure attributes and links the exercise catalog, Adult/Older Adult/Youth Compendia, Harvard reference table, DataHive recipe data, USDA FoodData Central, and Open Food Facts. It also states the DataHive non-commercial restriction, external-media ownership limits, AI review requirement, and educational/not-medical-advice safety warning.
+The legal disclosure attributes and links the exercise catalog, Adult/Older Adult/Youth Compendia, Harvard reference table, DataHive recipe data, Country.is, USDA FoodData Central, and Open Food Facts. It also states the DataHive non-commercial restriction, cuisine-location privacy behavior, external-media ownership limits, AI review requirement, and educational/not-medical-advice safety warning.
 
 ## 17. Local storage, backup, and deletion
 
@@ -483,8 +501,7 @@ Object stores:
 
 ### 17.2 Other browser storage
 
-- Profile, exercise-demonstration preference, and AI calibration: `localStorage`.
-- Welcome-dialog skip state: `sessionStorage`.
+- Profile, exercise-demonstration preference, AI calibration, welcome-dialog dismissal timestamp, and cached country/cuisine result: `localStorage`.
 - Encrypted AI keys and active provider: separate secure-settings IndexedDB database.
 
 ### 17.3 Backup scope
@@ -496,7 +513,7 @@ JSON backups use `schemaVersion: 1` and contain export time, workouts, food entr
 - Personal profile.
 - Exercise-demonstration preference.
 - Cached AI calibration.
-- Welcome-dialog session state.
+- Welcome-dialog dismissal timestamp and cached cuisine location.
 
 Import validates the top-level schema version and array presence, clears the existing three history stores, and then restores their records. `Delete local history` clears those same three stores; it does not delete profile or encrypted AI settings.
 
@@ -509,6 +526,7 @@ Import validates the top-level schema version and array presence, clears the exi
 | GET | `/api/recipes/healthz` | DataHive readiness and exact count |
 | GET | `/api/recipes` | Paginated recipe search, filters, and facets |
 | GET | `/api/recipes/:id` | Full recipe details |
+| GET | `/api/location/cuisine` | Country-only cuisine preference with language/world fallback |
 | GET | `/api/nutrition/healthz` | USDA readiness, schema, and counts |
 | GET | `/api/nutrition/search?q=` | USDA food search |
 | GET | `/api/nutrition/foods/:fdcId` | Food nutrients and portions |
@@ -533,6 +551,7 @@ AI requests authenticate with the user-supplied key in a Bearer header and selec
 
 - Exercise catalog: [free-exercise-db-api](https://github.com/luisaraujoc/free-exercise-db-api), declared MIT license. External video/image rights require separate confirmation for commercial reuse.
 - Recipe catalog: [DataHive recipes-with-nutrition](https://huggingface.co/datasets/datahiveai/recipes-with-nutrition), CC BY-NC 4.0. The 39,447-record catalog is restricted to non-commercial use; linked pages and remote images can have separate owners and terms.
+- Cuisine location: [Country.is](https://country.is/), using GeoLite2 country data. A public visitor IP is submitted for country resolution and is not stored by Eat & Fit.
 - Nutrition: [USDA FoodData Central](https://fdc.nal.usda.gov/), public-domain data published under CC0 1.0.
 - Products: [Open Food Facts](https://world.openfoodfacts.org/terms-of-use), subject to its database terms and possible incompleteness.
 - Adult energy: [2024 Adult Compendium of Physical Activities](https://pacompendium.com/conditioning-exercise/).
@@ -547,6 +566,7 @@ AI requests authenticate with the user-supplied key in a Bearer header and selec
 - The application does not provide accounts, remote history storage, cloud sync, or multi-device key synchronization.
 - Local encryption protects saved keys at rest but cannot protect an unlocked browser, compromised device, malicious extension, or compromised application origin.
 - Remote recipe images and source links contact their respective external hosts when loaded or opened.
+- Opening the unfiltered Recipes screen can submit the visitor IP to Country.is for country-only cuisine localization. Eat & Fit stores neither the raw address nor precise location.
 - Camera access is limited by the deployed Permissions Policy to the application origin.
 - The web container and API container use read-only filesystems, temporary writable directories, dropped Linux capabilities, and same-origin API proxying.
 - Nginx adds `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, and a camera Permissions Policy. API request bodies through Nginx are limited to 2 MiB.
@@ -559,7 +579,7 @@ The production topology is:
 Browser -> Nginx web container -> Node API container
                               -> read-only recipe SQLite volume
                               -> read-only USDA SQLite volume
-                              -> external Meta/Gemini/Open Food Facts services when requested
+                              -> external Country.is/Meta/Gemini/Open Food Facts services when requested
 ```
 
 Docker Compose provides separate import jobs for recipe and USDA data. Runtime containers do not require the original CSV files. Recipe and nutrition databases live in named volumes so application image replacement does not delete catalog data.
@@ -579,7 +599,7 @@ npm run build:byok
 docker compose config
 ```
 
-Feature tests cover provider selection and validation, scanner behavior, secure-key encryption, recipe and USDA calculations, profile boundaries, exercise-energy formulas and provenance, calibration limits, training-plan validation, Calendar numeric editing and bulk operations, Balance calculations and gauge behavior, backup validation, legal content, and core/BYOK design visibility.
+Feature tests cover provider selection and validation, scanner behavior, secure-key encryption, recipe recommendations/search and USDA calculations, profile reminder boundaries, global numeric-zero replacement, exercise-energy formulas and provenance, calibration limits, training-plan validation, Calendar numeric editing and bulk operations, Balance calculations and gauge behavior, backup validation, legal content, favicon branding, and core/BYOK design visibility.
 
 ## 23. Explicit non-features and current limitations
 
@@ -589,7 +609,7 @@ Feature tests cover provider selection and validation, scanner behavior, secure-
 - No automatic cross-provider AI fallback.
 - No automatic barcode decoding from live video frames; lookup currently uses entered barcode digits.
 - No medical diagnosis, clinical nutrition plan, or guaranteed weight-loss prediction.
-- No automatic meal plan or calorie target.
+- No automatically saved meal plan or calorie target; localized recipes are optional catalog suggestions only.
 - No body-weight history or macro targets.
 - No manual generic activity entry.
 - No video technique analysis, repetition counting, live form-error alerts, or rest timer yet.

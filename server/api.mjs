@@ -10,6 +10,7 @@ import { createNutritionProvider, NutritionCatalogError } from './nutrition-prov
 import { createRecipeProvider, RecipeCatalogError } from './recipe-provider.mjs';
 import { generateRecipes, RecipeGenerationError } from './recipe-generation-provider.mjs';
 import { calibrateTrainingEnergy, generateTrainingPlan, TrainingProviderError, verifyAiCredential } from './training-provider.mjs';
+import { resolveCuisineLocation } from './location-provider.mjs';
 
 const port = Number(process.env.API_PORT ?? 3000);
 const host = process.env.API_HOST ?? '0.0.0.0';
@@ -30,6 +31,7 @@ export function createApiServer({
   recipeProvider,
   nutritionProvider,
   trainingProvider,
+  locationProvider,
 } = {}) {
 const smartScannerEnabled = edition === 'byok';
 let recipeCatalog = recipeProvider;
@@ -39,6 +41,11 @@ const getNutritionCatalog = () => nutritionCatalog ??= createNutritionProvider({
 return createServer(async (request, response) => {
   const url = new URL(request.url ?? '/', `http://${request.headers.host}`);
   try {
+    if (url.pathname === '/api/location/cuisine') {
+      const location = await (locationProvider ? locationProvider(request) : resolveCuisineLocation(request));
+      response.setHeader('cache-control', 'private, max-age=3600');
+      return json(response, 200, location);
+    }
     if (url.pathname === '/api/recipes/healthz') {
       try { return json(response, 200, getRecipeCatalog().getHealth()); }
       catch (error) {

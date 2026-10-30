@@ -11,6 +11,7 @@ export type RecipeSummary = {
   cuisine: string[];
   dish: string[];
   meal: string[];
+  recommendationSlot?: 'morning' | 'afternoon' | 'evening';
 };
 
 export type RecipeDetail = RecipeSummary & {

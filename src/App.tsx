@@ -13,6 +13,7 @@ import type { ScanMode } from './scanner/types';
 import { SettingsView } from './settings/SettingsView';
 import { getRecognitionCredential, getRecognitionKeyStatus } from './settings/secureKeys';
 import { ensureEnergyCalibration } from './training/calibration';
+import { selectZeroNumberInput } from './ui/numberInput';
 
 export type View = 'exercises' | 'calendar' | 'balance' | 'recipes' | 'scan' | 'ai' | 'settings';
 type PrimaryView = Exclude<View, 'ai' | 'settings'>;
@@ -150,7 +151,16 @@ export function App() {
   };
 
   return (
-    <div className="app-shell">
+    <div
+      className="app-shell"
+      onFocusCapture={(event) => selectZeroNumberInput(event.target)}
+      onBeforeInputCapture={(event) => selectZeroNumberInput(event.target)}
+      onPointerUpCapture={(event) => {
+        const target = event.target;
+        if (!selectZeroNumberInput(target)) return;
+        window.requestAnimationFrame(() => selectZeroNumberInput(target));
+      }}
+    >
       <FirebaseAnalytics />
       <header className="topbar">
         <div className="topbar-inner">
@@ -172,9 +182,7 @@ export function App() {
         </div>
       </header>
 
-      <main className="page" onFocus={(event) => {
-        if (event.target instanceof HTMLInputElement && event.target.type === 'number') event.target.select();
-      }}>
+      <main className="page">
         {view === 'exercises' && <ExerciseLibrary aiFeaturesEnabled={aiFeaturesEnabled} onWorkoutAdded={(date) => showCalendar(date, 'workout')} />}
         {view === 'balance' && <BalanceView onAddFood={() => showRecipes([], localDate(), 'balance')} onAddExercise={() => showView('exercises')} />}
         {view === 'calendar' && (
