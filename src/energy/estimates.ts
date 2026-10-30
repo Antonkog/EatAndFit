@@ -26,6 +26,22 @@ const restSeconds: Record<EnergyProfileId, number> = {
   kettlebell: 60,
 };
 
+const activeSecondsPerRep: Record<EnergyProfileId, number> = {
+  stretching: 5,
+  core: 4,
+  bodyweight_general: 4,
+  bodyweight_vigorous: 5,
+  squat_deadlift: 6,
+  resistance_general: 4,
+  resistance_vigorous: 5,
+  circuit: 4,
+  kettlebell: 5,
+};
+
+export function estimateSetDurationSeconds(reps: number, profileId: EnergyProfileId) {
+  return Math.max(30, Math.round(Math.max(0, reps) * activeSecondsPerRep[profileId]));
+}
+
 export function schofieldBmrKcalPerMinute(age: number, sex: ProfileSex, weightKg: number) {
   if (age < 6 || age > 18 || weightKg <= 0) return undefined;
   if (sex === 'male') return (age <= 9 ? 22.706 * weightKg + 504.3 : 17.686 * weightKg + 658.2) / 1440;
@@ -34,7 +50,7 @@ export function schofieldBmrKcalPerMinute(age: number, sex: ProfileSex, weightKg
 
 export function estimateDurationSeconds(sets: Array<Pick<WorkoutSet, 'reps' | 'durationSeconds'>>, profileId: EnergyProfileId) {
   if (sets.length === 0) return 0;
-  const active = sets.reduce((total, set) => total + (set.durationSeconds && set.durationSeconds > 0 ? set.durationSeconds : Math.max(0, set.reps) * 4), 0);
+  const active = sets.reduce((total, set) => total + (set.durationSeconds && set.durationSeconds > 0 ? set.durationSeconds : estimateSetDurationSeconds(set.reps, profileId)), 0);
   return active + Math.max(0, sets.length - 1) * restSeconds[profileId];
 }
 

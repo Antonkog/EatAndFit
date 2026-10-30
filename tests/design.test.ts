@@ -34,4 +34,36 @@ test('scan and recipe controls use the revised copy and matching action sizes', 
   assert.doesNotMatch(scan, /Recognize ingredients from a photo or scan a packaged product barcode/);
   assert.equal((scan.match(/photo-source-button/g) ?? []).length, 4);
   assert.equal((recipes.match(/recipe-action-button/g) ?? []).length, 2);
+  assert.match(recipes, /pageSize: '5'/);
+  assert.match(recipes, /role="combobox"/);
+  assert.match(recipes, /role="listbox"/);
+  assert.match(recipes, /event\.key === 'ArrowDown'/);
+});
+
+test('application background is solid dark and recipe filter selections avoid the grey surface tint', () => {
+  const styles = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
+  assert.match(styles, /body \{[\s\S]*background: var\(--background\);/);
+  assert.doesNotMatch(styles, /linear-gradient\(rgba\(183,255,79,\.025\)/);
+  assert.match(styles, /\.recipe-filter-grid select option \{[^}]*background-color: #090d0a/);
+});
+
+test('profile measurements and adult goals stay in compact three-column rows on mobile', () => {
+  const profile = readFileSync(new URL('../src/profile/ProfileForm.tsx', import.meta.url), 'utf8');
+  const styles = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
+  assert.match(profile, /label: 'Stay fit'/);
+  assert.match(styles, /@media \(max-width: 600px\)[\s\S]*\.profile-measurements \{ grid-template-columns: repeat\(3,minmax\(0,1fr\)\)/);
+  assert.match(styles, /@media \(max-width: 600px\)[\s\S]*\.profile-goal > div \{ grid-template-columns: repeat\(3,minmax\(0,1fr\)\)/);
+});
+
+test('calendar workout, food, and scanned-product entries open stored details', () => {
+  const calendar = readFileSync(new URL('../src/calendar/CalendarView.tsx', import.meta.url), 'utf8');
+  const details = readFileSync(new URL('../src/calendar/CalendarEntryDetail.tsx', import.meta.url), 'utf8');
+  const exercises = readFileSync(new URL('../src/exercises/ExerciseLibrary.tsx', import.meta.url), 'utf8');
+  assert.match(calendar, /View \$\{workout\.exerciseName\} details/);
+  assert.match(calendar, /View \$\{entry\.title\} details/);
+  assert.match(calendar, /<CalendarFoodDetail/);
+  assert.match(details, /Scanned product · Open Food Facts/);
+  assert.match(details, /Product details/);
+  assert.match(details, /Ingredients/);
+  assert.match(exercises, /export function ExerciseDetail/);
 });

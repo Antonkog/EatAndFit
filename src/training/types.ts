@@ -4,7 +4,7 @@ export type GeneratedPlanExercise = {
   exerciseId: string;
   sets: number;
   reps?: number;
-  durationSeconds?: number;
+  durationMinutes?: number;
 };
 
 export type GeneratedPlanSession = {

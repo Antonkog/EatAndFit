@@ -76,8 +76,8 @@ export async function workoutsForDate(date: string) {
 export async function allWorkouts() { return all<Workout>('workouts'); }
 export async function allFood() { return all<FoodEntry>('food'); }
 
-export async function scheduleWorkout(exerciseId: string, exerciseName: string, date = localDate()) {
-  const workout: Workout = { id: crypto.randomUUID(), date, exerciseId, exerciseName, notes: '', completed: false, sets: [{ id: crypto.randomUUID(), reps: 10, weightKg: 0, complete: false }] };
+export async function scheduleWorkout(exerciseId: string, exerciseName: string, date = localDate(), durationSeconds = 40) {
+  const workout: Workout = { id: crypto.randomUUID(), date, exerciseId, exerciseName, notes: '', completed: false, sets: [{ id: crypto.randomUUID(), reps: 10, weightKg: 0, durationSeconds, complete: false }] };
   await put('workouts', workout);
   window.dispatchEvent(new Event('eatfit-data-change'));
   return workout;

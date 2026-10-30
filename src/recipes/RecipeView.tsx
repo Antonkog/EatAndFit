@@ -50,6 +50,9 @@ export function RecipeView({
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
   const [refresh, setRefresh] = useState(0);
+  const [suggestions, setSuggestions] = useState<RecipeSummary[]>([]);
+  const [suggestionsOpen, setSuggestionsOpen] = useState(false);
+  const [suggestionIndex, setSuggestionIndex] = useState(-1);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -67,10 +70,43 @@ export function RecipeView({
     return () => clearTimeout(timer);
   }, [filters, ingredients, page, query, refresh]);
 
+  useEffect(() => {
+    const search = draft.trim();
+    if (!search) {
+      setSuggestions([]);
+      setSuggestionsOpen(false);
+      setSuggestionIndex(-1);
+      return;
+    }
+    const controller = new AbortController();
+    const timer = setTimeout(() => {
+      const params = recipeSearchParams({ query: search, page: '1', pageSize: '5', ...filters }, ingredients);
+      fetch(`/api/recipes?${params}`, { signal: controller.signal })
+        .then((response) => response.ok ? response.json() as Promise<RecipePage> : Promise.reject(new Error('Suggestions are unavailable.')))
+        .then((value) => {
+          setSuggestions(value.items.slice(0, 5));
+          setSuggestionsOpen(value.items.length > 0);
+          setSuggestionIndex(-1);
+        })
+        .catch((reason: Error) => {
+          if (reason.name !== 'AbortError') {
+            setSuggestions([]);
+            setSuggestionsOpen(false);
+          }
+        });
+    }, 180);
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [draft, filters, ingredients]);
+
   const activeFilters = Object.values(filters).filter(Boolean).length;
   const totalPages = Math.max(1, Math.ceil((data?.total ?? 0) / (data?.pageSize ?? 12)));
 
   const openRecipe = async (recipe: RecipeSummary) => {
+    setSuggestionsOpen(false);
+    setSuggestionIndex(-1);
     setDetailLoading(recipe.id);
     setDetailError('');
     try {
@@ -91,7 +127,16 @@ export function RecipeView({
     setIngredients([]);
     setFilters(emptyFilters);
     setFiltersOpen(false);
+    setSuggestions([]);
+    setSuggestionsOpen(false);
+    setSuggestionIndex(-1);
     setPage(1);
+  };
+
+  const chooseSuggestion = (recipe: RecipeSummary) => {
+    setSuggestionsOpen(false);
+    setSuggestionIndex(-1);
+    void openRecipe(recipe);
   };
 
   return (
@@ -101,8 +146,56 @@ export function RecipeView({
         {__SMART_SCANNER__ && onOpenAi && <button className="primary-button large recipe-action-button" onClick={onOpenAi}><Sparkles size={18} /> Generate AI recipe</button>}
       </div>
 
-      <form className="recipe-search" onSubmit={(event) => { event.preventDefault(); setQuery(draft.trim()); setPage(1); }}>
-        <label className="search-box"><Search size={17} /><input aria-label="Search recipes" placeholder="Search recipes" value={draft} onChange={(event) => { setDraft(event.target.value); if (!event.target.value) setQuery(''); }} /></label>
+      <form className="recipe-search" onSubmit={(event) => { event.preventDefault(); setSuggestionsOpen(false); setQuery(draft.trim()); setPage(1); }}>
+        <div className="recipe-search-autocomplete" onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setSuggestionsOpen(false); }}>
+          <label className="search-box"><Search size={17} /><input
+            aria-label="Search recipes"
+            role="combobox"
+            aria-autocomplete="list"
+            aria-expanded={suggestionsOpen}
+            aria-controls="recipe-search-suggestions"
+            aria-activedescendant={suggestionIndex >= 0 ? `recipe-suggestion-${suggestionIndex}` : undefined}
+            placeholder="Search recipes"
+            value={draft}
+            onFocus={() => suggestions.length > 0 && setSuggestionsOpen(true)}
+            onChange={(event) => { setDraft(event.target.value); if (!event.target.value) setQuery(''); }}
+            onKeyDown={(event) => {
+              if (event.key === 'Escape') { setSuggestionsOpen(false); setSuggestionIndex(-1); return; }
+              if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+                if (!suggestions.length) return;
+                event.preventDefault();
+                setSuggestionsOpen(true);
+                setSuggestionIndex((current) => event.key === 'ArrowDown'
+                  ? current >= suggestions.length - 1 ? 0 : current + 1
+                  : current <= 0 ? suggestions.length - 1 : current - 1);
+                return;
+              }
+              if (event.key === 'Enter' && suggestionsOpen && suggestionIndex >= 0) {
+                event.preventDefault();
+                chooseSuggestion(suggestions[suggestionIndex]);
+              }
+            }}
+          /></label>
+          {suggestionsOpen && (
+            <div className="recipe-suggestions" id="recipe-search-suggestions" role="listbox" aria-label="Recipe suggestions">
+              {suggestions.map((recipe, index) => (
+                <button
+                  id={`recipe-suggestion-${index}`}
+                  role="option"
+                  aria-selected={suggestionIndex === index}
+                  className={suggestionIndex === index ? 'active' : ''}
+                  type="button"
+                  key={recipe.id}
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={() => chooseSuggestion(recipe)}
+                >
+                  <RecipeImage src={recipe.imageUrl} loading="lazy" fallbackClass="recipe-suggestion-placeholder" />
+                  <span><strong>{recipe.title}</strong><small>{recipe.source} · {Math.round(recipe.nutrition.calories)} kcal</small></span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
         <button className="primary-button large recipe-action-button" type="submit"><Search size={17} /> Search recipes</button>
       </form>
 

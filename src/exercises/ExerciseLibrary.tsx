@@ -11,6 +11,8 @@ import {
 } from 'lucide-react';
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { localDate, scheduleWorkout } from '../data/db';
+import { estimateSetDurationSeconds } from '../energy/estimates';
+import { classifyExercise } from '../energy/sources';
 import { preferredExerciseSex, profileIssue, readUserProfile, setExerciseModelPreference, type ProfileSex } from '../profile/userProfile';
 import { exerciseMatches } from './search';
 import type { Exercise, ExerciseCatalog } from './types';
@@ -74,17 +76,21 @@ function secondaryMuscles(exercise: Exercise) {
   return 'Supporting stabilizers';
 }
 
-function ExerciseDetail({
+export function ExerciseDetail({
   exercise,
   onClose,
   onAdded,
+  initialDate = localDate(),
+  allowScheduling = true,
 }: {
   exercise: Exercise;
   onClose: () => void;
-  onAdded: (date: string) => void;
+  onAdded?: (date: string) => void;
+  initialDate?: string;
+  allowScheduling?: boolean;
 }) {
   const [gender, setGender] = useState<Gender>(preferredGender);
-  const [date, setDate] = useState(localDate());
+  const [date, setDate] = useState(initialDate);
   const [adding, setAdding] = useState(false);
   const [added, setAdded] = useState(false);
   const [error, setError] = useState('');
@@ -108,9 +114,9 @@ function ExerciseDetail({
     setAdding(true);
     setError('');
     try {
-      await scheduleWorkout(exercise.id, exercise.name, date);
+      await scheduleWorkout(exercise.id, exercise.name, date, estimateSetDurationSeconds(10, classifyExercise(exercise)));
       setAdded(true);
-      onAdded(date);
+      onAdded?.(date);
       onClose();
     } catch {
       setError('Could not add this exercise. Please try again.');
@@ -187,14 +193,14 @@ function ExerciseDetail({
               </dl>
             </section>
           </div>
-          <footer className="exercise-detail-footer">
+          {allowScheduling && <footer className="exercise-detail-footer">
             {error && <p className="form-error">{error}</p>}
             <label>Workout date<input type="date" value={date} onChange={(event) => setDate(event.target.value)} /></label>
             <button className="primary-button" disabled={adding} onClick={() => void add()}>
               {added ? <Check size={18} /> : <CalendarPlus size={18} />}
               {adding ? 'Adding…' : added ? 'Added' : 'Add to workout'}
             </button>
-          </footer>
+          </footer>}
         </div>
       </article>
     </div>

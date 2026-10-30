@@ -57,4 +57,5 @@ test('Balance is the default middle navigation destination', () => {
   assert.match(source, /showRecipes\(\[\], localDate\(\), 'balance'\)/);
   assert.match(source, /foodReturnView === 'balance'[\s\S]*setView\('balance'\)/);
   assert.match(source, /onAddExercise=\{\(\) => showView\('exercises'\)\}/);
+  assert.doesNotMatch(source, /kg energy equivalent/);
 });

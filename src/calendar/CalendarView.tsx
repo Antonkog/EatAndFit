@@ -27,13 +27,17 @@ import {
   type MealType,
   type Workout,
 } from '../data/db';
-import { energySourceLabel, estimateExerciseEnergy, type EnergyEstimate } from '../energy/estimates';
+import { energySourceLabel, estimateExerciseEnergy, estimateSetDurationSeconds, type EnergyEstimate } from '../energy/estimates';
+import { classifyExercise, type EnergyProfileId } from '../energy/sources';
 import { applyWorkoutCompletion } from '../energy/workout';
 import type { ExerciseCatalog } from '../exercises/types';
 import { PROFILE_CHANGED, readUserProfile, type UserProfile } from '../profile/userProfile';
 import { getRecognitionKeyStatus, RECOGNITION_KEYS_CHANGED } from '../settings/secureKeys';
 import { ENERGY_CALIBRATION_CHANGED, readEnergyCalibration } from '../training/calibration';
 import { finalizeWorkoutNumberDraft, parseWorkoutNumberDraft, type WorkoutNumberKind } from './workoutNumber';
+import { CalendarFoodDetail } from './CalendarEntryDetail';
+import { ExerciseDetail } from '../exercises/ExerciseLibrary';
+import type { Exercise } from '../exercises/types';
 
 const weekdays = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
 const meals: MealType[] = ['breakfast', 'lunch', 'dinner', 'snack'];
@@ -78,6 +82,8 @@ export function CalendarView({
   const [catalog, setCatalog] = useState<ExerciseCatalog>();
   const [profile, setProfile] = useState<UserProfile>(readUserProfile);
   const [calibration, setCalibration] = useState<number>();
+  const [selectedExercise, setSelectedExercise] = useState<Exercise>();
+  const [selectedFood, setSelectedFood] = useState<FoodEntry>();
 
   const refresh = useCallback(() => {
     void Promise.all([workoutsForDate(date), foodForDate(date), allWorkouts(), allFood()]).then(([nextWorkouts, nextFood, everyWorkout, everyFood]) => {
@@ -134,6 +140,7 @@ export function CalendarView({
   };
 
   return (
+    <>
     <div className="calendar-layout">
       <aside className="calendar-sidebar">
         <h1>Calendar</h1>
@@ -177,8 +184,9 @@ export function CalendarView({
             onChange={updateWorkout}
             estimateWorkout={estimateWorkout}
             estimateUnavailable={Number(profile.age) > 0 && Number(profile.age) < 6}
+            onOpenDetails={setSelectedExercise}
             onRemovePlanned={async () => {
-              if (!workouts.some((workout) => !workout.completed) || !window.confirm(`Remove all planned trainings for ${fullDate(date)}? Completed workouts will stay.`)) return;
+              if (!workouts.some((workout) => !workout.completed) || !window.confirm(`Remove planned trainings for ${fullDate(date)}? Completed workouts will stay.`)) return;
               await removePlannedWorkoutsForDate(date);
             }}
             onMoveFuture={async () => {
@@ -188,10 +196,13 @@ export function CalendarView({
             }}
           />
         ) : (
-          <FoodDay date={date} entries={food} onRecipes={() => onRecipes(date)} onProduct={() => onProduct(date)} />
+          <FoodDay date={date} entries={food} onRecipes={() => onRecipes(date)} onProduct={() => onProduct(date)} onOpenDetails={setSelectedFood} />
         )}
       </section>
     </div>
+    {selectedExercise && <ExerciseDetail exercise={selectedExercise} initialDate={date} allowScheduling={false} onClose={() => setSelectedExercise(undefined)} />}
+    {selectedFood && <CalendarFoodDetail entry={selectedFood} onClose={() => setSelectedFood(undefined)} />}
+    </>
   );
 }
 
@@ -257,6 +268,56 @@ function WorkoutNumberInput({
   );
 }
 
+function minutesLabel(seconds: number) {
+  return String(Math.round(seconds / 6) / 10);
+}
+
+function WorkoutMinutesInput({
+  value,
+  fallbackSeconds,
+  onChange,
+}: {
+  value?: number;
+  fallbackSeconds: number;
+  onChange: (seconds: number) => void;
+}) {
+  const effectiveSeconds = value && value > 0 ? value : fallbackSeconds;
+  const [draft, setDraft] = useState(minutesLabel(effectiveSeconds));
+  const editing = useRef(false);
+
+  useEffect(() => {
+    if (!editing.current) setDraft(minutesLabel(effectiveSeconds));
+  }, [effectiveSeconds]);
+
+  const finish = () => {
+    editing.current = false;
+    const minutes = Number(draft);
+    const seconds = Number.isFinite(minutes) && minutes >= 0.1 ? Math.round(minutes * 60) : fallbackSeconds;
+    setDraft(minutesLabel(seconds));
+    if (seconds !== value) onChange(seconds);
+  };
+
+  return (
+    <input
+      aria-label="Minutes"
+      type="number"
+      min="0.1"
+      step="0.1"
+      placeholder="Min"
+      value={draft}
+      onFocus={(event) => { editing.current = true; event.currentTarget.select(); }}
+      onChange={(event) => {
+        const nextDraft = event.target.value;
+        setDraft(nextDraft);
+        const minutes = Number(nextDraft);
+        if (nextDraft && Number.isFinite(minutes) && minutes >= 0.1) onChange(Math.round(minutes * 60));
+      }}
+      onBlur={finish}
+      onKeyDown={(event) => { if (event.key === 'Enter') event.currentTarget.blur(); }}
+    />
+  );
+}
+
 function WorkoutDay({
   date,
   workouts,
@@ -265,6 +326,7 @@ function WorkoutDay({
   onChange,
   estimateWorkout,
   estimateUnavailable,
+  onOpenDetails,
   onRemovePlanned,
   onMoveFuture,
 }: {
@@ -275,12 +337,13 @@ function WorkoutDay({
   onChange: (workout: Workout) => void;
   estimateWorkout: (workout: Workout) => EnergyEstimate | undefined;
   estimateUnavailable: boolean;
+  onOpenDetails: (exercise: Exercise) => void;
   onRemovePlanned: () => void;
   onMoveFuture: () => void;
 }) {
   return (
     <section>
-      <DayHeading date={date} actions={<><button className="primary-button" onClick={onBrowse}><Plus size={17} /> Add to workout</button>{workouts.some((workout) => !workout.completed) && <button className="text-button" onClick={onRemovePlanned}><Trash2 size={17} /> Remove planned trainings for this day</button>}<button className="text-button" onClick={onMoveFuture}><RotateCw size={17} /> Move all future trainings by 1 day</button></>} />
+      <DayHeading date={date} actions={<><button className="primary-button" onClick={onBrowse}><Plus size={17} /> Add to workout</button>{workouts.some((workout) => !workout.completed) && <button className="text-button" onClick={onRemovePlanned}><Trash2 size={17} /> Remove today trainings</button>}<button className="text-button" onClick={onMoveFuture}><RotateCw size={17} /> Move all future trainings by 1 day</button></>} />
       {workouts.length === 0 ? (
         <div className="empty-card calendar-empty">
           <span><Dumbbell /></span>
@@ -291,6 +354,7 @@ function WorkoutDay({
         <div className="workout-list">
           {workouts.map((workout) => {
             const exercise = exerciseMap.get(workout.exerciseId);
+            const energyProfile: EnergyProfileId = exercise ? classifyExercise(exercise) : 'resistance_general';
             const thumbnail = exercise?.media.thumbnail?.female ?? exercise?.media.thumbnail?.male;
             const liveEstimate = workout.completed ? undefined : estimateWorkout(workout);
             const calories = workout.completed ? workout.caloriesBurned : liveEstimate?.calories;
@@ -301,11 +365,13 @@ function WorkoutDay({
             return (
               <article className="workout-card" key={workout.id}>
                 <header>
-                  {thumbnail ? <img src={thumbnail} alt="" /> : <span className="workout-placeholder"><Dumbbell /></span>}
-                  <div className="workout-title">
-                    <div><span className={`badge ${workout.completed ? 'solid' : 'outline'}`}>{workout.completed ? 'Completed' : 'Planned'}</span><small>{workout.sets.length} sets</small></div>
-                    <h3>{workout.exerciseName}</h3>
-                  </div>
+                  <button className="calendar-entry-open workout-entry-open" type="button" disabled={!exercise} onClick={() => exercise && onOpenDetails(exercise)} aria-label={`View ${workout.exerciseName} details`}>
+                    {thumbnail ? <img src={thumbnail} alt="" /> : <span className="workout-placeholder"><Dumbbell /></span>}
+                    <span className="workout-title">
+                      <span><span className={`badge ${workout.completed ? 'solid' : 'outline'}`}>{workout.completed ? 'Completed' : 'Planned'}</span><small>{workout.sets.length} sets</small></span>
+                      <strong>{workout.exerciseName}</strong>
+                    </span>
+                  </button>
                   <button className="icon-button" onClick={() => void removeWorkout(workout.id)} aria-label="Remove exercise"><Trash2 size={18} /></button>
                 </header>
                 {calories !== undefined && (
@@ -318,17 +384,17 @@ function WorkoutDay({
                 )}
                 {!calories && estimateUnavailable && <p className="workout-energy-unavailable">Sourced calorie estimates begin at age 6.</p>}
                 <div className="set-list">
-                  <div className="set-labels"><span>Set</span><span>Reps</span><span>Kg</span><span>Seconds</span><span>Done</span></div>
+                  <div className="set-labels"><span>Set</span><span>Reps</span><span>Kg</span><span>Minutes</span><span>Done</span></div>
                   {workout.sets.map((set, index) => (
                     <div className={set.complete ? 'set-row complete' : 'set-row'} key={set.id}>
                       <strong>{index + 1}</strong>
                       <WorkoutNumberInput label="Reps" value={set.reps} kind="integer" step="1" onChange={(reps) => onChange({ ...workout, sets: workout.sets.map((item) => item.id === set.id ? { ...item, reps } : item) })} />
                       <WorkoutNumberInput label="Kg" value={set.weightKg} kind="decimal" step="0.5" onChange={(weightKg) => onChange({ ...workout, sets: workout.sets.map((item) => item.id === set.id ? { ...item, weightKg } : item) })} />
-                      <input aria-label="Seconds" type="number" min="0" placeholder="Sec" value={set.durationSeconds ?? ''} onChange={(event) => onChange({ ...workout, sets: workout.sets.map((item) => item.id === set.id ? { ...item, durationSeconds: event.target.value ? Number(event.target.value) : undefined } : item) })} />
+                      <WorkoutMinutesInput value={set.durationSeconds} fallbackSeconds={estimateSetDurationSeconds(set.reps, energyProfile)} onChange={(durationSeconds) => onChange({ ...workout, sets: workout.sets.map((item) => item.id === set.id ? { ...item, durationSeconds } : item) })} />
                       <button className={set.complete ? 'set-done active' : 'set-done'} aria-label="Done" onClick={() => onChange({ ...workout, sets: workout.sets.map((item) => item.id === set.id ? { ...item, complete: !item.complete } : item) })}>{set.complete ? <Check size={17} /> : <Circle size={17} />}</button>
                     </div>
                   ))}
-                  <button className="add-set" onClick={() => onChange({ ...workout, sets: [...workout.sets, { id: crypto.randomUUID(), reps: 10, weightKg: 0, complete: false }] })}><Plus size={17} /> Add set</button>
+                  <button className="add-set" onClick={() => onChange({ ...workout, sets: [...workout.sets, { id: crypto.randomUUID(), reps: 10, weightKg: 0, durationSeconds: estimateSetDurationSeconds(10, energyProfile), complete: false }] })}><Plus size={17} /> Add set</button>
                 </div>
               </article>
             );
@@ -339,7 +405,7 @@ function WorkoutDay({
   );
 }
 
-function FoodDay({ date, entries, onRecipes, onProduct }: { date: string; entries: FoodEntry[]; onRecipes: () => void; onProduct: () => void }) {
+function FoodDay({ date, entries, onRecipes, onProduct, onOpenDetails }: { date: string; entries: FoodEntry[]; onRecipes: () => void; onProduct: () => void; onOpenDetails: (entry: FoodEntry) => void }) {
   const totals = entries.reduce((sum, item) => ({
     calories: sum.calories + (item.calories ?? 0),
     protein: sum.protein + (item.protein ?? 0),
@@ -358,7 +424,7 @@ function FoodDay({ date, entries, onRecipes, onProduct }: { date: string; entrie
         <>
           <section className="daily-total"><h3>Daily total</h3><MacroGrid values={totals} /></section>
           <div className="food-log-list">
-            {entries.map((entry) => <FoodRow key={entry.id} entry={entry} />)}
+            {entries.map((entry) => <FoodRow key={entry.id} entry={entry} onOpenDetails={() => onOpenDetails(entry)} />)}
           </div>
           <p className="data-attribution">Nutrition estimates may come from DataHive, USDA FoodData Central, AI generation, or Open Food Facts.</p>
         </>
@@ -367,16 +433,16 @@ function FoodDay({ date, entries, onRecipes, onProduct }: { date: string; entrie
   );
 }
 
-function FoodRow({ entry }: { entry: FoodEntry }) {
+function FoodRow({ entry, onOpenDetails }: { entry: FoodEntry; onOpenDetails: () => void }) {
   const [date, setDate] = useState(entry.date);
   const [meal, setMeal] = useState<MealType>(entry.mealType ?? 'dinner');
   const [quantity, setQuantity] = useState(entry.quantity ?? 1);
   return (
     <article className="food-log-card">
-      <div className="food-log-summary">
+      <button className="food-log-summary calendar-entry-open" type="button" onClick={onOpenDetails} aria-label={`View ${entry.title} details`}>
         {entry.imageUrl ? <img src={entry.imageUrl} alt="" /> : <span><Utensils /></span>}
         <div><small>{titleCase(entry.mealType ?? 'dinner')}</small><h3>{entry.title}</h3><p>{Math.round(entry.calories ?? 0)} kcal · Protein {(entry.protein ?? 0).toFixed(1)}g · Fat {(entry.fat ?? 0).toFixed(1)}g</p></div>
-      </div>
+      </button>
       <div className="food-log-controls">
         <label>Date<input type="date" value={date} onChange={(event) => setDate(event.target.value)} /></label>
         <label>Meal<select value={meal} onChange={(event) => setMeal(event.target.value as MealType)}>{meals.map((item) => <option value={item} key={item}>{titleCase(item)}</option>)}</select></label>

@@ -5,7 +5,7 @@ import { profileIssue, readUserProfile, saveUserProfile, type ProfileSex, type T
 const goals: Array<{ value: TrainingGoal; label: string }> = [
   { value: 'lose_weight', label: 'Lose weight' },
   { value: 'build_muscle', label: 'Build muscle' },
-  { value: 'stay_fit', label: 'Stay fit and healthy' },
+  { value: 'stay_fit', label: 'Stay fit' },
 ];
 
 export function ProfileForm({ onSaved, submitLabel = 'Save profile' }: { onSaved?: (profile: UserProfile) => void; submitLabel?: string }) {

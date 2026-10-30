@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
-import { compendiumCalories, estimateDurationSeconds, estimateExerciseEnergy, harvardCalories, schofieldBmrKcalPerMinute, youthCalories } from '../src/energy/estimates';
+import { compendiumCalories, estimateDurationSeconds, estimateExerciseEnergy, estimateSetDurationSeconds, harvardCalories, schofieldBmrKcalPerMinute, youthCalories } from '../src/energy/estimates';
 import { classifyExercise, ENERGY_SOURCE_REGISTRY_VERSION, resolveEnergySource, validateEnergySource } from '../src/energy/sources';
 import { applyWorkoutCompletion } from '../src/energy/workout';
 import type { ExerciseCatalog } from '../src/exercises/types';
@@ -48,7 +48,10 @@ test('Adult, Older Adult, Youth, and Schofield calculations use their published 
   assert.equal(youthCalories(4, 1, 20), 80);
 });
 
-test('duration is derived from entered seconds, four seconds per repetition, and intensity rest', () => {
+test('duration is derived from entered time or the exercise profile, with a non-zero default and intensity rest', () => {
+  assert.equal(estimateSetDurationSeconds(0, 'resistance_general'), 30);
+  assert.equal(estimateSetDurationSeconds(10, 'resistance_general'), 40);
+  assert.equal(estimateSetDurationSeconds(10, 'squat_deadlift'), 60);
   assert.equal(estimateDurationSeconds([{ reps: 10 }, { reps: 10 }, { reps: 10 }], 'resistance_general'), 240);
   assert.equal(estimateDurationSeconds([{ reps: 0, durationSeconds: 30 }, { reps: 0, durationSeconds: 45 }], 'squat_deadlift'), 165);
 });

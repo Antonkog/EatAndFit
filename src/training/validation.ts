@@ -13,7 +13,7 @@ export function validateGeneratedTrainingPlan(value: unknown, exercises: Exercis
     }
     for (const exercise of session.exercises) {
       const hasReps = Number.isInteger(exercise.reps) && Number(exercise.reps) >= 1 && Number(exercise.reps) <= 100;
-      const hasDuration = Number.isInteger(exercise.durationSeconds) && Number(exercise.durationSeconds) >= 5 && Number(exercise.durationSeconds) <= 3600;
+      const hasDuration = Number.isFinite(exercise.durationMinutes) && Number(exercise.durationMinutes) >= 0.1 && Number(exercise.durationMinutes) <= 60;
       if (!validIds.has(exercise.exerciseId) || !Number.isInteger(exercise.sets) || exercise.sets < 1 || exercise.sets > 8 || (!hasReps && !hasDuration)) {
         throw new Error('The AI provider returned an exercise that is not valid for this catalog.');
       }

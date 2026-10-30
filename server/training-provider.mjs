@@ -19,8 +19,8 @@ const planSchema = {
       properties: {
         title: { type: 'string' },
         exercises: { type: 'array', minItems: 5, maxItems: 7, items: {
-          type: 'object', additionalProperties: false, required: ['exerciseId', 'sets', 'reps'],
-          properties: { exerciseId: { type: 'string' }, sets: { type: 'integer', minimum: 1, maximum: 8 }, reps: { type: 'integer', minimum: 0, maximum: 100 }, durationSeconds: { type: 'integer', minimum: 5, maximum: 3600 } },
+          type: 'object', additionalProperties: false, required: ['exerciseId', 'sets'],
+          properties: { exerciseId: { type: 'string' }, sets: { type: 'integer', minimum: 1, maximum: 8 }, reps: { type: 'integer', minimum: 0, maximum: 100 }, durationMinutes: { type: 'number', minimum: 0.1, maximum: 60 } },
         } },
       },
     } },
@@ -40,7 +40,7 @@ function parseJson(text, provider) {
 }
 
 function planPrompt(input) {
-  return `Create a conservative two-week adult gym plan. Use only supplied exercise IDs. Return exactly six sessions with 5–7 exercises each, 1–8 sets, and repetitions or duration. Return JSON only. Input: ${JSON.stringify(input)}`;
+  return `Create a conservative two-week adult gym plan. Use only supplied exercise IDs. Return exactly six sessions with 5–7 exercises each, 1–8 sets, and repetitions or estimated activity minutes per set. Return JSON only. Input: ${JSON.stringify(input)}`;
 }
 
 function calibrationPrompt(input) {

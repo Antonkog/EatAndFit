@@ -15,8 +15,8 @@ function requestBody(profile: UserProfile, goal: TrainingGoal, catalog: Exercise
 function prompt(value: ReturnType<typeof requestBody>) {
   return [
     'Create a safe two-week gym plan for this adult profile using only exercise IDs from the supplied catalog.',
-    'Return JSON: {goal, sessions:[{title, exercises:[{exerciseId,sets,reps,durationSeconds?}]}]}.',
-    'Return exactly six sessions. Each session must contain 5–7 exercises. Use 1–8 sets and either repetitions or duration seconds. Do not invent IDs.',
+    'Return JSON: {goal, sessions:[{title, exercises:[{exerciseId,sets,reps,durationMinutes?}]}]}.',
+    'Return exactly six sessions. Each session must contain 5–7 exercises. Use 1–8 sets and either repetitions or estimated activity minutes per set. Do not invent IDs.',
     `Input: ${JSON.stringify(value)}`,
   ].join('\n');
 }
