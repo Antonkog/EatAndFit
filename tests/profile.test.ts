@@ -32,3 +32,10 @@ test('skipping profile setup lasts only for the current browser session', () => 
   assert.match(source, /sessionStorage\.setItem\(PROFILE_SETUP_SESSION_KEY/);
   assert.doesNotMatch(source, /localStorage\.setItem\(PROFILE_SETUP_SESSION_KEY/);
 });
+
+test('profile copy explains that personal data remains in the browser', () => {
+  const settings = readFileSync(new URL('../src/settings/SettingsView.tsx', import.meta.url), 'utf8');
+  const setup = readFileSync(new URL('../src/profile/ProfileSetupDialog.tsx', import.meta.url), 'utf8');
+  assert.match(settings, /We don’t save your personal data, it stays in your own browser/);
+  assert.match(setup, /We don’t save your personal data, it stays in your own browser/);
+});

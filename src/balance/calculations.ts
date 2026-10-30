@@ -1,7 +1,7 @@
 import type { FoodEntry, Workout } from '../data/db';
 
-export const BALANCE_MIN = -5000;
-export const BALANCE_MAX = 5000;
+export const BALANCE_MIN = -3500;
+export const BALANCE_MAX = 3500;
 
 export type DailyBalance = {
   date: string;

@@ -14,7 +14,7 @@ export function ProfileSetupDialog({ onFinished }: { onFinished: () => void }) {
         <span className="profile-setup-icon"><Activity /></span>
         <p className="eyebrow">A quick setup</p>
         <h2 id="profile-setup-title">Personalize Eat &amp; Fit</h2>
-        <p>Sex, weight, and height are needed for more accurate calorie calculations. Your sex also selects the matching exercise demonstration images. These details stay in this browser and can be edited later in Settings.</p>
+        <p>Sex, weight, and height are needed for more accurate calorie calculations. Your sex also selects the matching exercise demonstration images. We don’t save your personal data, it stays in your own browser. You can edit these details later in Settings.</p>
         <ProfileForm submitLabel="Save and continue" onSaved={onFinished} />
         <button className="profile-skip" type="button" onClick={skip}>Skip for this session</button>
       </section>

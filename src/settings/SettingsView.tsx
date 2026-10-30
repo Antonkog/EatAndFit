@@ -89,7 +89,7 @@ export function SettingsView() {
       <div className="calendar-heading"><div><p className="eyebrow">{APP_EDITION_LABEL}</p><h2>Settings</h2></div></div>
       <article className="settings-card profile-settings">
         <h3><UserRound size={20} /> Personal profile</h3>
-        <p>Sex selects matching exercise demonstrations. Weight and height are used for more accurate calorie calculations. This profile stays in this browser.</p>
+        <p>Sex selects matching exercise demonstrations. Weight and height are used for more accurate calorie calculations. We don’t save your personal data, it stays in your own browser.</p>
         <ProfileForm onSaved={() => setProfileMessage('Profile saved.')} />
         {profileMessage && <p className="key-message" role="status">{profileMessage}</p>}
       </article>

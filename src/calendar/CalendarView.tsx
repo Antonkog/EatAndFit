@@ -9,7 +9,7 @@ import {
   Trash2,
   Utensils,
 } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   allFood,
   allWorkouts,
@@ -25,6 +25,7 @@ import {
   type Workout,
 } from '../data/db';
 import type { ExerciseCatalog } from '../exercises/types';
+import { finalizeWorkoutNumberDraft, parseWorkoutNumberDraft, type WorkoutNumberKind } from './workoutNumber';
 
 const weekdays = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
 const meals: MealType[] = ['breakfast', 'lunch', 'dinner', 'snack'];
@@ -158,6 +159,59 @@ function DayHeading({ date, actions }: { date: string; actions: React.ReactNode 
   );
 }
 
+function WorkoutNumberInput({
+  label,
+  value,
+  kind,
+  step,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  kind: WorkoutNumberKind;
+  step: string;
+  onChange: (value: number) => void;
+}) {
+  const [draft, setDraft] = useState(String(value));
+  const editing = useRef(false);
+
+  useEffect(() => {
+    if (!editing.current) setDraft(String(value));
+  }, [value]);
+
+  const finish = () => {
+    editing.current = false;
+    const next = finalizeWorkoutNumberDraft(draft, kind, value);
+    setDraft(String(next));
+    if (next !== value) onChange(next);
+  };
+
+  return (
+    <input
+      aria-label={label}
+      type="number"
+      min="0"
+      step={step}
+      placeholder={label}
+      value={draft}
+      onFocus={(event) => {
+        editing.current = true;
+        if (value === 0) event.currentTarget.select();
+      }}
+      onChange={(event) => {
+        const nextDraft = event.target.value;
+        setDraft(nextDraft);
+        const next = parseWorkoutNumberDraft(nextDraft, kind);
+        if (next !== undefined && next !== value) onChange(next);
+      }}
+      onBlur={finish}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter') event.currentTarget.blur();
+      }}
+    />
+  );
+}
+
 function WorkoutDay({
   date,
   workouts,
@@ -200,8 +254,8 @@ function WorkoutDay({
                   {workout.sets.map((set, index) => (
                     <div className={set.complete ? 'set-row complete' : 'set-row'} key={set.id}>
                       <strong>{index + 1}</strong>
-                      <input aria-label="Reps" type="number" min="0" placeholder="Reps" value={set.reps} onChange={(event) => onChange({ ...workout, sets: workout.sets.map((item) => item.id === set.id ? { ...item, reps: Number(event.target.value) } : item) })} />
-                      <input aria-label="Kg" type="number" min="0" step="0.5" placeholder="Kg" value={set.weightKg} onChange={(event) => onChange({ ...workout, sets: workout.sets.map((item) => item.id === set.id ? { ...item, weightKg: Number(event.target.value) } : item) })} />
+                      <WorkoutNumberInput label="Reps" value={set.reps} kind="integer" step="1" onChange={(reps) => onChange({ ...workout, sets: workout.sets.map((item) => item.id === set.id ? { ...item, reps } : item) })} />
+                      <WorkoutNumberInput label="Kg" value={set.weightKg} kind="decimal" step="0.5" onChange={(weightKg) => onChange({ ...workout, sets: workout.sets.map((item) => item.id === set.id ? { ...item, weightKg } : item) })} />
                       <input aria-label="Seconds" type="number" min="0" placeholder="Sec" value={set.durationSeconds ?? ''} onChange={(event) => onChange({ ...workout, sets: workout.sets.map((item) => item.id === set.id ? { ...item, durationSeconds: event.target.value ? Number(event.target.value) : undefined } : item) })} />
                       <button className={set.complete ? 'set-done active' : 'set-done'} aria-label="Done" onClick={() => onChange({ ...workout, sets: workout.sets.map((item) => item.id === set.id ? { ...item, complete: !item.complete } : item) })}>{set.complete ? <Check size={17} /> : <Circle size={17} />}</button>
                     </div>

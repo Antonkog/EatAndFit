@@ -27,9 +27,19 @@ test('gauge bands include the yellow boundary and clamp only the needle', () => 
   assert.equal(balanceBand(-500), 'yellow');
   assert.equal(balanceBand(500), 'yellow');
   assert.equal(balanceBand(501), 'red');
-  assert.deepEqual(gaugePosition(-6000), { clamped: -5000, ratio: 1, angle: 360, band: 'green' });
+  assert.deepEqual(gaugePosition(-6000), { clamped: -3500, ratio: 1, angle: 360, band: 'green' });
   assert.deepEqual(gaugePosition(0), { clamped: 0, ratio: 0.5, angle: 270, band: 'yellow' });
-  assert.deepEqual(gaugePosition(6000), { clamped: 5000, ratio: 0, angle: 180, band: 'red' });
+  assert.deepEqual(gaugePosition(6000), { clamped: 3500, ratio: 0, angle: 180, band: 'red' });
+});
+
+test('gauge uses a continuous red-yellow-green gradient with the new labels', () => {
+  const source = readFileSync(new URL('../src/balance/BalanceView.tsx', import.meta.url), 'utf8');
+  assert.match(source, /linearGradient id="balance-gauge-gradient"/);
+  assert.match(source, /offset="0%" stopColor="#ff6b5f"/);
+  assert.match(source, /offset="50%" stopColor="#ffd35f"/);
+  assert.match(source, /offset="100%" stopColor="#b7ff4f"/);
+  assert.match(source, /\+3,500[\s\S]*−3,500/);
+  assert.doesNotMatch(source, /gauge-red|gauge-yellow|gauge-green/);
 });
 
 test('rolling balance covers today and the previous six local dates', () => {

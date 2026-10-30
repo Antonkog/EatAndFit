@@ -38,16 +38,19 @@ function BalanceGauge({ value }: { value: number }) {
     <div className="balance-gauge" aria-label={`Calorie balance ${signed(value)} kilocalories`}>
       <div className="gauge-value"><strong style={{ color: gaugeColors[position.band] }}>{signed(value)}</strong><span>kcal</span></div>
       <svg viewBox="0 0 320 190" role="img">
+        <defs>
+          <linearGradient id="balance-gauge-gradient" gradientUnits="userSpaceOnUse" x1="50" y1="150" x2="270" y2="150">
+            <stop offset="0%" stopColor="#ff6b5f" />
+            <stop offset="50%" stopColor="#ffd35f" />
+            <stop offset="100%" stopColor="#b7ff4f" />
+          </linearGradient>
+        </defs>
         <path className="gauge-track" d={arc(180, 360)} />
-        <path className="gauge-red" d={arc(180, 261)} />
-        <path className="gauge-yellow" d={arc(261, 279)} />
-        <path className="gauge-green" d={arc(279, 360)} />
-        <circle className="gauge-red-cap" cx={point(180, 110).x} cy={point(180, 110).y} r="8" />
-        <circle className="gauge-green-cap" cx={point(360, 110).x} cy={point(360, 110).y} r="8" />
+        <path className="gauge-gradient" d={arc(180, 360)} />
         <line className="gauge-needle" x1="160" y1="150" x2={needle.x} y2={needle.y} />
         <circle className="gauge-pin" cx="160" cy="150" r="9" />
       </svg>
-      <div className="gauge-labels"><span>+5,000</span><span>0</span><span>−5,000</span></div>
+      <div className="gauge-labels"><span>+3,500</span><span>0</span><span>−3,500</span></div>
     </div>
   );
 }

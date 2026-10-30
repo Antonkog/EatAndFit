@@ -98,12 +98,12 @@ export function RecipeView({
     <section>
       <div className="recipe-heading">
         <h1>Recipes</h1>
-        {__SMART_SCANNER__ && onOpenAi && <button className="primary-button large" onClick={onOpenAi}><Sparkles size={18} /> Generate AI recipe</button>}
+        {__SMART_SCANNER__ && onOpenAi && <button className="primary-button large recipe-action-button" onClick={onOpenAi}><Sparkles size={18} /> Generate AI recipe</button>}
       </div>
 
       <form className="recipe-search" onSubmit={(event) => { event.preventDefault(); setQuery(draft.trim()); setPage(1); }}>
         <label className="search-box"><Search size={17} /><input aria-label="Search recipes" placeholder="Search recipes" value={draft} onChange={(event) => { setDraft(event.target.value); if (!event.target.value) setQuery(''); }} /></label>
-        <button className="primary-button" type="submit"><Search size={17} /> Search recipes</button>
+        <button className="primary-button large recipe-action-button" type="submit"><Search size={17} /> Search recipes</button>
       </form>
 
       {ingredients.length > 0 && (
