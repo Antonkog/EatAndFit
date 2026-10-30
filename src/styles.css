@@ -261,12 +261,18 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .profile-sex label.active { border-color: rgba(183,255,79,.5); color: var(--text); background: rgba(183,255,79,.09); }
 .profile-sex input { position: absolute; opacity: 0; pointer-events: none; }
 .profile-sex small { color: var(--muted-text); font-size: 9px; }
-.profile-measurements { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.profile-measurements { display: grid; grid-template-columns: repeat(3,1fr); gap: 8px; }
 .profile-measurements label { display: grid; gap: 7px; color: var(--muted-text); font-size: 10px; font-weight: 700; }
 .profile-measurements label > span:first-child { display: flex; align-items: center; gap: 6px; }
 .profile-measurements label > span:last-child { display: flex; align-items: center; gap: 7px; }
 .profile-measurements input { width: 100%; min-width: 0; height: 42px; padding: 8px 10px; border-radius: 9px; }
 .profile-settings .profile-form { max-width: 620px; }
+.profile-goal, .training-goals { margin: 0; padding: 0; border: 0; }
+.profile-goal legend, .training-goals legend { display: flex; align-items: center; gap: 7px; margin-bottom: 8px; color: var(--muted-text); font-size: 11px; font-weight: 750; }
+.profile-goal > div { display: grid; grid-template-columns: repeat(3,1fr); gap: 8px; }
+.profile-goal label { padding: 12px; border: 1px solid var(--border); border-radius: 12px; color: var(--muted-text); background: rgba(255,255,255,.025); cursor: pointer; }
+.profile-goal label.active { border-color: rgba(183,255,79,.5); color: var(--text); background: rgba(183,255,79,.09); }
+.profile-goal input, .training-goals input { position: absolute; opacity: 0; pointer-events: none; }
 .profile-setup-backdrop { position: fixed; inset: 0; z-index: 130; display: grid; place-items: center; overflow-y: auto; padding: 18px; background: rgba(0,0,0,.8); backdrop-filter: blur(10px); }
 .profile-setup-dialog { width: min(520px,100%); padding: 25px; border: 1px solid var(--border-strong); border-radius: 24px; background: var(--surface-raised); box-shadow: 0 30px 100px rgba(0,0,0,.65); }
 .profile-setup-icon { display: grid; width: 48px; height: 48px; margin-bottom: 16px; place-items: center; border-radius: 15px; color: var(--primary-ink); background: var(--primary); box-shadow: 0 0 28px rgba(183,255,79,.16); }
@@ -447,6 +453,12 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .calendar-empty h3 { margin: 0 0 15px; color: var(--text); }
 .workout-card { padding: 0; overflow: hidden; border-radius: 24px; }
 .workout-card header { padding: 16px 20px; border-bottom: 1px solid var(--border); }
+.workout-energy { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 8px; padding: 14px 20px; border-bottom: 1px solid var(--border); background: rgba(183,255,79,.025); }
+.workout-energy > span { display: grid; gap: 3px; }
+.workout-energy strong { color: var(--text); font-size: 13px; }
+.workout-energy small { color: var(--muted-text); font-size: 9px; font-weight: 600; }
+.workout-energy > a, .workout-energy > small { grid-column: 1/-1; color: var(--primary); font-size: 9px; line-height: 1.5; text-decoration: none; }
+.workout-energy-unavailable { margin: 0; padding: 12px 20px; border-bottom: 1px solid var(--border); color: var(--muted-text); font-size: 10px; }
 .workout-card header > img, .workout-placeholder { width: 64px; height: 64px; flex: 0 0 auto; border-radius: 16px; object-fit: cover; background: var(--muted); }
 .workout-placeholder { display: grid; place-items: center; color: var(--primary); }
 .workout-title { min-width: 0; flex: 1; }
@@ -676,6 +688,33 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .product-log-panel > h3 { margin: 18px 0 9px; }
 .product-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; }
 
+.personalized-training-button { margin-top: 22px; }
+.training-planner-overlay { display: grid; place-items: center; padding: 22px; }
+.training-planner { position: relative; width: min(980px,100%); max-height: calc(100vh - 44px); overflow-y: auto; padding: 28px; border: 1px solid var(--border-strong); border-radius: 25px; background: var(--surface-raised); box-shadow: 0 30px 100px rgba(0,0,0,.65); }
+.training-planner > header { padding-right: 55px; }
+.training-planner > header h2 { margin: 0; font-size: clamp(2rem,4vw,3.2rem); letter-spacing: -.05em; }
+.training-planner > header > p:last-child { max-width: 700px; color: var(--muted-text); line-height: 1.65; }
+.training-goals { margin: 24px 0; }
+.training-goals > div { display: grid; grid-template-columns: repeat(3,1fr); gap: 9px; }
+.training-goals label { display: grid; gap: 5px; padding: 15px; border: 1px solid var(--border); border-radius: 15px; color: var(--muted-text); background: rgba(255,255,255,.025); cursor: pointer; }
+.training-goals label.active { border-color: rgba(183,255,79,.48); color: var(--text); background: rgba(183,255,79,.08); }
+.training-goals small { color: var(--muted-text); font-size: 10px; line-height: 1.5; }
+.training-plan-sessions { display: grid; gap: 12px; }
+.training-plan-sessions > article { padding: 17px; border: 1px solid var(--border); border-radius: 17px; background: rgba(255,255,255,.024); }
+.training-plan-sessions > article > header { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+.training-plan-sessions h3 { margin: 4px 0 0; }
+.training-plan-sessions header small { color: var(--primary); font-size: 9px; text-transform: uppercase; }
+.training-plan-sessions header label { display: flex; align-items: center; gap: 7px; color: var(--muted-text); }
+.training-plan-sessions input { padding: 8px 10px; border-radius: 9px; }
+.training-plan-sessions ul { display: grid; grid-template-columns: repeat(2,1fr); gap: 6px 18px; margin: 15px 0 0; padding: 0; list-style: none; }
+.training-plan-sessions li { display: flex; justify-content: space-between; gap: 10px; padding: 7px 0; border-bottom: 1px solid rgba(255,255,255,.05); font-size: 11px; }
+.training-plan-sessions li small { color: var(--muted-text); text-align: right; }
+.session-energy { margin: 12px 0 0; color: var(--primary); font-size: 10px; }
+.estimate-disclaimer { margin: 0; color: var(--muted-text); font-size: 10px; line-height: 1.6; }
+.training-plan-actions { display: flex; justify-content: end; gap: 8px; }
+.spin { animation: eatfit-spin .8s linear infinite; }
+@keyframes eatfit-spin { to { transform: rotate(360deg); } }
+
 @media (min-width: 601px) {
   .muscle-card.featured { grid-column: span 2; aspect-ratio: 2/1; }
 }
@@ -765,6 +804,15 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   .product-summary > img, .product-summary > span { width: 120px; height: 120px; }
   .manual-nutrition > div, .four-fields { grid-template-columns: repeat(2,1fr); }
   .product-actions { align-items: stretch; flex-direction: column; }
+  .profile-measurements, .profile-goal > div, .training-goals > div { grid-template-columns: 1fr; }
+  .training-planner-overlay { padding: 0; align-items: stretch; }
+  .training-planner { max-height: 100vh; padding: 20px 16px 30px; border-radius: 0; }
+  .training-plan-sessions > article > header { align-items: stretch; flex-direction: column; }
+  .training-plan-sessions header input { flex: 1; }
+  .training-plan-sessions ul { grid-template-columns: 1fr; }
+  .training-plan-actions { align-items: stretch; flex-direction: column; }
+  .workout-energy { grid-template-columns: 1fr 1fr; padding-inline: 14px; }
+  .workout-energy > span:nth-child(3) { grid-column: 1/-1; }
 }
 
 @media (prefers-reduced-motion: reduce) {

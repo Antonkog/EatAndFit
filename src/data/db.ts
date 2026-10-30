@@ -1,5 +1,19 @@
 export type WorkoutSet = { id: string; reps: number; weightKg: number; durationSeconds?: number; complete: boolean };
-export type Workout = { id: string; date: string; exerciseId: string; exerciseName: string; sets: WorkoutSet[]; notes: string; completed: boolean; caloriesBurned?: number; calorieSource?: string };
+export type Workout = {
+  id: string;
+  date: string;
+  exerciseId: string;
+  exerciseName: string;
+  sets: WorkoutSet[];
+  notes: string;
+  completed: boolean;
+  caloriesBurned?: number;
+  calorieSource?: string;
+  calorieSourceUrl?: string;
+  energyDurationMinutes?: number;
+  energyEquivalentKg?: number;
+  trainingPlanId?: string;
+};
 export type MealType = 'breakfast' | 'lunch' | 'dinner' | 'snack';
 export type FoodEntry = { id: string; date: string; title: string; calories?: number; protein?: number; carbs?: number; fat?: number; provider: string; mealType?: MealType; quantity?: number; quantityUnit?: 'serving' | 'g' | 'ml'; imageUrl?: string; payload?: unknown };
 export type LocalProduct = { barcode: string; name: string; calories?: number; protein?: number; carbs?: number; fat?: number };
@@ -42,6 +56,14 @@ async function put<T>(storeName: string, value: T) {
   db.close();
 }
 
+function transactionDone(transaction: IDBTransaction) {
+  return new Promise<void>((resolve, reject) => {
+    transaction.oncomplete = () => resolve();
+    transaction.onerror = () => reject(transaction.error);
+    transaction.onabort = () => reject(transaction.error ?? new Error('The local data transaction was cancelled.'));
+  });
+}
+
 export function localDate(date = new Date()) {
   const offset = date.getTimezoneOffset() * 60_000;
   return new Date(date.getTime() - offset).toISOString().slice(0, 10);
@@ -64,6 +86,64 @@ export async function scheduleWorkout(exerciseId: string, exerciseName: string, 
 export async function saveWorkout(workout: Workout) {
   await put('workouts', workout);
   window.dispatchEvent(new Event('eatfit-data-change'));
+}
+
+export async function saveTrainingPlan(workouts: Workout[]) {
+  if (workouts.length === 0) throw new Error('The training plan has no workouts to save.');
+  const db = await openDatabase();
+  try {
+    const transaction = db.transaction('workouts', 'readwrite');
+    const store = transaction.objectStore('workouts');
+    workouts.forEach((workout) => store.put(workout));
+    await transactionDone(transaction);
+  } finally {
+    db.close();
+  }
+  window.dispatchEvent(new Event('eatfit-data-change'));
+}
+
+export async function removePlannedWorkoutsForDate(date: string) {
+  const db = await openDatabase();
+  let removed = 0;
+  try {
+    const transaction = db.transaction('workouts', 'readwrite');
+    const store = transaction.objectStore('workouts');
+    const workouts = await requestResult(store.getAll()) as Workout[];
+    workouts.filter((workout) => workout.date === date && !workout.completed).forEach((workout) => {
+      store.delete(workout.id);
+      removed += 1;
+    });
+    await transactionDone(transaction);
+  } finally {
+    db.close();
+  }
+  if (removed) window.dispatchEvent(new Event('eatfit-data-change'));
+  return removed;
+}
+
+function addLocalDays(value: string, days: number) {
+  const date = new Date(`${value}T12:00:00`);
+  date.setDate(date.getDate() + days);
+  return localDate(date);
+}
+
+export async function moveFutureWorkoutsOneDay(fromDate = localDate()) {
+  const db = await openDatabase();
+  let moved = 0;
+  try {
+    const transaction = db.transaction('workouts', 'readwrite');
+    const store = transaction.objectStore('workouts');
+    const workouts = await requestResult(store.getAll()) as Workout[];
+    workouts.filter((workout) => workout.date >= fromDate && !workout.completed).forEach((workout) => {
+      store.put({ ...workout, date: addLocalDays(workout.date, 1) });
+      moved += 1;
+    });
+    await transactionDone(transaction);
+  } finally {
+    db.close();
+  }
+  if (moved) window.dispatchEvent(new Event('eatfit-data-change'));
+  return moved;
 }
 
 export async function removeWorkout(id: string) {
@@ -107,7 +187,7 @@ export async function clearData() {
   const db = await openDatabase();
   const transaction = db.transaction(['workouts', 'food', 'products'], 'readwrite');
   transaction.objectStore('workouts').clear(); transaction.objectStore('food').clear(); transaction.objectStore('products').clear();
-  await new Promise<void>((resolve, reject) => { transaction.oncomplete = () => resolve(); transaction.onerror = () => reject(transaction.error); });
+  await transactionDone(transaction);
   db.close();
 }
 

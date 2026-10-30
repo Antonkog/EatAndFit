@@ -6,16 +6,21 @@ import {
   Clock3,
   Play,
   Search,
+  Sparkles,
   X,
 } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { localDate, scheduleWorkout } from '../data/db';
-import { preferredExerciseSex, setExerciseModelPreference, type ProfileSex } from '../profile/userProfile';
+import { preferredExerciseSex, profileIssue, readUserProfile, setExerciseModelPreference, type ProfileSex } from '../profile/userProfile';
 import { exerciseMatches } from './search';
 import type { Exercise, ExerciseCatalog } from './types';
 
 type Gender = ProfileSex;
 type MuscleGroup = { name: string; targets: string[] };
+
+const SmartTrainingPlanner = typeof __SMART_SCANNER__ !== 'undefined' && __SMART_SCANNER__
+  ? lazy(() => import('../training/TrainingPlanner').then((module) => ({ default: module.TrainingPlanner })))
+  : null;
 
 export const muscleGroups: MuscleGroup[] = [
   { name: 'Neck', targets: ['neck flexors', 'sternocleidomastoid'] },
@@ -208,11 +213,14 @@ function Fact({ label, value }: { label: string; value: string }) {
   return <div><dt>{label}</dt><dd>{titleCase(value)}</dd></div>;
 }
 
-export function ExerciseLibrary({ onWorkoutAdded }: { onWorkoutAdded: (date: string) => void }) {
+export function ExerciseLibrary({ onWorkoutAdded, aiFeaturesEnabled = false }: { onWorkoutAdded: (date: string) => void; aiFeaturesEnabled?: boolean }) {
   const [catalog, setCatalog] = useState<ExerciseCatalog>();
   const [query, setQuery] = useState('');
   const [selectedGroup, setSelectedGroup] = useState<MuscleGroup>();
   const [selected, setSelected] = useState<Exercise>();
+  const [plannerOpen, setPlannerOpen] = useState(false);
+  const profile = readUserProfile();
+  const canPlan = aiFeaturesEnabled && Number(profile.age) >= 19 && !profileIssue(profile);
 
   useEffect(() => {
     void fetch('/data/catalog.json').then((response) => response.json()).then(setCatalog);
@@ -235,6 +243,7 @@ export function ExerciseLibrary({ onWorkoutAdded }: { onWorkoutAdded: (date: str
         <div className="exercise-hero">
           <div className="hero-copy">
             <h1>Choose what you train today.</h1>
+            {canPlan && <button className="primary-button personalized-training-button" onClick={() => setPlannerOpen(true)}><Sparkles size={18} /> Personalized training program</button>}
           </div>
         </div>
         <div className="muscle-grid">
@@ -250,6 +259,7 @@ export function ExerciseLibrary({ onWorkoutAdded }: { onWorkoutAdded: (date: str
             );
           })}
         </div>
+        {plannerOpen && SmartTrainingPlanner && <Suspense fallback={<div className="loading-state">Loading training planner…</div>}><SmartTrainingPlanner catalog={catalog} onClose={() => setPlannerOpen(false)} onSaved={onWorkoutAdded} /></Suspense>}
       </section>
     );
   }

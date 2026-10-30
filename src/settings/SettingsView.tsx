@@ -58,6 +58,7 @@ export function SettingsView() {
   const saveKey = async (provider: RecognitionProvider) => {
     const value = provider === 'META' ? metaKey : geminiKey;
     try {
+      setKeyMessage('Checking API key…');
       await saveRecognitionKey(provider, value);
       if (provider === 'META') setMetaKey(''); else setGeminiKey('');
       setKeyMessage('API key set');
@@ -89,14 +90,14 @@ export function SettingsView() {
       <div className="calendar-heading"><div><p className="eyebrow">{APP_EDITION_LABEL}</p><h2>Settings</h2></div></div>
       <article className="settings-card profile-settings">
         <h3><UserRound size={20} /> Personal profile</h3>
-        <p>Sex selects matching exercise demonstrations. Weight and height are used for more accurate calorie calculations. We don’t save your personal data, it stays in your own browser.</p>
+        <p>Age selects the appropriate activity-energy source. Sex selects matching exercise demonstrations. Weight and height are used for more accurate calorie calculations. We don’t save your personal data, it stays in your own browser.</p>
         <ProfileForm onSaved={() => setProfileMessage('Profile saved.')} />
         {profileMessage && <p className="key-message" role="status">{profileMessage}</p>}
       </article>
       {__SMART_SCANNER__ && (
         <article className="settings-card api-key-settings">
           <h3><KeyRound size={20} /> AI provider keys</h3>
-          <p>Smart Scan and AI recipe generation are enabled when the selected provider has a saved key. Your provider may charge your account for API requests.</p>
+          <p>Smart Scan, AI recipe generation, adult energy calibration, and personalized training are enabled when the selected provider has a verified key. Your provider may charge your account for API requests.</p>
           <div className="key-security-note">
             <ShieldCheck size={20} />
             <p>Keys are encrypted.</p>

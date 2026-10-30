@@ -3,17 +3,20 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { normalizeUserProfile, profileIssue } from '../src/profile/userProfile';
 
-test('profile validation accepts supported sex and realistic metric values', () => {
-  assert.equal(profileIssue({ sex: 'female', weightKg: 62.5, heightCm: 168 }), '');
-  assert.equal(profileIssue({ sex: 'male', weightKg: 84, heightCm: 184 }), '');
-  assert.match(profileIssue({ weightKg: 84, heightCm: 184 }), /male or female/);
-  assert.match(profileIssue({ sex: 'male', weightKg: 0, heightCm: 184 }), /weight/);
-  assert.match(profileIssue({ sex: 'female', weightKg: 62, heightCm: 400 }), /height/);
+test('profile validation accepts supported sex, age, goal, and realistic metric values', () => {
+  assert.equal(profileIssue({ sex: 'female', age: 18, weightKg: 62.5, heightCm: 168 }), '');
+  assert.equal(profileIssue({ sex: 'male', age: 35, weightKg: 84, heightCm: 184, trainingGoal: 'build_muscle' }), '');
+  assert.match(profileIssue({ age: 20, weightKg: 84, heightCm: 184, trainingGoal: 'stay_fit' }), /male or female/);
+  assert.match(profileIssue({ sex: 'male', age: 0, weightKg: 84, heightCm: 184 }), /age/);
+  assert.match(profileIssue({ sex: 'male', age: 25, weightKg: 0, heightCm: 184, trainingGoal: 'lose_weight' }), /weight/);
+  assert.match(profileIssue({ sex: 'female', age: 25, weightKg: 62, heightCm: 400, trainingGoal: 'stay_fit' }), /height/);
+  assert.match(profileIssue({ sex: 'female', age: 25, weightKg: 62, heightCm: 168 }), /training goal/);
 });
 
 test('stored profiles discard unsupported or out-of-range fields', () => {
-  assert.deepEqual(normalizeUserProfile({ sex: 'male', weightKg: 80, heightCm: 180 }), { sex: 'male', weightKg: 80, heightCm: 180 });
-  assert.deepEqual(normalizeUserProfile({ sex: 'other', weightKg: -2, heightCm: 'wrong' }), {});
+  assert.deepEqual(normalizeUserProfile({ sex: 'male', age: '34', weightKg: '82.5', heightCm: '180', trainingGoal: 'stay_fit' }), { sex: 'male', age: 34, weightKg: 82.5, heightCm: 180, trainingGoal: 'stay_fit' });
+  assert.deepEqual(normalizeUserProfile({ sex: 'female', age: 16, weightKg: 55, heightCm: 165, trainingGoal: 'build_muscle' }), { sex: 'female', age: 16, weightKg: 55, heightCm: 165 });
+  assert.deepEqual(normalizeUserProfile({ sex: 'other', age: 130, weightKg: -2, heightCm: 'wrong', trainingGoal: 'unknown' }), {});
 });
 
 test('first-launch profile, Settings editing, and exercise media are integrated', () => {

@@ -6,11 +6,13 @@ import { CalendarView } from './calendar/CalendarView';
 import { localDate } from './data/db';
 import { ExerciseLibrary } from './exercises/ExerciseLibrary';
 import { ProfileSetupDialog } from './profile/ProfileSetupDialog';
-import { shouldShowProfileSetup } from './profile/userProfile';
+import { PROFILE_CHANGED, profileIssue, readUserProfile, shouldShowProfileSetup } from './profile/userProfile';
 import { RecipeView } from './recipes/RecipeView';
 import { CoreScanView } from './scanner/CoreScanView';
 import type { ScanMode } from './scanner/types';
 import { SettingsView } from './settings/SettingsView';
+import { getRecognitionCredential, getRecognitionKeyStatus } from './settings/secureKeys';
+import { ensureEnergyCalibration } from './training/calibration';
 
 export type View = 'exercises' | 'calendar' | 'balance' | 'recipes' | 'scan' | 'ai' | 'settings';
 type PrimaryView = Exclude<View, 'ai' | 'settings'>;
@@ -48,7 +50,7 @@ export function App() {
   useEffect(() => {
     if (!__SMART_SCANNER__) return;
     let disposed = false;
-    const refresh = () => void import('./settings/secureKeys').then(({ getRecognitionKeyStatus }) => getRecognitionKeyStatus()).then((status) => {
+    const refresh = () => void getRecognitionKeyStatus().then((status) => {
       if (!disposed) setAiFeaturesEnabled(status.activeProvider === 'META' ? status.metaConfigured : status.geminiConfigured);
     }).catch(() => { if (!disposed) setAiFeaturesEnabled(false); });
     refresh();
@@ -56,6 +58,27 @@ export function App() {
     return () => {
       disposed = true;
       window.removeEventListener('eatfit-recognition-keys-change', refresh);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!__SMART_SCANNER__) return;
+    let disposed = false;
+    const calibrate = async () => {
+      const profile = readUserProfile();
+      if (disposed || Number(profile.age) < 19 || profileIssue(profile)) return;
+      const credential = await getRecognitionCredential();
+      if (!credential || disposed) return;
+      const catalog = await fetch('/data/catalog.json').then((response) => response.json());
+      if (!disposed) await ensureEnergyCalibration(catalog, profile, credential).catch(() => undefined);
+    };
+    void calibrate();
+    window.addEventListener(PROFILE_CHANGED, calibrate);
+    window.addEventListener('eatfit-recognition-keys-change', calibrate);
+    return () => {
+      disposed = true;
+      window.removeEventListener(PROFILE_CHANGED, calibrate);
+      window.removeEventListener('eatfit-recognition-keys-change', calibrate);
     };
   }, []);
 
@@ -152,7 +175,7 @@ export function App() {
       <main className="page" onFocus={(event) => {
         if (event.target instanceof HTMLInputElement && event.target.type === 'number') event.target.select();
       }}>
-        {view === 'exercises' && <ExerciseLibrary onWorkoutAdded={(date) => showCalendar(date, 'workout')} />}
+        {view === 'exercises' && <ExerciseLibrary aiFeaturesEnabled={aiFeaturesEnabled} onWorkoutAdded={(date) => showCalendar(date, 'workout')} />}
         {view === 'balance' && <BalanceView onAddFood={() => showRecipes([], localDate(), 'balance')} onAddExercise={() => showView('exercises')} />}
         {view === 'calendar' && (
           <CalendarView

@@ -1,9 +1,12 @@
 export type ProfileSex = 'male' | 'female';
+export type TrainingGoal = 'lose_weight' | 'build_muscle' | 'stay_fit';
 
 export type UserProfile = {
   sex?: ProfileSex;
+  age?: number;
   weightKg?: number;
   heightCm?: number;
+  trainingGoal?: TrainingGoal;
 };
 
 export const PROFILE_CHANGED = 'eatfit-profile-change';
@@ -20,19 +23,27 @@ export function normalizeUserProfile(value: unknown): UserProfile {
   if (!value || typeof value !== 'object') return {};
   const candidate = value as Record<string, unknown>;
   const sex = candidate.sex === 'male' || candidate.sex === 'female' ? candidate.sex : undefined;
+  const age = finiteNumber(candidate.age);
   const weightKg = finiteNumber(candidate.weightKg);
   const heightCm = finiteNumber(candidate.heightCm);
+  const trainingGoal = candidate.trainingGoal === 'lose_weight' || candidate.trainingGoal === 'build_muscle' || candidate.trainingGoal === 'stay_fit'
+    ? candidate.trainingGoal
+    : undefined;
   return {
     ...(sex ? { sex } : {}),
-    ...(weightKg && weightKg >= 20 && weightKg <= 400 ? { weightKg } : {}),
-    ...(heightCm && heightCm >= 80 && heightCm <= 250 ? { heightCm } : {}),
+    ...(age && Number.isInteger(age) && age >= 1 && age <= 120 ? { age } : {}),
+    ...(weightKg && weightKg >= 2 && weightKg <= 400 ? { weightKg } : {}),
+    ...(heightCm && heightCm >= 40 && heightCm <= 250 ? { heightCm } : {}),
+    ...(age && age >= 19 && trainingGoal ? { trainingGoal } : {}),
   };
 }
 
 export function profileIssue(profile: UserProfile) {
   if (profile.sex !== 'male' && profile.sex !== 'female') return 'Select male or female.';
-  if (!Number.isFinite(profile.weightKg) || Number(profile.weightKg) < 20 || Number(profile.weightKg) > 400) return 'Enter a weight between 20 and 400 kg.';
-  if (!Number.isFinite(profile.heightCm) || Number(profile.heightCm) < 80 || Number(profile.heightCm) > 250) return 'Enter a height between 80 and 250 cm.';
+  if (!Number.isInteger(profile.age) || Number(profile.age) < 1 || Number(profile.age) > 120) return 'Enter an age between 1 and 120.';
+  if (!Number.isFinite(profile.weightKg) || Number(profile.weightKg) < 2 || Number(profile.weightKg) > 400) return 'Enter a weight between 2 and 400 kg.';
+  if (!Number.isFinite(profile.heightCm) || Number(profile.heightCm) < 40 || Number(profile.heightCm) > 250) return 'Enter a height between 40 and 250 cm.';
+  if (Number(profile.age) >= 19 && profile.trainingGoal !== 'lose_weight' && profile.trainingGoal !== 'build_muscle' && profile.trainingGoal !== 'stay_fit') return 'Select a training goal.';
   return '';
 }
 

@@ -81,6 +81,13 @@ export async function getRecognitionKeyStatus(): Promise<RecognitionKeyStatus> {
 export async function saveRecognitionKey(provider: RecognitionProvider, value: string) {
   const apiKey = value.trim();
   if (!apiKey) throw new Error('Enter an API key before saving.');
+  const verification = await fetch('/api/ai/keys/verify', {
+    method: 'POST',
+    headers: { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json', 'x-recognition-provider': provider },
+    body: '{}',
+  });
+  const verificationBody = await verification.json().catch(() => ({}));
+  if (!verification.ok || verificationBody?.ok !== true) throw new Error(verification.status === 401 ? 'Wrong API key' : verificationBody?.error || 'The API key could not be verified.');
   const database = await openDatabase();
   try {
     const encrypted = await encryptSecret(apiKey, await deviceKey(database));

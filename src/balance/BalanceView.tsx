@@ -113,7 +113,7 @@ export function BalanceView({ onAddFood, onAddExercise }: { onAddFood: () => voi
         <div className="balance-side">
           <section className="balance-totals">
             <article><span className="eaten"><Utensils size={18} /></span><small>Eaten</small><strong>{directionalAmount(totals.eaten, '+')} kcal</strong></article>
-            <article><span className="burned"><Flame size={18} /></span><small>Burned</small><strong>{directionalAmount(totals.burned, '−')} kcal</strong></article>
+            <article><span className="burned"><Flame size={18} /></span><small>Burned</small><strong>{directionalAmount(totals.burned, '−')} kcal</strong>{totals.burned > 0 && <em>{(totals.burned / 7700).toFixed(3)} kg energy equivalent</em>}</article>
             <article><span className={`net ${balanceBand(totals.balance)}`}><Flame size={18} /></span><small>Balance</small><strong>{signed(totals.balance)} kcal</strong></article>
           </section>
           <section className="balance-actions">

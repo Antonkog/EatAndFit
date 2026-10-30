@@ -6,6 +6,7 @@ import {
   Circle,
   Dumbbell,
   Plus,
+  RotateCw,
   Trash2,
   Utensils,
 } from 'lucide-react';
@@ -15,7 +16,9 @@ import {
   allWorkouts,
   foodForDate,
   localDate,
+  moveFutureWorkoutsOneDay,
   removeFood,
+  removePlannedWorkoutsForDate,
   removeWorkout,
   saveFood,
   saveWorkout,
@@ -24,7 +27,12 @@ import {
   type MealType,
   type Workout,
 } from '../data/db';
+import { energySourceLabel, estimateExerciseEnergy, type EnergyEstimate } from '../energy/estimates';
+import { applyWorkoutCompletion } from '../energy/workout';
 import type { ExerciseCatalog } from '../exercises/types';
+import { PROFILE_CHANGED, readUserProfile, type UserProfile } from '../profile/userProfile';
+import { getRecognitionKeyStatus, RECOGNITION_KEYS_CHANGED } from '../settings/secureKeys';
+import { ENERGY_CALIBRATION_CHANGED, readEnergyCalibration } from '../training/calibration';
 import { finalizeWorkoutNumberDraft, parseWorkoutNumberDraft, type WorkoutNumberKind } from './workoutNumber';
 
 const weekdays = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
@@ -68,6 +76,8 @@ export function CalendarView({
   const [food, setFood] = useState<FoodEntry[]>([]);
   const [activityDates, setActivityDates] = useState<Set<string>>(new Set());
   const [catalog, setCatalog] = useState<ExerciseCatalog>();
+  const [profile, setProfile] = useState<UserProfile>(readUserProfile);
+  const [calibration, setCalibration] = useState<number>();
 
   const refresh = useCallback(() => {
     void Promise.all([workoutsForDate(date), foodForDate(date), allWorkouts(), allFood()]).then(([nextWorkouts, nextFood, everyWorkout, everyFood]) => {
@@ -85,6 +95,24 @@ export function CalendarView({
 
   useEffect(() => { void fetch('/data/catalog.json').then((response) => response.json()).then(setCatalog); }, []);
 
+  useEffect(() => {
+    const refreshEnergyProfile = () => {
+      const nextProfile = readUserProfile();
+      setProfile(nextProfile);
+      if (!__SMART_SCANNER__) { setCalibration(undefined); return; }
+      void getRecognitionKeyStatus().then((status) => setCalibration(readEnergyCalibration(nextProfile, status.activeProvider))).catch(() => setCalibration(undefined));
+    };
+    refreshEnergyProfile();
+    window.addEventListener(PROFILE_CHANGED, refreshEnergyProfile);
+    window.addEventListener(RECOGNITION_KEYS_CHANGED, refreshEnergyProfile);
+    window.addEventListener(ENERGY_CALIBRATION_CHANGED, refreshEnergyProfile);
+    return () => {
+      window.removeEventListener(PROFILE_CHANGED, refreshEnergyProfile);
+      window.removeEventListener(RECOGNITION_KEYS_CHANGED, refreshEnergyProfile);
+      window.removeEventListener(ENERGY_CALIBRATION_CHANGED, refreshEnergyProfile);
+    };
+  }, []);
+
   const exerciseMap = useMemo(() => new Map(catalog?.exercises.map((exercise) => [exercise.id, exercise]) ?? []), [catalog]);
   const days = useMemo(() => calendarDays(month), [month]);
 
@@ -94,9 +122,15 @@ export function CalendarView({
     setMonth(selected);
   };
 
+  const estimateWorkout = useCallback((workout: Workout) => {
+    const exercise = exerciseMap.get(workout.exerciseId);
+    return exercise ? estimateExerciseEnergy(exercise, workout.sets, profile, calibration) : undefined;
+  }, [calibration, exerciseMap, profile]);
+
   const updateWorkout = (workout: Workout) => {
-    setWorkouts((items) => items.map((item) => item.id === workout.id ? workout : item));
-    void saveWorkout(workout);
+    const next = applyWorkoutCompletion(workout, estimateWorkout(workout));
+    setWorkouts((items) => items.map((item) => item.id === next.id ? next : item));
+    void saveWorkout(next);
   };
 
   return (
@@ -141,6 +175,17 @@ export function CalendarView({
             exerciseMap={exerciseMap}
             onBrowse={onBrowse}
             onChange={updateWorkout}
+            estimateWorkout={estimateWorkout}
+            estimateUnavailable={Number(profile.age) > 0 && Number(profile.age) < 6}
+            onRemovePlanned={async () => {
+              if (!workouts.some((workout) => !workout.completed) || !window.confirm(`Remove all planned trainings for ${fullDate(date)}? Completed workouts will stay.`)) return;
+              await removePlannedWorkoutsForDate(date);
+            }}
+            onMoveFuture={async () => {
+              if (!window.confirm('Move every planned training dated today or later forward by one day? Completed workouts will stay on their current dates.')) return;
+              const moved = await moveFutureWorkoutsOneDay();
+              if (!moved) window.alert('There are no future planned trainings to move.');
+            }}
           />
         ) : (
           <FoodDay date={date} entries={food} onRecipes={() => onRecipes(date)} onProduct={() => onProduct(date)} />
@@ -218,16 +263,24 @@ function WorkoutDay({
   exerciseMap,
   onBrowse,
   onChange,
+  estimateWorkout,
+  estimateUnavailable,
+  onRemovePlanned,
+  onMoveFuture,
 }: {
   date: string;
   workouts: Workout[];
   exerciseMap: Map<string, ExerciseCatalog['exercises'][number]>;
   onBrowse: () => void;
   onChange: (workout: Workout) => void;
+  estimateWorkout: (workout: Workout) => EnergyEstimate | undefined;
+  estimateUnavailable: boolean;
+  onRemovePlanned: () => void;
+  onMoveFuture: () => void;
 }) {
   return (
     <section>
-      <DayHeading date={date} actions={<button className="primary-button" onClick={onBrowse}><Plus size={17} /> Add to workout</button>} />
+      <DayHeading date={date} actions={<><button className="primary-button" onClick={onBrowse}><Plus size={17} /> Add to workout</button>{workouts.some((workout) => !workout.completed) && <button className="text-button" onClick={onRemovePlanned}><Trash2 size={17} /> Remove planned trainings for this day</button>}<button className="text-button" onClick={onMoveFuture}><RotateCw size={17} /> Move all future trainings by 1 day</button></>} />
       {workouts.length === 0 ? (
         <div className="empty-card calendar-empty">
           <span><Dumbbell /></span>
@@ -239,6 +292,12 @@ function WorkoutDay({
           {workouts.map((workout) => {
             const exercise = exerciseMap.get(workout.exerciseId);
             const thumbnail = exercise?.media.thumbnail?.female ?? exercise?.media.thumbnail?.male;
+            const liveEstimate = workout.completed ? undefined : estimateWorkout(workout);
+            const calories = workout.completed ? workout.caloriesBurned : liveEstimate?.calories;
+            const duration = workout.completed ? workout.energyDurationMinutes : liveEstimate?.durationMinutes;
+            const equivalent = workout.completed ? workout.energyEquivalentKg : liveEstimate?.equivalentKg;
+            const source = workout.completed ? workout.calorieSource : liveEstimate ? energySourceLabel(liveEstimate) : undefined;
+            const sourceUrl = workout.completed ? workout.calorieSourceUrl : liveEstimate?.source.sourceUrl;
             return (
               <article className="workout-card" key={workout.id}>
                 <header>
@@ -249,6 +308,15 @@ function WorkoutDay({
                   </div>
                   <button className="icon-button" onClick={() => void removeWorkout(workout.id)} aria-label="Remove exercise"><Trash2 size={18} /></button>
                 </header>
+                {calories !== undefined && (
+                  <div className="workout-energy">
+                    <span><strong>{Math.round(duration ?? 0)} min</strong><small>Estimated duration</small></span>
+                    <span><strong>{Math.round(calories)} kcal</strong><small>{workout.completed ? 'Frozen when completed' : 'Estimated energy'}</small></span>
+                    <span><strong>{(equivalent ?? calories / 7700).toFixed(3)} kg</strong><small>Energy equivalent, not guaranteed weight loss</small></span>
+                    {source && (sourceUrl ? <a href={sourceUrl} target="_blank" rel="noreferrer">{source}</a> : <small>{source}</small>)}
+                  </div>
+                )}
+                {!calories && estimateUnavailable && <p className="workout-energy-unavailable">Sourced calorie estimates begin at age 6.</p>}
                 <div className="set-list">
                   <div className="set-labels"><span>Set</span><span>Reps</span><span>Kg</span><span>Seconds</span><span>Done</span></div>
                   {workout.sets.map((set, index) => (
