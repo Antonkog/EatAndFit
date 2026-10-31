@@ -27,9 +27,10 @@ export function TrainingPlanner({ catalog, onClose, onSaved }: { catalog: Exerci
 
   const setsForItem = (item: GeneratedTrainingPlan['sessions'][number]['exercises'][number]) => {
     const exercise = byId.get(item.exerciseId);
+    const estimatedSeconds = estimateSetDurationSeconds(item.reps ?? 0, exercise ? classifyExercise(exercise) : 'resistance_general');
     const durationSeconds = item.durationMinutes
-      ? Math.round(item.durationMinutes * 60)
-      : estimateSetDurationSeconds(item.reps ?? 0, exercise ? classifyExercise(exercise) : 'resistance_general');
+      ? item.durationMinutes * 60
+      : Math.max(1, Math.ceil(estimatedSeconds / 60)) * 60;
     return Array.from({ length: item.sets }, () => ({ reps: item.reps ?? 0, durationSeconds }));
   };
 
@@ -37,8 +38,8 @@ export function TrainingPlanner({ catalog, onClose, onSaved }: { catalog: Exerci
     const exercise = byId.get(item.exerciseId);
     if (!exercise) return total;
     const estimate = estimateExerciseEnergy(exercise, setsForItem(item), profile, factor);
-    return total + (estimate?.calories ?? 0);
-  }, 0)) ?? [], [byId, factor, plan, profile]);
+    return { calories: total.calories + (estimate?.calories ?? 0), minutes: total.minutes + (estimate?.durationMinutes ?? 0) };
+  }, { calories: 0, minutes: 0 })) ?? [], [byId, factor, plan, profile]);
 
   const exportRows = useMemo<TrainingPlanExportRow[]>(() => plan?.sessions.flatMap((session, sessionIndex) => session.exercises.map((item) => {
     const exercise = byId.get(item.exerciseId)!;
@@ -51,8 +52,7 @@ export function TrainingPlanner({ catalog, onClose, onSaved }: { catalog: Exerci
       exercise: exercise.name,
       sets: item.sets,
       reps: item.reps ?? 0,
-      estimatedMinutes: estimate?.durationMinutes ?? estimateDurationSeconds(sets, classifyExercise(exercise)) / 60,
-      startingWeightKg: 0,
+      estimatedMinutes: Math.ceil(estimate?.durationMinutes ?? estimateDurationSeconds(sets, classifyExercise(exercise)) / 60),
       estimatedCalories: estimate?.calories ?? 0,
     };
   })) ?? [], [byId, dates, factor, plan, profile]);
@@ -129,13 +129,12 @@ export function TrainingPlanner({ catalog, onClose, onSaved }: { catalog: Exerci
                 <header><div><small>Session {index + 1}</small><h3>{session.title}</h3></div><label><CalendarDays size={15} /><input type="date" min={new Date().toISOString().slice(0, 10)} value={dates[index]} onChange={(event) => setDates((items) => items.map((date, itemIndex) => itemIndex === index ? event.target.value : date))} /></label></header>
                 <ul>{session.exercises.map((item) => {
                   const row = exportRows.find((entry) => entry.session === index + 1 && entry.exercise === byId.get(item.exerciseId)?.name);
-                  const prescription = item.reps ? `${item.sets} sets × ${item.reps} reps` : `${item.sets} sets × ${item.durationMinutes?.toFixed(1) ?? '0.5'} min`;
-                  return <li key={item.exerciseId}><span>{byId.get(item.exerciseId)?.name}</span><small>{prescription} · {row?.estimatedMinutes.toFixed(1) ?? '0.5'} min total · 0 kg</small></li>;
+                  const prescription = item.reps ? `${item.sets} sets × ${item.reps} reps` : `${item.sets} sets × ${item.durationMinutes ?? 1} min`;
+                  return <li key={item.exerciseId}><span>{byId.get(item.exerciseId)?.name}</span><small>{prescription} · {row?.estimatedMinutes ?? 1} min total</small></li>;
                 })}</ul>
-                <p className="session-energy">Estimated {Math.round(sessionTotals[index] ?? 0)} kcal · {(sessionTotals[index] / 7700).toFixed(3)} kg energy equivalent</p>
+                <p className="session-energy">Estimated {Math.ceil(sessionTotals[index]?.minutes ?? 0)} min · {Math.round(sessionTotals[index]?.calories ?? 0)} kcal</p>
               </article>
             ))}
-            <p className="estimate-disclaimer">Energy equivalents are rough exercise-energy comparisons, not guaranteed weight loss.</p>
             <div className="training-plan-actions">
               <button className="text-button" onClick={() => downloadTrainingPlan('eat-and-fit-training-plan.csv', trainingPlanCsv(exportRows), 'text/csv;charset=utf-8')}><Download size={16} /> Export CSV</button>
               <button className="text-button" onClick={() => downloadTrainingPlan('eat-and-fit-training-plan.txt', trainingPlanText(exportRows, goalLabels[goal]), 'text/plain;charset=utf-8')}><Download size={16} /> Export TXT</button>

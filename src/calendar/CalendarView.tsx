@@ -1,14 +1,17 @@
 import {
   Barcode,
+  CalendarDays,
   Check,
   ChevronLeft,
   ChevronRight,
   Circle,
   Dumbbell,
   Plus,
+  Pencil,
   RotateCw,
   Trash2,
   Utensils,
+  X,
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -17,6 +20,7 @@ import {
   foodForDate,
   localDate,
   moveFutureWorkoutsOneDay,
+  movePlannedWorkoutsForDate,
   removeFood,
   removePlannedWorkoutsForDate,
   removeWorkout,
@@ -78,17 +82,20 @@ export function CalendarView({
   const [mode, setMode] = useState<'workout' | 'food'>(initialMode);
   const [workouts, setWorkouts] = useState<Workout[]>([]);
   const [food, setFood] = useState<FoodEntry[]>([]);
+  const [everyWorkout, setEveryWorkout] = useState<Workout[]>([]);
   const [activityDates, setActivityDates] = useState<Set<string>>(new Set());
   const [catalog, setCatalog] = useState<ExerciseCatalog>();
   const [profile, setProfile] = useState<UserProfile>(readUserProfile);
   const [calibration, setCalibration] = useState<number>();
   const [selectedExercise, setSelectedExercise] = useState<Exercise>();
   const [selectedFood, setSelectedFood] = useState<FoodEntry>();
+  const [editingTraining, setEditingTraining] = useState(false);
 
   const refresh = useCallback(() => {
     void Promise.all([workoutsForDate(date), foodForDate(date), allWorkouts(), allFood()]).then(([nextWorkouts, nextFood, everyWorkout, everyFood]) => {
       setWorkouts(nextWorkouts);
       setFood(nextFood);
+      setEveryWorkout(everyWorkout);
       setActivityDates(new Set([...everyWorkout, ...everyFood].map((item) => item.date)));
     });
   }, [date]);
@@ -185,15 +192,8 @@ export function CalendarView({
             estimateWorkout={estimateWorkout}
             estimateUnavailable={Number(profile.age) > 0 && Number(profile.age) < 6}
             onOpenDetails={setSelectedExercise}
-            onRemovePlanned={async () => {
-              if (!workouts.some((workout) => !workout.completed) || !window.confirm(`Remove planned trainings for ${fullDate(date)}? Completed workouts will stay.`)) return;
-              await removePlannedWorkoutsForDate(date);
-            }}
-            onMoveFuture={async () => {
-              if (!window.confirm('Move every planned training dated today or later forward by one day? Completed workouts will stay on their current dates.')) return;
-              const moved = await moveFutureWorkoutsOneDay();
-              if (!moved) window.alert('There are no future planned trainings to move.');
-            }}
+            editDisabled={!everyWorkout.some((workout) => !workout.completed && workout.date >= date)}
+            onEditTraining={() => setEditingTraining(true)}
           />
         ) : (
           <FoodDay date={date} entries={food} onRecipes={() => onRecipes(date)} onProduct={() => onProduct(date)} onOpenDetails={setSelectedFood} />
@@ -202,7 +202,94 @@ export function CalendarView({
     </div>
     {selectedExercise && <ExerciseDetail exercise={selectedExercise} initialDate={date} allowScheduling={false} onClose={() => setSelectedExercise(undefined)} />}
     {selectedFood && <CalendarFoodDetail entry={selectedFood} onClose={() => setSelectedFood(undefined)} />}
+    {editingTraining && <EditTrainingDialog date={date} workouts={everyWorkout} onClose={() => setEditingTraining(false)} />}
     </>
+  );
+}
+
+function EditTrainingDialog({ date, workouts, onClose }: { date: string; workouts: Workout[]; onClose: () => void }) {
+  const today = localDate();
+  const selectedPlanned = workouts.filter((workout) => workout.date === date && !workout.completed);
+  const futurePlanned = workouts.filter((workout) => workout.date >= date && !workout.completed);
+  const [choosingDate, setChoosingDate] = useState(false);
+  const [targetDate, setTargetDate] = useState('');
+  const [targetMonth, setTargetMonth] = useState(() => parseLocal(date < today ? today : date));
+  const targetDays = useMemo(() => calendarDays(targetMonth), [targetMonth]);
+  const isToday = date === today;
+  const futureLabel = isToday ? 'Move today and all future trainings by 1 day' : `Move ${fullDate(date)} and all future trainings by 1 day`;
+  const singleDayLabel = isToday ? 'Move today’s training to another day' : `Move training on ${fullDate(date)} to another day`;
+  const removeLabel = isToday ? 'Remove all today’s trainings' : `Remove all trainings on ${fullDate(date)}`;
+
+  const moveFuture = async () => {
+    if (!futurePlanned.length) return;
+    if (!window.confirm(`Move ${futurePlanned.length} planned training${futurePlanned.length === 1 ? '' : 's'} forward by one day? Completed workouts will stay on their current dates.`)) return;
+    await moveFutureWorkoutsOneDay(date);
+    onClose();
+  };
+
+  const removeSelected = async () => {
+    if (!selectedPlanned.length) return;
+    if (!window.confirm(`Remove ${selectedPlanned.length} planned training${selectedPlanned.length === 1 ? '' : 's'} from ${fullDate(date)}? Completed workouts will stay.`)) return;
+    await removePlannedWorkoutsForDate(date);
+    onClose();
+  };
+
+  const moveSelected = async () => {
+    if (!targetDate || targetDate === date || targetDate < today) return;
+    const destinationHasWorkouts = workouts.some((workout) => workout.date === targetDate);
+    const warning = destinationHasWorkouts ? ` ${fullDate(targetDate)} already contains training; the moved exercises will be appended.` : '';
+    if (!window.confirm(`Move ${selectedPlanned.length} planned training${selectedPlanned.length === 1 ? '' : 's'} to ${fullDate(targetDate)}?${warning}`)) return;
+    await movePlannedWorkoutsForDate(date, targetDate);
+    onClose();
+  };
+
+  return (
+    <div className="dialog-backdrop">
+      <section className="match-dialog training-edit-dialog" role="dialog" aria-modal="true" aria-labelledby="training-edit-title">
+        <button className="sheet-close" onClick={onClose} aria-label="Close"><X /></button>
+        <h2 id="training-edit-title">Edit training</h2>
+        <p>Change planned training without altering completed workout history.</p>
+        {!choosingDate ? (
+          <div className="training-edit-options">
+            <button className="text-button" disabled={!futurePlanned.length} onClick={() => void moveFuture()}><RotateCw size={17} /> {futureLabel}</button>
+            <button className="text-button" disabled={!selectedPlanned.length} onClick={() => setChoosingDate(true)}><CalendarDays size={17} /> {singleDayLabel}</button>
+            <button className="danger-button" disabled={!selectedPlanned.length} onClick={() => void removeSelected()}><Trash2 size={17} /> {removeLabel}</button>
+          </div>
+        ) : (
+          <div className="training-date-picker">
+            <h3>Choose a new training day</h3>
+            <div className="month-picker">
+              <button aria-label="Previous month" onClick={() => setTargetMonth(new Date(targetMonth.getFullYear(), targetMonth.getMonth() - 1, 1, 12))}><ChevronLeft size={17} /></button>
+              <strong>{monthLabel(targetMonth)}</strong>
+              <button aria-label="Next month" onClick={() => setTargetMonth(new Date(targetMonth.getFullYear(), targetMonth.getMonth() + 1, 1, 12))}><ChevronRight size={17} /></button>
+            </div>
+            <div className="calendar-grid" role="grid" aria-label="Choose destination date">
+              {weekdays.map((item) => <span className="weekday" key={item}>{item}</span>)}
+              {targetDays.map((item) => {
+                const value = localDate(item);
+                const disabled = value < today || value === date;
+                return (
+                  <button
+                    key={value}
+                    className={`${value === targetDate ? 'selected' : ''} ${item.getMonth() !== targetMonth.getMonth() ? 'outside' : ''}`}
+                    disabled={disabled}
+                    onClick={() => setTargetDate(value)}
+                    aria-label={fullDate(value)}
+                    aria-pressed={value === targetDate}
+                  >
+                    {item.getDate()}
+                  </button>
+                );
+              })}
+            </div>
+            <footer>
+              <button className="text-button" onClick={() => { setChoosingDate(false); setTargetDate(''); }}>Back</button>
+              <button className="primary-button" disabled={!targetDate} onClick={() => void moveSelected()}>Confirm new date</button>
+            </footer>
+          </div>
+        )}
+      </section>
+    </div>
   );
 }
 
@@ -327,8 +414,8 @@ function WorkoutDay({
   estimateWorkout,
   estimateUnavailable,
   onOpenDetails,
-  onRemovePlanned,
-  onMoveFuture,
+  editDisabled,
+  onEditTraining,
 }: {
   date: string;
   workouts: Workout[];
@@ -338,12 +425,12 @@ function WorkoutDay({
   estimateWorkout: (workout: Workout) => EnergyEstimate | undefined;
   estimateUnavailable: boolean;
   onOpenDetails: (exercise: Exercise) => void;
-  onRemovePlanned: () => void;
-  onMoveFuture: () => void;
+  editDisabled: boolean;
+  onEditTraining: () => void;
 }) {
   return (
     <section>
-      <DayHeading date={date} actions={<><button className="primary-button" onClick={onBrowse}><Plus size={17} /> Add to workout</button>{workouts.some((workout) => !workout.completed) && <button className="text-button" onClick={onRemovePlanned}><Trash2 size={17} /> Remove today trainings</button>}<button className="text-button" onClick={onMoveFuture}><RotateCw size={17} /> Move all future trainings by 1 day</button></>} />
+      <DayHeading date={date} actions={<><button className="primary-button" onClick={onBrowse}><Plus size={17} /> Add to workout</button><button className="text-button" disabled={editDisabled} onClick={onEditTraining}><Pencil size={17} /> Edit training</button></>} />
       {workouts.length === 0 ? (
         <div className="empty-card calendar-empty">
           <span><Dumbbell /></span>
@@ -384,7 +471,7 @@ function WorkoutDay({
                 )}
                 {!calories && estimateUnavailable && <p className="workout-energy-unavailable">Sourced calorie estimates begin at age 6.</p>}
                 <div className="set-list">
-                  <div className="set-labels"><span>Set</span><span>Reps</span><span>Kg</span><span>Minutes</span><span>Done</span></div>
+                  <div className="set-labels"><span>Set</span><span>Reps</span><span>Weight (kg)</span><span>Time (min)</span><span>Done</span></div>
                   {workout.sets.map((set, index) => (
                     <div className={set.complete ? 'set-row complete' : 'set-row'} key={set.id}>
                       <strong>{index + 1}</strong>

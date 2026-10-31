@@ -85,3 +85,11 @@ test('localized meal suggestions stay inside the existing recipe grid', () => {
   assert.match(recipes, /recommendations', 'daily'/);
   assert.equal((recipes.match(/className="recipe-grid"/g) ?? []).length, 1);
 });
+
+test('balance actions remain while the Log today eyebrow is removed', () => {
+  const balance = readFileSync(new URL('../src/balance/BalanceView.tsx', import.meta.url), 'utf8');
+  assert.doesNotMatch(balance, /Log today/);
+  assert.match(balance, /Update your balance/);
+  assert.match(balance, /Add food/);
+  assert.match(balance, /Add exercise/);
+});

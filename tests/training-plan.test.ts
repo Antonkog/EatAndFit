@@ -26,8 +26,11 @@ test('default plan dates are Monday, Wednesday, and Friday across two weeks', ()
 test('training validation requires six sessions, 5–7 exercises, and catalog IDs', () => {
   assert.equal(validateGeneratedTrainingPlan(validPlan(), catalog.exercises).sessions.length, 6);
   const timed = validPlan();
-  timed.sessions[0].exercises[0] = { exerciseId: ids[0], sets: 3, reps: 0, durationMinutes: 1.5 };
-  assert.equal(validateGeneratedTrainingPlan(timed, catalog.exercises).sessions[0].exercises[0].durationMinutes, 1.5);
+  timed.sessions[0].exercises[0] = { exerciseId: ids[0], sets: 3, reps: 0, durationMinutes: 2 };
+  assert.equal(validateGeneratedTrainingPlan(timed, catalog.exercises).sessions[0].exercises[0].durationMinutes, 2);
+  const fractional = validPlan();
+  fractional.sessions[0].exercises[0] = { exerciseId: ids[0], sets: 3, reps: 0, durationMinutes: 1.5 };
+  assert.throws(() => validateGeneratedTrainingPlan(fractional, catalog.exercises), /catalog/);
   const missing = validPlan();
   missing.sessions[0].exercises[0].exerciseId = 'not-in-catalog';
   assert.throws(() => validateGeneratedTrainingPlan(missing, catalog.exercises), /catalog/);
@@ -48,17 +51,24 @@ test('calendar bulk actions and training plan saves use readwrite IndexedDB tran
   assert.match(source, /saveTrainingPlan[\s\S]*transaction\('workouts', 'readwrite'\)/);
   assert.match(source, /removePlannedWorkoutsForDate[\s\S]*transaction\('workouts', 'readwrite'\)/);
   assert.match(source, /moveFutureWorkoutsOneDay[\s\S]*transaction\('workouts', 'readwrite'\)/);
+  assert.match(source, /movePlannedWorkoutsForDate[\s\S]*transaction\('workouts', 'readwrite'\)/);
   const calendar = readFileSync(new URL('../src/calendar/CalendarView.tsx', import.meta.url), 'utf8');
-  assert.match(calendar, /Remove today trainings/);
-  assert.match(calendar, /Move all future trainings by 1 day/);
+  assert.match(calendar, /Edit training/);
+  assert.match(calendar, /Move today and all future trainings by 1 day/);
+  assert.match(calendar, /Move today’s training to another day/);
+  assert.match(calendar, /Remove all today’s trainings/);
+  assert.match(calendar, /Weight \(kg\)/);
+  assert.match(calendar, /Time \(min\)/);
 });
 
 test('training plan can be exported as CSV and readable text with estimated minutes', () => {
-  const rows: TrainingPlanExportRow[] = [{ session: 1, date: '2026-11-09', sessionTitle: 'Push', exercise: 'Bench Press', sets: 3, reps: 10, estimatedMinutes: 3.2, startingWeightKg: 0, estimatedCalories: 31.6 }];
+  const rows: TrainingPlanExportRow[] = [{ session: 1, date: '2026-11-09', sessionTitle: 'Push', exercise: 'Bench Press', sets: 3, reps: 10, estimatedMinutes: 3.2, estimatedCalories: 31.6 }];
   assert.match(trainingPlanCsv(rows), /Estimated minutes/);
-  assert.match(trainingPlanCsv(rows), /Bench Press,3,10,3\.2,0,32/);
+  assert.doesNotMatch(trainingPlanCsv(rows), /Starting kg/);
+  assert.match(trainingPlanCsv(rows), /Bench Press,3,10,4,32/);
   assert.match(trainingPlanText(rows, 'Stay fit'), /Goal: Stay fit/);
-  assert.match(trainingPlanText(rows, 'Stay fit'), /3\.2 min/);
+  assert.match(trainingPlanText(rows, 'Stay fit'), /4 min/);
+  assert.doesNotMatch(trainingPlanText(rows, 'Stay fit'), /0 kg/);
 });
 
 test('personalized training reuses the saved goal without a second goal screen', () => {
@@ -68,4 +78,6 @@ test('personalized training reuses the saved goal without a second goal screen',
   assert.match(planner, /generationStarted/);
   assert.match(planner, /Export CSV/);
   assert.match(planner, /Export TXT/);
+  assert.doesNotMatch(planner, /total · 0 kg/);
+  assert.match(planner, /Estimated.*min.*kcal/);
 });

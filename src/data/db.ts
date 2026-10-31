@@ -146,6 +146,26 @@ export async function moveFutureWorkoutsOneDay(fromDate = localDate()) {
   return moved;
 }
 
+export async function movePlannedWorkoutsForDate(sourceDate: string, targetDate: string) {
+  if (sourceDate === targetDate) return 0;
+  const db = await openDatabase();
+  let moved = 0;
+  try {
+    const transaction = db.transaction('workouts', 'readwrite');
+    const store = transaction.objectStore('workouts');
+    const workouts = await requestResult(store.getAll()) as Workout[];
+    workouts.filter((workout) => workout.date === sourceDate && !workout.completed).forEach((workout) => {
+      store.put({ ...workout, date: targetDate });
+      moved += 1;
+    });
+    await transactionDone(transaction);
+  } finally {
+    db.close();
+  }
+  if (moved) window.dispatchEvent(new Event('eatfit-data-change'));
+  return moved;
+}
+
 export async function removeWorkout(id: string) {
   const db = await openDatabase();
   await requestResult(db.transaction('workouts', 'readwrite').objectStore('workouts').delete(id));

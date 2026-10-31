@@ -11,6 +11,8 @@ test('Meta and Gemini training providers use only the explicitly selected provid
   await meta.generate({ profile: {}, catalog: [] });
   assert.match(calls[0].url, /api\.meta\.ai/);
   assert.equal(calls[0].body.model, 'muse-spark-1.3-contributor');
+  assert.equal(calls[0].body.response_format.json_schema.schema.properties.sessions.items.properties.exercises.items.properties.durationMinutes.type, 'integer');
+  assert.match(calls[0].body.messages.at(-1).content, /whole integer from 1 to 60/);
 
   calls.length = 0;
   const gemini = createTrainingProvider({ provider: 'GEMINI', apiKey: 'gemini-key' }, { fetchImpl: async (url: string, init: RequestInit) => {

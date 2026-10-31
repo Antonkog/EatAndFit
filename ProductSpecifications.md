@@ -146,6 +146,8 @@ The dashboard shows Eaten, Burned, Balance, and a seven-day chart for today plus
 
 `Add food` opens Recipes and returns to Balance after saving. `Add exercise` opens the exercise library and continues through the Calendar workflow.
 
+The action panel is headed `Update your balance`; it does not repeat a separate `Log today` eyebrow.
+
 ## 6. Exercise library
 
 ### 6.1 Catalog
@@ -194,7 +196,7 @@ The AI must return:
 - Exactly six sessions.
 - Five through seven catalog exercises in each session.
 - One through eight sets per exercise.
-- Either 1–100 repetitions or an estimated 0.1–60 activity minutes per set.
+- Either 1–100 repetitions or an estimated 1–60 whole activity minutes per set.
 - Only exercise IDs that exist in the local catalog.
 
 Invalid provider output is rejected and nothing is saved.
@@ -205,9 +207,9 @@ Default dates are the next Monday, Wednesday, and Friday, repeated in the follow
 
 Confirmation requires six different, non-past dates in chronological order. If any selected date already contains a workout, the user must confirm that the generated plan should be appended.
 
-Every generated set starts at 0 kg. The plan is written to IndexedDB in one transaction and all workouts receive a shared `trainingPlanId`.
+Every generated set starts at 0 kg for later Calendar editing, but zero weight is not shown in the plan review or exports. AI-provided durations must be whole minutes. Repetition-based durations are rounded upward to at least one whole minute per set before storage. The plan is written to IndexedDB in one transaction and all workouts receive a shared `trainingPlanId`.
 
-Before confirmation, the review screen shows estimated minutes and calories and can export the current dates and exercises as either CSV or human-readable TXT. Both exports include session number, selected date, session title, exercise, sets, reps, estimated minutes, starting weight, and estimated calories.
+Before confirmation, the review screen shows whole per-exercise minutes plus the combined whole session duration and calories. It can export the current dates and exercises as either CSV or human-readable TXT. Both exports include session number, selected date, session title, exercise, sets, reps, whole estimated minutes, and estimated calories. They omit the always-zero starting weight.
 
 ### 7.3 No provider fallback
 
@@ -223,7 +225,7 @@ The Calendar has a month grid, previous/next month controls, an activity dot for
 
 Each workout stores its exercise identity, date, notes, sets, completion status, optional frozen energy fields, and optional training-plan ID.
 
-Each set supports:
+Each set uses the visible columns `Set`, `Reps`, `Weight (kg)`, `Time (min)`, and `Done`. It supports:
 
 - Repetitions: non-negative whole number.
 - Weight: non-negative decimal value with a 0.5 kg input step.
@@ -234,7 +236,7 @@ Reps and Kg inputs permit an empty editing draft. Focusing an existing zero sele
 
 A workout becomes completed only when it has at least one set and every set is marked done. Completing all sets freezes the current calories, duration, source, source URL, and energy-equivalent value into history. Reopening any set returns the workout to planned and removes those frozen fields. Previously completed history is not recalculated when the profile, model, or source registry changes.
 
-Users can add sets, remove individual workouts, use `Remove today trainings` to remove incomplete workouts from the selected date, and move every incomplete workout dated today or later forward by one day. The two bulk operations require confirmation and run as atomic IndexedDB transactions. Completed workouts are not affected by either bulk operation.
+Users can add sets or remove individual workouts. `Edit training` opens bulk controls for the selected Calendar date: move its incomplete workouts to another non-past date, move every incomplete workout on or after the selected date forward by one day, or remove all incomplete workouts on the selected date. The wording uses `today` only when today is selected. Destination conflicts require confirmation, and every bulk operation runs as one atomic IndexedDB transaction. Completed workouts are never affected.
 
 Pressing a workout's exercise summary opens the existing full exercise detail view, including its demonstration, technique, form cues, common mistakes, breathing guidance, equipment, and muscle information. This Calendar detail view is read-only and does not show the scheduling controls.
 
@@ -306,7 +308,7 @@ kcal = METy × Schofield BMR kcal/min × minutes
 
 Schofield equations use age band, sex, and weight. No sourced estimate is returned below age 6.
 
-Harvard Health 30-minute values are implemented as an attributable interpolation/duration-scaling reference and regression check. Current catalog runtime estimates resolve through the age-appropriate Compendium registry because all exercises have a valid Compendium mapping.
+Harvard Health 30-minute values are implemented as an attributable interpolation/duration-scaling reference and regression check. Current catalog runtime estimates resolve through the age-appropriate Compendium registry because all exercises have a valid Compendium mapping. Session totals sum the exact per-exercise durations and calories before display rounding; valid estimates are not inflated merely because they appear low.
 
 ### 9.4 Confidence labels
 
@@ -445,7 +447,9 @@ The user can edit, remove, and manually add ingredients, then either find matchi
 
 ### 14.2 Barcode and packaged products
 
-Barcode lookup is available in both editions. The screen starts the rear camera preview when browser permission allows and always provides numeric manual entry. The current lookup action uses an entered 8–14 digit barcode; automatic frame decoding is not implemented.
+Barcode lookup is available in both editions. On HTTPS or localhost, the screen dynamically loads the ZXing browser decoder and scans the rear-camera stream for EAN-8, EAN-13, UPC-A, UPC-E, and ITF/GTIN-14 codes. The first valid 8–14 digit result stops the camera, optionally vibrates the device, and automatically starts product lookup. Duplicate frame results are ignored.
+
+Camera tracks are stopped when the scanner is left, hidden, reset, or replaced by a product result. `Scan another product` starts a fresh decoding session. Permission, browser-support, decoder, or secure-context failures show a retry action while numeric manual entry remains available.
 
 Lookup uses Open Food Facts and retrieves product name, brand, front image, and calories/protein/carbohydrates/fat per 100 g. If lookup fails, the user can enter a local product and its per-100-g nutrition manually.
 
@@ -607,7 +611,6 @@ Feature tests cover provider selection and validation, scanner behavior, secure-
 - No localization; English only.
 - No on-device ingredient recognition.
 - No automatic cross-provider AI fallback.
-- No automatic barcode decoding from live video frames; lookup currently uses entered barcode digits.
 - No medical diagnosis, clinical nutrition plan, or guaranteed weight-loss prediction.
 - No automatically saved meal plan or calorie target; localized recipes are optional catalog suggestions only.
 - No body-weight history or macro targets.

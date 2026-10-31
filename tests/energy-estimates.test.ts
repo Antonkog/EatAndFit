@@ -64,6 +64,13 @@ test('Harvard values interpolate by body weight and scale from thirty minutes', 
   assert.ok(Math.abs(harvardCalories('general_weight_training', middle, 30) - 99) < 1e-9);
 });
 
+test('a 122 kcal fifteen-minute session at 95 kg remains within Harvard resistance-training references', () => {
+  const general = harvardCalories('general_weight_training', 95, 15);
+  const vigorous = harvardCalories('vigorous_weight_training', 95, 15);
+  assert.ok(122 >= general, `${general} should not exceed the representative estimate`);
+  assert.ok(122 <= vigorous, `${vigorous} should not be below the representative estimate`);
+});
+
 test('AI factor applies after the immutable source calculation and energy equivalent is explicit', () => {
   const sets = [{ reps: 10 }, { reps: 10 }, { reps: 10 }];
   const profile = { age: 35, sex: 'male' as const, weightKg: 80, heightCm: 180, trainingGoal: 'build_muscle' as const };

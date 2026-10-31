@@ -117,7 +117,7 @@ export function BalanceView({ onAddFood, onAddExercise }: { onAddFood: () => voi
             <article><span className={`net ${balanceBand(totals.balance)}`}><Flame size={18} /></span><small>Balance</small><strong>{signed(totals.balance)} kcal</strong></article>
           </section>
           <section className="balance-actions">
-            <div><p className="eyebrow">Log today</p><h2>Update your balance</h2><p>Add a meal or choose an exercise for today.</p></div>
+            <div><h2>Update your balance</h2><p>Add a meal or choose an exercise for today.</p></div>
             <button className="primary-button large" onClick={onAddFood}><Utensils size={18} /> Add food</button>
             <button className="text-button large" onClick={onAddExercise}><Dumbbell size={18} /> Add exercise</button>
           </section>

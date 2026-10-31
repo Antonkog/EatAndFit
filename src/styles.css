@@ -115,6 +115,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .primary-button:not(:disabled):active, .text-button:not(:disabled):active, .upload-button:not(:disabled):active { color: var(--primary-ink); background: var(--primary); border-color: var(--primary); transform: translateY(1px) scale(.985); animation: eatfit-action-flash .28s ease-out; }
 .primary-button:disabled, .text-button:disabled, .upload-button:disabled { opacity: .42; cursor: not-allowed; }
 .danger-button { border: 1px solid rgba(255,143,130,.2); color: var(--danger); background: rgba(255,143,130,.08); }
+.danger-button:disabled { opacity: .42; cursor: not-allowed; }
 @keyframes eatfit-action-flash { from { box-shadow: 0 0 0 0 rgba(183,255,79,.52); } to { box-shadow: 0 0 0 7px rgba(183,255,79,0); } }
 
 .calendar-heading { display: flex; align-items: end; justify-content: space-between; gap: 20px; margin-bottom: 25px; }
@@ -432,6 +433,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .calendar-grid .weekday { display: grid; place-items: center; height: 30px; color: var(--muted-text); font-size: 10px; font-weight: 750; }
 .calendar-grid button { position: relative; display: grid; place-items: center; aspect-ratio: 1; min-width: 0; padding: 0; border: 0; border-radius: 9px; color: var(--text); background: transparent; font-size: 12px; cursor: pointer; }
 .calendar-grid button:hover { background: rgba(255,255,255,.055); }
+.calendar-grid button:disabled { opacity: .28; cursor: not-allowed; }
 .calendar-grid button.outside { color: #566058; }
 .calendar-grid button.selected { color: var(--primary-ink); background: var(--primary); font-weight: 800; }
 .calendar-grid button i { position: absolute; bottom: 3px; width: 4px; height: 4px; border-radius: 50%; background: var(--primary); }
@@ -646,6 +648,13 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .usda-amount input { width: 120px; padding: 9px 11px; border-radius: 9px; }
 .usda-amount small { color: var(--muted-text); }
 .match-dialog footer { display: flex; flex-wrap: wrap; justify-content: end; gap: 8px; margin-top: 18px; }
+.training-edit-dialog { width: min(620px,100%); }
+.training-edit-options { display: grid; gap: 9px; margin-top: 20px; }
+.training-edit-options > button { justify-content: flex-start; width: 100%; text-align: left; }
+.training-date-picker { margin-top: 20px; }
+.training-date-picker h3 { margin: 0 0 14px; }
+.training-date-picker .calendar-grid { max-width: 420px; margin-inline: auto; }
+.training-date-picker .calendar-grid button { min-height: 42px; }
 
 .scan-view { max-width: 1024px; margin: 0 auto; }
 .scan-heading { margin-bottom: 28px; }
@@ -691,7 +700,9 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .manual-barcode h2 { margin: 0; font-size: 16px; }
 .manual-barcode label { display: grid; gap: 5px; margin-bottom: 12px; color: var(--muted-text); font-size: 10px; font-weight: 700; }
 .manual-barcode input { width: 100%; height: 42px; padding: 8px 10px; border-radius: 9px; }
-.camera-error { display: flex; gap: 6px; margin-top: 12px; color: #ffd392; font-size: 10px; line-height: 1.5; }
+.camera-error { display: grid; gap: 9px; margin-top: 12px; color: #ffd392; font-size: 10px; line-height: 1.5; }
+.camera-error > span { display: flex; align-items: flex-start; gap: 6px; }
+.camera-error .text-button { width: 100%; }
 .product-editor { display: grid; gap: 18px; }
 .product-editor > section { padding: 22px; border: 1px solid var(--border); border-radius: 24px; background: var(--surface); }
 .product-summary { display: flex; gap: 18px; }

@@ -7,7 +7,7 @@ import {
   Save,
   Search,
 } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { saveFood, saveProduct, type MealType } from '../data/db';
 
 type Product = {
@@ -24,6 +24,11 @@ type Product = {
 
 const meals: MealType[] = ['breakfast', 'lunch', 'dinner', 'snack'];
 
+export function normalizeScannedBarcode(value: string) {
+  const code = value.replace(/\D/g, '');
+  return /^\d{8,14}$/.test(code) ? code : undefined;
+}
+
 function titleCase(value: string) {
   return value.charAt(0).toUpperCase() + value.slice(1);
 }
@@ -34,6 +39,9 @@ export function ProductScanner({ initialDate, onAdded, onUseInRecipe }: {
   onUseInRecipe: (name: string) => void;
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
+  const scannerControls = useRef<{ stop: () => void } | undefined>(undefined);
+  const detectionHandled = useRef(false);
+  const [cameraKey, setCameraKey] = useState(0);
   const [barcode, setBarcode] = useState('');
   const [product, setProduct] = useState<Product>();
   const [manual, setManual] = useState(false);
@@ -44,36 +52,86 @@ export function ProductScanner({ initialDate, onAdded, onUseInRecipe }: {
   const [meal, setMeal] = useState<MealType>('dinner');
   const [amount, setAmount] = useState(100);
 
-  useEffect(() => {
-    if (product || manual || !navigator.mediaDevices?.getUserMedia) return;
-    let stream: MediaStream | undefined;
-    void navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' } }, audio: false }).then((value) => {
-      stream = value;
-      if (videoRef.current) videoRef.current.srcObject = value;
-    }).catch(() => setCameraError('The camera could not be started. Allow camera access or enter the barcode manually.'));
-    return () => stream?.getTracks().forEach((track) => track.stop());
-  }, [manual, product]);
+  const stopCamera = useCallback(() => {
+    scannerControls.current?.stop();
+    scannerControls.current = undefined;
+    const stream = videoRef.current?.srcObject;
+    if (stream instanceof MediaStream) stream.getTracks().forEach((track) => track.stop());
+    if (videoRef.current) videoRef.current.srcObject = null;
+  }, []);
 
-  const lookup = async () => {
-    if (!/^\d{8,14}$/.test(barcode)) {
+  const lookup = useCallback(async (rawBarcode: string) => {
+    const code = normalizeScannedBarcode(rawBarcode);
+    if (!code) {
       setStatus('Enter 8 to 14 digits.');
       return;
     }
+    setBarcode(code);
+    stopCamera();
     setLoading(true);
     setStatus('');
     try {
-      const response = await fetch(`/api/products/${barcode}`);
+      const response = await fetch(`/api/products/${code}`);
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'This product is not in Open Food Facts.');
       setProduct(data);
     } catch (value) {
       setStatus(value instanceof Error ? value.message : 'Product lookup failed.');
       setManual(true);
-      setProduct({ barcode, name: '', brand: '', imageUrl: '', calories: 0, protein: 0, carbs: 0, fat: 0, basis: 'per 100 g' });
+      setProduct({ barcode: code, name: '', brand: '', imageUrl: '', calories: 0, protein: 0, carbs: 0, fat: 0, basis: 'per 100 g' });
     } finally {
       setLoading(false);
     }
-  };
+  }, [stopCamera]);
+
+  useEffect(() => {
+    if (product || manual || loading) return;
+    if (!window.isSecureContext) {
+      setCameraError('Camera scanning requires HTTPS or localhost. You can still enter the barcode manually.');
+      return;
+    }
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setCameraError('Camera scanning is not available in this browser. You can still enter the barcode manually.');
+      return;
+    }
+    let active = true;
+    detectionHandled.current = false;
+    setCameraError('');
+    void import('@zxing/browser')
+      .then(async ({ BarcodeFormat, BrowserMultiFormatReader }) => {
+        if (!active || !videoRef.current) return;
+        const reader = new BrowserMultiFormatReader();
+        reader.possibleFormats = [BarcodeFormat.EAN_8, BarcodeFormat.EAN_13, BarcodeFormat.UPC_A, BarcodeFormat.UPC_E, BarcodeFormat.ITF];
+        const controls = await reader.decodeFromConstraints(
+          { audio: false, video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } } },
+          videoRef.current,
+          (result) => {
+            if (!active || detectionHandled.current || !result) return;
+            const code = normalizeScannedBarcode(result.getText());
+            if (!code) return;
+            detectionHandled.current = true;
+            navigator.vibrate?.(80);
+            scannerControls.current?.stop();
+            void lookup(code);
+          },
+        );
+        if (!active) controls.stop();
+        else scannerControls.current = controls;
+      })
+      .catch(() => {
+        if (active) setCameraError('The camera could not be started. Allow camera access or enter the barcode manually.');
+      });
+    return () => {
+      active = false;
+      stopCamera();
+    };
+  }, [cameraKey, loading, lookup, manual, product, stopCamera]);
+
+  useEffect(() => {
+    const handleVisibility = () => { if (document.hidden) stopCamera(); };
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => document.removeEventListener('visibilitychange', handleVisibility);
+  }, [stopCamera]);
 
   const updateProduct = (key: keyof Product, value: string | number) => setProduct((item) => item ? { ...item, [key]: value } : item);
   const calculated = product ? {
@@ -105,10 +163,13 @@ export function ProductScanner({ initialDate, onAdded, onUseInRecipe }: {
   };
 
   const reset = () => {
+    stopCamera();
     setProduct(undefined);
     setManual(false);
     setBarcode('');
     setStatus('');
+    setCameraError('');
+    setCameraKey((value) => value + 1);
   };
 
   return (
@@ -119,8 +180,8 @@ export function ProductScanner({ initialDate, onAdded, onUseInRecipe }: {
           <div className="manual-barcode">
             <header><span><Keyboard /></span><h2>Enter barcode manually</h2></header>
             <label>Barcode<input value={barcode} inputMode="numeric" maxLength={14} onChange={(event) => setBarcode(event.target.value.replace(/\D/g, '').slice(0, 14))} /></label>
-            <button className="primary-button full" disabled={loading} onClick={() => void lookup()}>{loading ? <LoaderCircle className="spin" /> : <Barcode size={17} />} Find product</button>
-            {cameraError && <p className="camera-error"><AlertTriangle size={16} /> {cameraError}</p>}
+            <button className="primary-button full" disabled={loading} onClick={() => void lookup(barcode)}>{loading ? <LoaderCircle className="spin" /> : <Barcode size={17} />} Find product</button>
+            {cameraError && <div className="camera-error"><span><AlertTriangle size={16} /> {cameraError}</span><button className="text-button" onClick={() => { stopCamera(); setCameraError(''); setCameraKey((value) => value + 1); }}>Retry camera</button></div>}
           </div>
         </div>
       ) : (
