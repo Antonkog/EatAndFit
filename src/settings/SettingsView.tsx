@@ -1,8 +1,9 @@
-import { ChevronDown, Download, ExternalLink, KeyRound, ShieldCheck, Trash2, Upload, UserRound } from 'lucide-react';
+import { ChevronDown, Download, ExternalLink, KeyRound, Share2, ShieldCheck, Smartphone, Trash2, Upload, UserRound } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { APP_EDITION_LABEL } from '../config/edition';
 import { clearData, exportBackup, importBackup, isBackup } from '../data/db';
 import { ProfileForm } from '../profile/ProfileForm';
+import { pwaInstallState, requestPwaInstall, subscribePwaInstall } from '../pwa/install';
 import { legalSources } from './legal';
 import {
   getRecognitionKeyStatus,
@@ -21,6 +22,8 @@ export function SettingsView() {
   const [geminiKey, setGeminiKey] = useState('');
   const [keyMessage, setKeyMessage] = useState('');
   const [profileMessage, setProfileMessage] = useState('');
+  const [installState, setInstallState] = useState(pwaInstallState);
+  const [installMessage, setInstallMessage] = useState('');
 
   useEffect(() => {
     if (!__SMART_SCANNER__) return;
@@ -29,6 +32,8 @@ export function SettingsView() {
     window.addEventListener(RECOGNITION_KEYS_CHANGED, refresh);
     return () => window.removeEventListener(RECOGNITION_KEYS_CHANGED, refresh);
   }, []);
+
+  useEffect(() => subscribePwaInstall(() => setInstallState(pwaInstallState())), []);
 
   const download = async () => {
     const backup = await exportBackup();
@@ -85,6 +90,11 @@ export function SettingsView() {
 
   const hasAnyKey = Boolean(keyStatus?.metaConfigured || keyStatus?.geminiConfigured);
 
+  const installApp = async () => {
+    const outcome = await requestPwaInstall();
+    setInstallMessage(outcome === 'accepted' ? 'Installation started.' : 'Installation was not completed.');
+  };
+
   return (
     <section className="settings">
       <div className="calendar-heading"><div><p className="eyebrow">{APP_EDITION_LABEL}</p><h2>Settings</h2></div></div>
@@ -93,6 +103,22 @@ export function SettingsView() {
         <p>Age selects the appropriate activity-energy source. Sex selects matching exercise demonstrations. Weight and height are used for more accurate calorie calculations. We don’t save your personal data, it stays in your own browser.</p>
         <ProfileForm onSaved={() => setProfileMessage('Profile saved.')} />
         {profileMessage && <p className="key-message" role="status">{profileMessage}</p>}
+      </article>
+      <article className="settings-card pwa-settings">
+        <h3><Smartphone size={20} /> Install Eat &amp; Fit</h3>
+        {installState.standalone ? (
+          <p>Eat &amp; Fit is installed and running as an app without browser controls.</p>
+        ) : installState.ios ? (
+          <>
+            <p>On iPhone or iPad, open Eat &amp; Fit in Safari, tap Share, then choose <strong>Add to Home Screen</strong>. Open it from the new Home Screen icon to use it without Safari’s bottom website bar.</p>
+            <div className="pwa-install-hint"><Share2 size={18} /><span>Share → Add to Home Screen</span></div>
+          </>
+        ) : installState.promptAvailable ? (
+          <><p>Install Eat &amp; Fit for an app-like window and quick access from your device.</p><button className="text-button" onClick={() => void installApp()}><Download size={17} /> Install Eat &amp; Fit</button></>
+        ) : (
+          <p>Use your browser’s <strong>Install app</strong> or <strong>Add to Home Screen</strong> command to open Eat &amp; Fit without normal browser controls.</p>
+        )}
+        {installMessage && <p className="key-message" role="status">{installMessage}</p>}
       </article>
       {__SMART_SCANNER__ && (
         <article className="settings-card api-key-settings">

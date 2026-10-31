@@ -289,6 +289,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .active-provider { display: grid; gap: 6px; max-width: 360px; margin-top: 14px; color: var(--muted-text); font-size: 11px; font-weight: 700; }
 .active-provider select { padding: 11px; border-radius: 10px; }
 .key-message { margin-bottom: 0; color: var(--primary); }
+.pwa-install-hint { display: inline-flex; align-items: center; gap: 8px; padding: 10px 12px; border: 1px solid rgba(183,255,79,.16); border-radius: 11px; color: var(--primary); background: rgba(183,255,79,.05); font-size: 11px; font-weight: 750; }
 .legal-disclosure { padding: 0; }
 .legal-disclosure > summary { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 20px 22px; list-style: none; cursor: pointer; }
 .legal-disclosure > summary::-webkit-details-marker { display: none; }
@@ -860,4 +861,9 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 @media (prefers-reduced-motion: reduce) {
   .primary-button, .text-button, .upload-button { transition: none; }
   .primary-button:not(:disabled):active, .text-button:not(:disabled):active, .upload-button:not(:disabled):active { animation: none; transform: none; }
+}
+
+@media (display-mode: standalone) and (max-width: 800px) {
+  .app-shell { padding-bottom: calc(92px + env(safe-area-inset-bottom)); }
+  .bottom-nav { bottom: max(12px, env(safe-area-inset-bottom)); }
 }

@@ -577,6 +577,16 @@ AI requests authenticate with the user-supplied key in a Bearer header and selec
 
 ## 21. Deployment and operations
 
+### 21.1 Installable web app
+
+Eat & Fit is an installable Progressive Web App in both editions. The web manifest uses the product name, lime dumbbell icons, dark theme colors, root scope, and `standalone` display mode. Apple Home Screen metadata supplies the matching touch icon, title, black status bar, and standalone launch behavior.
+
+Settings contains `Install Eat & Fit`. On iPhone and iPad it explains the Safari Share → Add to Home Screen flow. Browsers that provide `beforeinstallprompt` expose a direct install button. When launched from its Home Screen icon, Eat & Fit runs without Safari’s address field or bottom website bar. Browser chrome remains visible during ordinary website browsing because a page cannot hide browser-owned controls.
+
+A versioned service worker caches the application shell and same-origin static assets for faster repeat launches and basic offline navigation. API requests, Meta/Gemini requests, Open Food Facts data, recipe search, and other network-backed operations are never served from that cache and still require connectivity. Existing profile, API-key, workout, meal, and product storage remains in the browser’s local IndexedDB/local storage.
+
+### 21.2 Containers and health
+
 The production topology is:
 
 ```text
