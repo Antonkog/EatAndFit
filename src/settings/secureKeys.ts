@@ -133,3 +133,14 @@ export async function getRecognitionCredential(): Promise<RecognitionCredential 
     database.close();
   }
 }
+
+export async function getRecognitionCredentialForProvider(provider: RecognitionProvider): Promise<RecognitionCredential | undefined> {
+  const database = await openDatabase();
+  try {
+    const secret = await requestResult(database.transaction('secrets').objectStore('secrets').get(provider)) as StoredSecret | undefined;
+    if (!secret) return undefined;
+    return { provider, apiKey: await decryptSecret(secret, await deviceKey(database)) };
+  } finally {
+    database.close();
+  }
+}

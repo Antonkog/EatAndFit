@@ -85,6 +85,19 @@ Muse returns strict structured data containing:
 
 Muse must not invent or alter repetition counts, calories, timestamps, joint measurements, completion state, or numerical scores. A correction that does not reference supplied evidence is rejected. The result should be labelled `Coached by Muse Spark 1.3`.
 
+### Assessment contract
+
+Eat & Fit—not Muse—chooses one authoritative assessment before any cloud request:
+
+```ts
+type FormAssessment =
+  | { status: 'good_form'; evidence: MovementEvidence[] }
+  | { status: 'correction_needed'; issue: SupportedFormIssue; evidence: MovementEvidence[] }
+  | { status: 'insufficient_evidence'; reason: TrackingFailure; evidence: MovementEvidence[] };
+```
+
+Muse must return the identical status. For `good_form`, a positive observation is required and `primaryCorrection` is null. For `correction_needed`, exactly one correction and its supplied evidence metric are required. For `insufficient_evidence`, both positive judgment and correction are null. The server rejects any contradiction.
+
 ### Meta SAM 3D Body
 
 SAM 3D Body is a future experiment, not part of the first release. It reconstructs human pose and body shape from a single image and is available as an open-weight research model rather than the low-latency hosted workflow required here.
@@ -252,7 +265,7 @@ When Meta finishes, add:
 
 - a short replay with the SAM mask or track overlay;
 - one positive observation;
-- one evidence-grounded correction;
+- either positive confirmation or one evidence-grounded correction, according to the application-selected assessment;
 - one goal for the next set;
 - model labels and an AI disclaimer.
 
@@ -264,29 +277,27 @@ The first camera-aware release supports eight catalog exercises. Three bodyweigh
 
 | Exercise | Catalog ID | Required view | Primary measurement |
 | --- | --- | --- | --- |
-| Barbell Back Squat | `freeexercise:1435` | Side | Knee angle and hip depth |
-| Dumbbell Deadlift | `freeexercise:0300` | Side | Hip hinge and return |
+| Barbell Back Squat | `freeexercise:1435` | Side | Knee-angle cycle |
+| Dumbbell Deadlift | `freeexercise:0300` | Side | Hip-angle cycle |
 | Barbell Bench Press | `freeexercise:0025` | Side | Elbow extension cycle |
-| Pull-Up / Chin-Up | `freeexercise:drv-chin-ups-pull-ups` | Front | Elbow angle and shoulder elevation |
-| Military Press | `freeexercise:0553` | Front | Elbow lockout and wrist height |
-| Squat | `freeexercise:drv-squat` | Side | Knee angle and hip depth |
-| Push-Up | `freeexercise:drv-push-ups` | Side | Elbow angle and body alignment |
-| Jumping Jack | `freeexercise:new-low-impact-jumping-jack` | Front | Arm elevation and foot separation |
+| Pull-Up / Chin-Up | `freeexercise:drv-chin-ups-pull-ups` | Front | Elbow-angle cycle |
+| Military Press | `freeexercise:0553` | Front | Elbow-extension cycle |
+| Squat | `freeexercise:drv-squat` | Side | Knee-angle cycle |
+| Push-Up | `freeexercise:drv-push-ups` | Side | Elbow-angle cycle |
+| Jumping Jack | `freeexercise:new-low-impact-jumping-jack` | Front | Wrist position and foot-separation ratio |
 
 `High Knees` is not included because the current Eat & Fit catalog has no matching exercise. It can be considered only after a real catalog entry, instructions, media, and source attribution are added.
 
 Each profile is versioned and contains required landmarks, camera orientation, confidence threshold, start/peak/return states, timing limits, and measurable cues.
 
-Initial heuristic thresholds:
+Initial implemented heuristic thresholds use a broader peak threshold to recognize a completed movement and a stricter threshold to classify good form. This lets a shallow repetition be counted while still producing one correction:
 
-- Squat: ready knee angle at least 155 degrees, bottom no more than 105 degrees, return at least 150 degrees.
-- Deadlift: ready hip angle at least 155 degrees, hinge no more than 110 degrees, return at least 150 degrees.
-- Bench press: extended elbow angle at least 150 degrees, bottom no more than 100 degrees, return at least 145 degrees.
-- Pull-up: ready elbows at least 150 degrees, top elbows no more than 90 degrees with upward shoulder movement, return at least 145 degrees.
-- Military press: start elbows no more than 110 degrees with wrists near shoulder height, lockout at least 155 degrees with wrists above shoulders, return no more than 115 degrees.
-- Bodyweight squat: ready knee angle at least 155 degrees, bottom no more than 105 degrees, return at least 150 degrees, with the hip moving down and back.
-- Push-up: ready elbow angle at least 155 degrees, bottom no more than 95 degrees, return at least 145 degrees, with shoulder, hip, and ankle alignment of at least 150 degrees when those landmarks are visible.
-- Jumping jack: start with wrists below the shoulders and feet within 1.2 shoulder widths, reach the open state when wrists are above the shoulders and feet are at least 1.8 shoulder widths apart, then return to the start state.
+- Squat and Barbell Back Squat: ready knee angle at least 150 degrees, count at 125 degrees or lower, and classify good form at 110 degrees or lower.
+- Deadlift: ready hip angle at least 150 degrees, count at 125 degrees or lower, and classify good form at 110 degrees or lower.
+- Bench press and Push-Up: ready elbow angle at least 145 degrees, count at 115 degrees or lower, and classify good form at 100 degrees or lower.
+- Pull-up: ready elbow angle at least 145 degrees, count at 110 degrees or lower, and classify good form at 90 degrees or lower.
+- Military press: start elbow angle at most 115 degrees, count at 145 degrees or higher, and classify good form at 155 degrees or higher.
+- Jumping jack: start with wrists below the shoulders and feet within 1.25 shoulder widths, count when wrists are above the shoulders and feet reach at least 1.55 shoulder widths, and classify good form at 1.8 shoulder widths or wider.
 
 A transition requires:
 
@@ -308,24 +319,14 @@ Workout sets gain backward-compatible optional fields:
 type TrackingMode = 'camera' | 'timer' | 'manual';
 
 type MovementSummary = {
+  profileId: string;
   profileVersion: number;
-  repsCompleted: number;
-  actualDurationSeconds: number;
-  averageRepDurationMs?: number;
-  rangeOfMotionDegrees?: number;
-  symmetryDeltaDegrees?: number;
-  confidence?: number;
-  flags: string[];
-  meta?: {
-    samModel: 'sam-3.1';
-    museModel: string;
-    trackingCoverage?: number;
-    positiveObservation: string;
-    primaryCorrection: string;
-    nextSetGoal: string;
-    evidenceMetric: string;
-    analyzedAt: string;
-  };
+  mode: 'camera' | 'timer';
+  completedReps: number;
+  elapsedSeconds: number;
+  reps: RepMeasurement[];
+  selectedRep?: number;
+  metaAnalysis?: StoredMetaMovementAnalysis; // coaching and aggregate tracking metrics only; no boxes or masks
 };
 ```
 
@@ -355,34 +356,22 @@ Request fields:
 - deterministic ROM, cadence, symmetry, visibility, confidence, and cue metrics;
 - adult-confirmation metadata without weight, height, sex, or exact age.
 
-The server validates the key, eligibility, MIME type, duration, size, timestamps, exercise ID, and measurements. It converts files only in container tmpfs and uses random filenames.
+The server validates the key, adult confirmation, size, timestamps, exercise ID, and measurements. It converts files only in container tmpfs and uses random filenames.
 
 Response shape:
 
 ```ts
 type MetaMovementAnalysisResponse = {
-  models: {
-    sam: 'sam-3.1';
-    muse: string;
-  };
-  tracking: {
+  sam: {
+    model: 'sam-3.1';
     coverage: number;
-    confidence?: number;
-    multiplePeopleDetected: boolean;
-    masks: Array<{
-      timestampMs: number;
-      width: number;
-      height: number;
-      encoding: 'one_bit_rle';
-      data: string;
-    }>;
+    confidence: number | null;
+    sourceWidth: number;
+    sourceHeight: number;
+    boxes: SamTrackBox[];
   };
-  coaching: {
-    positiveObservation: string;
-    primaryCorrection: string;
-    nextSetGoal: string;
-    evidenceMetric: string;
-  };
+  coaching: MetaCoaching;
+  museModel: 'muse-spark-1.3';
   processedAt: string;
 };
 ```

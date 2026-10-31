@@ -42,6 +42,8 @@ import { finalizeWorkoutNumberDraft, parseWorkoutNumberDraft, type WorkoutNumber
 import { CalendarFoodDetail } from './CalendarEntryDetail';
 import { ExerciseDetail } from '../exercises/ExerciseLibrary';
 import type { Exercise } from '../exercises/types';
+import { ExerciseSession } from '../movement/ExerciseSession';
+import { movementProfileForExercise } from '../movement/profiles';
 
 const weekdays = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
 const meals: MealType[] = ['breakfast', 'lunch', 'dinner', 'snack'];
@@ -90,6 +92,7 @@ export function CalendarView({
   const [selectedExercise, setSelectedExercise] = useState<Exercise>();
   const [selectedFood, setSelectedFood] = useState<FoodEntry>();
   const [editingTraining, setEditingTraining] = useState(false);
+  const [activeSession, setActiveSession] = useState<{ workout: Workout; setIndex: number }>();
 
   const refresh = useCallback(() => {
     void Promise.all([workoutsForDate(date), foodForDate(date), allWorkouts(), allFood()]).then(([nextWorkouts, nextFood, everyWorkout, everyFood]) => {
@@ -194,6 +197,7 @@ export function CalendarView({
             onOpenDetails={setSelectedExercise}
             editDisabled={!everyWorkout.some((workout) => !workout.completed && workout.date >= date)}
             onEditTraining={() => setEditingTraining(true)}
+            onStart={(workout, setIndex) => setActiveSession({ workout, setIndex })}
           />
         ) : (
           <FoodDay date={date} entries={food} onRecipes={() => onRecipes(date)} onProduct={() => onProduct(date)} onOpenDetails={setSelectedFood} />
@@ -203,6 +207,15 @@ export function CalendarView({
     {selectedExercise && <ExerciseDetail exercise={selectedExercise} initialDate={date} allowScheduling={false} onClose={() => setSelectedExercise(undefined)} />}
     {selectedFood && <CalendarFoodDetail entry={selectedFood} onClose={() => setSelectedFood(undefined)} />}
     {editingTraining && <EditTrainingDialog date={date} workouts={everyWorkout} onClose={() => setEditingTraining(false)} />}
+    {activeSession && (
+      <ExerciseSession
+        workout={activeSession.workout}
+        profile={movementProfileForExercise(activeSession.workout.exerciseId)}
+        initialSetIndex={activeSession.setIndex}
+        onSave={updateWorkout}
+        onClose={() => { setActiveSession(undefined); refresh(); }}
+      />
+    )}
     </>
   );
 }
@@ -416,6 +429,7 @@ function WorkoutDay({
   onOpenDetails,
   editDisabled,
   onEditTraining,
+  onStart,
 }: {
   date: string;
   workouts: Workout[];
@@ -427,6 +441,7 @@ function WorkoutDay({
   onOpenDetails: (exercise: Exercise) => void;
   editDisabled: boolean;
   onEditTraining: () => void;
+  onStart: (workout: Workout, setIndex: number) => void;
 }) {
   return (
     <section>
@@ -449,6 +464,8 @@ function WorkoutDay({
             const equivalent = workout.completed ? workout.energyEquivalentKg : liveEstimate?.equivalentKg;
             const source = workout.completed ? workout.calorieSource : liveEstimate ? energySourceLabel(liveEstimate) : undefined;
             const sourceUrl = workout.completed ? workout.calorieSourceUrl : liveEstimate?.source.sourceUrl;
+            const firstIncompleteSet = workout.sets.findIndex((set) => !set.complete);
+            const canStart = date === localDate() && firstIncompleteSet >= 0;
             return (
               <article className="workout-card" key={workout.id}>
                 <header>
@@ -459,7 +476,10 @@ function WorkoutDay({
                       <strong>{workout.exerciseName}</strong>
                     </span>
                   </button>
-                  <button className="icon-button" onClick={() => void removeWorkout(workout.id)} aria-label="Remove exercise"><Trash2 size={18} /></button>
+                  <div className="workout-card-actions">
+                    {canStart && <button className="text-button start-exercise-button" onClick={() => onStart(workout, firstIncompleteSet)}><Dumbbell size={17} /> Start exercise</button>}
+                    <button className="icon-button" onClick={() => void removeWorkout(workout.id)} aria-label="Remove exercise"><Trash2 size={18} /></button>
+                  </div>
                 </header>
                 {calories !== undefined && (
                   <div className="workout-energy">
@@ -478,7 +498,7 @@ function WorkoutDay({
                       <WorkoutNumberInput label="Reps" value={set.reps} kind="integer" step="1" onChange={(reps) => onChange({ ...workout, sets: workout.sets.map((item) => item.id === set.id ? { ...item, reps } : item) })} />
                       <WorkoutNumberInput label="Kg" value={set.weightKg} kind="decimal" step="0.5" onChange={(weightKg) => onChange({ ...workout, sets: workout.sets.map((item) => item.id === set.id ? { ...item, weightKg } : item) })} />
                       <WorkoutMinutesInput value={set.durationSeconds} fallbackSeconds={estimateSetDurationSeconds(set.reps, energyProfile)} onChange={(durationSeconds) => onChange({ ...workout, sets: workout.sets.map((item) => item.id === set.id ? { ...item, durationSeconds } : item) })} />
-                      <button className={set.complete ? 'set-done active' : 'set-done'} aria-label="Done" onClick={() => onChange({ ...workout, sets: workout.sets.map((item) => item.id === set.id ? { ...item, complete: !item.complete } : item) })}>{set.complete ? <Check size={17} /> : <Circle size={17} />}</button>
+                      <button className={set.complete ? 'set-done active' : 'set-done'} aria-label="Done" onClick={() => onChange({ ...workout, sets: workout.sets.map((item) => item.id === set.id ? { ...item, complete: !item.complete, ...(!item.complete ? {} : { completedReps: undefined, actualDurationSeconds: undefined, trackingMode: undefined, movementSummary: undefined }) } : item) })}>{set.complete ? <Check size={17} /> : <Circle size={17} />}</button>
                     </div>
                   ))}
                   <button className="add-set" onClick={() => onChange({ ...workout, sets: [...workout.sets, { id: crypto.randomUUID(), reps: 10, weightKg: 0, durationSeconds: estimateSetDurationSeconds(10, energyProfile), complete: false }] })}><Plus size={17} /> Add set</button>

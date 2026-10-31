@@ -751,6 +751,58 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .spin { animation: eatfit-spin .8s linear infinite; }
 @keyframes eatfit-spin { to { transform: rotate(360deg); } }
 
+.workout-card-actions { display: flex; align-items: center; gap: 8px; }
+.start-exercise-button { white-space: nowrap; }
+.exercise-session { position: fixed; z-index: 1000; inset: 0; display: grid; grid-template-rows: auto minmax(0,1fr); overflow: auto; padding: max(18px,env(safe-area-inset-top)) max(18px,env(safe-area-inset-right)) max(18px,env(safe-area-inset-bottom)) max(18px,env(safe-area-inset-left)); color: var(--text); background: #040604; }
+.exercise-session-header { display: flex; align-items: center; justify-content: space-between; gap: 20px; width: min(1120px,100%); margin: 0 auto; padding-bottom: 16px; border-bottom: 1px solid var(--border); }
+.exercise-session-header small { color: var(--primary); font-size: 10px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
+.exercise-session-header h2 { margin: 3px 0 0; font-size: clamp(1.4rem,3vw,2.2rem); }
+.exercise-consent, .timer-session { display: grid; width: min(580px,100%); margin: auto; place-items: center; padding: 38px; border: 1px solid var(--border-strong); border-radius: 26px; background: var(--surface); text-align: center; box-shadow: 0 30px 90px rgba(0,0,0,.55); }
+.exercise-consent h3, .timer-session h3 { margin: 18px 0 8px; font-size: clamp(1.8rem,4vw,3rem); }
+.exercise-consent p, .timer-session p { max-width: 470px; margin: 5px 0; color: var(--muted-text); line-height: 1.6; }
+.session-icon { display: grid; width: 68px; height: 68px; place-items: center; border: 1px solid rgba(183,255,79,.34); border-radius: 22px; color: var(--primary); background: rgba(183,255,79,.08); box-shadow: 0 0 30px rgba(183,255,79,.1); }
+.session-icon svg { width: 28px; height: 28px; }
+.session-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 9px; margin-top: 25px; }
+.camera-session { display: grid; grid-template-columns: minmax(0,1fr) 320px; gap: 18px; width: min(1120px,100%); margin: auto; padding-top: 18px; }
+.camera-stage { position: relative; min-height: 0; overflow: hidden; aspect-ratio: 16/9; border: 1px solid var(--border-strong); border-radius: 24px; background: #000; }
+.camera-stage video, .camera-stage canvas { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
+.camera-stage video { transform: scaleX(-1); }
+.camera-stage canvas { pointer-events: none; }
+.session-countdown { position: absolute; inset: 50% auto auto 50%; transform: translate(-50%,-50%); font-size: clamp(5rem,14vw,10rem); color: var(--primary); text-shadow: 0 0 40px rgba(183,255,79,.5); }
+.rep-progress { position: absolute; top: 16px; left: 16px; display: grid; width: 116px; height: 116px; place-content: center; place-items: center; overflow: hidden; border: 1px solid rgba(183,255,79,.45); border-radius: 50%; background: conic-gradient(var(--primary) var(--rep-progress),rgba(4,6,4,.78) 0); backdrop-filter: blur(12px); }
+.rep-progress::before { position: absolute; inset: 8px; content: ''; border-radius: inherit; background: rgba(4,6,4,.9); }
+.rep-progress strong { position: relative; z-index: 1; color: var(--primary); font-size: 35px; line-height: 1; }
+.rep-progress span { position: relative; z-index: 1; margin-top: 3px; color: var(--muted-text); font-size: 10px; }
+.camera-setup, .live-session-controls { align-self: center; padding: 22px; border: 1px solid var(--border); border-radius: 22px; background: var(--surface); }
+.camera-setup h3 { margin: 0 0 7px; }
+.camera-setup p, .live-session-controls p { color: var(--muted-text); font-size: 12px; line-height: 1.55; }
+.camera-setup .tracking-status { margin: 18px 0; padding: 11px; border-radius: 11px; color: var(--text); background: rgba(183,255,79,.06); }
+.camera-setup .primary-button { width: 100%; }
+.live-session-controls > strong { display: block; margin: 25px 0; color: var(--primary); font-size: 42px; }
+.live-session-controls > div { display: grid; gap: 8px; }
+.timer-value { margin: 18px 0 5px; color: var(--primary); font-size: clamp(4rem,12vw,8rem); font-variant-numeric: tabular-nums; }
+.session-message, .session-error { padding: 10px 12px; border-radius: 11px; background: rgba(255,190,92,.08); color: #ffdca4 !important; }
+.set-result { width: min(820px,100%); margin: auto; padding: 28px 0; }
+.set-complete-heading { display: flex; align-items: center; gap: 15px; margin-bottom: 18px; }
+.set-complete-heading > span { display: grid; width: 52px; height: 52px; place-items: center; border-radius: 17px; color: #061006; background: var(--primary); }
+.set-complete-heading small { color: var(--primary); font-size: 10px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
+.set-complete-heading h3 { margin: 3px 0 0; font-size: 28px; }
+.assessment-card, .meta-coaching { margin: 12px 0; padding: 20px; border: 1px solid var(--border); border-radius: 19px; background: var(--surface); }
+.assessment-card.good, .meta-coaching.good_form { border-color: rgba(183,255,79,.32); }
+.assessment-card.correction, .meta-coaching.correction_needed { border-color: rgba(255,190,92,.36); }
+.assessment-card small, .meta-coaching > small { color: var(--primary); font-size: 9px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
+.assessment-card h3, .meta-coaching h3 { margin: 7px 0; }
+.assessment-card p, .meta-coaching p { color: var(--muted-text); line-height: 1.55; }
+.analyze-rep { margin: 8px 0; }
+.improvement-verified { display: flex; align-items: center; gap: 8px; padding: 11px 13px; border: 1px solid rgba(183,255,79,.32); border-radius: 12px; color: var(--primary); background: rgba(183,255,79,.06); font-size: 11px; font-weight: 750; }
+.session-attributions { display: flex; flex-wrap: wrap; gap: 7px; margin: 16px 0; }
+.session-attributions span { padding: 6px 9px; border: 1px solid var(--border); border-radius: 999px; color: var(--muted-text); font-size: 9px; }
+.next-set-button { margin-left: auto; }
+.sam-replay { position: relative; width: min(500px,100%); margin: 15px 0; overflow: hidden; border-radius: 15px; background: #000; }
+.sam-replay video { display: block; width: 100%; }
+.sam-replay i { position: absolute; pointer-events: none; border: 3px solid var(--primary); border-radius: 8px; box-shadow: 0 0 20px rgba(183,255,79,.45); }
+.sam-replay span { position: absolute; right: 9px; bottom: 9px; padding: 5px 8px; border-radius: 999px; color: var(--primary); background: rgba(0,0,0,.8); font-size: 9px; font-weight: 800; }
+
 @media (min-width: 601px) {
   .muscle-card.featured { grid-column: span 2; aspect-ratio: 2/1; }
 }
@@ -774,6 +826,8 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   .recipe-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
   .recipe-filter-grid { grid-template-columns: repeat(2,1fr); }
   .barcode-start { grid-template-columns: 1fr; }
+  .camera-session { grid-template-columns: 1fr; }
+  .camera-setup, .live-session-controls { align-self: stretch; }
 }
 
 @media (max-width: 600px) {
@@ -856,6 +910,18 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   .training-plan-actions { align-items: stretch; flex-direction: column; }
   .workout-energy { grid-template-columns: 1fr 1fr; padding-inline: 14px; }
   .workout-energy > span:nth-child(3) { grid-column: 1/-1; }
+  .workout-card > header { align-items: flex-start; }
+  .workout-card-actions { align-items: flex-end; flex-direction: column-reverse; }
+  .start-exercise-button { padding-inline: 10px; font-size: 10px; }
+  .exercise-session { padding: max(10px,env(safe-area-inset-top)) 10px max(10px,env(safe-area-inset-bottom)); }
+  .exercise-session-header { padding-inline: 4px; }
+  .exercise-consent, .timer-session { padding: 25px 16px; border-radius: 20px; }
+  .camera-session { align-content: start; padding-top: 10px; }
+  .camera-stage { border-radius: 17px; }
+  .camera-setup, .live-session-controls { padding: 15px; border-radius: 17px; }
+  .live-session-controls > div { grid-template-columns: 1fr 1fr; }
+  .set-result { padding: 20px 4px; }
+  .next-set-button { width: 100%; }
 }
 
 @media (prefers-reduced-motion: reduce) {

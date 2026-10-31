@@ -15,16 +15,20 @@
     "test": "node --import tsx --test tests/*.test.ts"
   },
   "dependencies": {
+    "@firebase/analytics": "latest",
+    "@firebase/app": "latest",
     "@fontsource-variable/manrope": "latest",
+    "@mediapipe/tasks-vision": "1.2.0",
+    "@meta-sam/parser": "0.1.0",
     "@vitejs/plugin-react": "latest",
     "@zxing/browser": "0.1.5",
-    "vite": "latest",
-    "typescript": "latest",
+    "busboy": "1.6.0",
+    "lucide-react": "latest",
+    "openai": "7.47.0",
     "react": "latest",
     "react-dom": "latest",
-    "lucide-react": "latest",
-    "@firebase/app": "latest",
-    "@firebase/analytics": "latest"
+    "typescript": "latest",
+    "vite": "latest"
   },
   "devDependencies": {
     "@types/node": "latest",

@@ -3,8 +3,8 @@
 ## Document status
 
 - Product: Eat & Fit web application
-- Specification version: 1.5
-- Implementation baseline: `main` as of October 30, 2026
+- Specification version: 1.6
+- Implementation baseline: `develop` as of October 31, 2026
 - Language: English only
 - Platforms: responsive web application for desktop and mobile browsers
 
@@ -38,6 +38,8 @@ Eat & Fit is built in two free editions.
 | AI recipe generation | Hidden | Available after a verified key is saved |
 | Adult AI energy calibration | No | Automatic when an eligible profile and key exist |
 | Personalized two-week training | Hidden | Available to eligible adults after a verified key is saved |
+| Local camera-guided exercise sessions | Yes | Yes |
+| Post-set SAM/Muse movement coaching | Hidden | Available to adults with a verified Meta key and separate per-rep consent |
 | Provider-key settings | Hidden | Yes |
 
 The build-time edition flag is `APP_EDITION=core` or `APP_EDITION=byok`. The Core API does not expose AI routes. The application never stores a model API key in source control, `.env`, Docker configuration, or server environment variables.
@@ -239,6 +241,26 @@ A workout becomes completed only when it has at least one set and every set is m
 Users can add sets or remove individual workouts. `Edit training` opens bulk controls for the selected Calendar date: move its incomplete workouts to another non-past date, move every incomplete workout on or after the selected date forward by one day, or remove all incomplete workouts on the selected date. The wording uses `today` only when today is selected. Destination conflicts require confirmation, and every bulk operation runs as one atomic IndexedDB transaction. Completed workouts are never affected.
 
 Pressing a workout's exercise summary opens the existing full exercise detail view, including its demonstration, technique, form cues, common mistakes, breathing guidance, equipment, and muscle information. This Calendar detail view is read-only and does not show the scheduling controls.
+
+### 8.3 Camera-guided exercise sessions
+
+An incomplete workout scheduled for the current day displays `Start exercise`. The first release has versioned camera profiles for Barbell Back Squat, Dumbbell Deadlift, Barbell Bench Press, Pull-Up / Chin-Up, Military Press, bodyweight Squat, Push-Up, and Jumping Jack. Other exercises use the same whole-set timer workflow.
+
+After explicit camera permission, a self-hosted MediaPipe Pose Landmarker runs in a dedicated browser worker at approximately 10–12 analyzed frames per second. It draws the live 33-landmark skeleton, applies deterministic start/peak/return state machines, and owns the repetition count. A valid transition requires five consecutive frames with at least 0.6 landmark visibility, a repetition duration of 0.8–8 seconds, and 0.7 seconds of duplicate protection. Users can undo the last count or add a missed repetition.
+
+Camera denial, unavailable tracking, an unsupported exercise, or the user choosing `Use timer instead` starts a complete-set timer. The user explicitly confirms completion after the timer. Both modes mark the set locally, preserve backward compatibility through optional set fields, and start a skippable 60-second rest period. Only fully completed workouts freeze calories and affect Balance.
+
+The local assessment has exactly three states: `good_form`, `correction_needed`, or `insufficient_evidence`. A counted repetition can still be identified as shallow because the counting threshold is intentionally broader than the good-form threshold. Correct execution receives positive confirmation with no fabricated correction. Low-confidence evidence receives camera-position guidance and no positive or negative technique judgment.
+
+When one set needs correction, the next set is compared with the previous primary measurement. Reaching the good-form threshold—or moving the primary measurement in the correct direction—shows a deterministic `Improvement verified` result.
+
+### 8.4 Optional Meta movement analysis
+
+In the BYOK edition, an adult with a separately verified Meta key can choose `Analyze rep N with Meta` after a camera-counted set. Meta movement analysis is independent of the provider selected for recipes or scanning. The action requests a second, per-repetition consent; it never uploads automatically.
+
+The browser records the set in memory without audio. Eat & Fit selects a locally measured questionable repetition first, otherwise a representative successful repetition. The server trims only that 0.8–12-second window in tmpfs, removes audio, converts it to H.264 MP4 at no more than 720p and 12 FPS, and uploads it through the Meta Files API. SAM 3.1 provides a real person track rendered as a replay box. Multiple-person or missing-person results are rejected. Muse Spark 1.3 receives the same clip and the authoritative local assessment, and returns structured coaching.
+
+Muse cannot change the application-selected status or create numerical measurements. Good form requires a positive observation and a null correction. A correction state requires exactly one evidence-grounded correction. Insufficient evidence permits no technique judgment. Contradictory output is rejected. Local and Meta files are deleted on both success and failure paths; raw video, landmarks, and SAM output are not stored in IndexedDB or backups. Meta failure never removes local workout progress.
 
 ### 8.3 Nutrition history
 
@@ -464,7 +486,7 @@ Exactly two providers are supported:
 - Meta, using Muse Spark 1.3 (`muse-spark-1.3-contributor`, with `muse-spark-1.3` tried when the contributor model is reported missing).
 - Google Gemini, using `gemini-3.1-flash-lite` by default.
 
-The selected provider is shared by ingredient recognition, AI recipes, adult calibration, and personalized training. Recipe-generation configuration is not independently selectable in the UI.
+The selected provider is shared by ingredient recognition, AI recipes, adult calibration, and personalized training. Recipe-generation configuration is not independently selectable in the UI. Optional movement analysis always uses a separately saved Meta key and remains available when Gemini is selected for the other AI features.
 
 There is no automatic cross-provider fallback.
 
@@ -547,6 +569,7 @@ Import validates the top-level schema version and array presence, clears the exi
 | POST | `/api/ai/recipes/generate` | Server-side recipe path used by Gemini |
 | POST | `/api/ai/training/generate` | Server-side training path used by Gemini |
 | POST | `/api/ai/training/calibrate` | Server-side calibration path used by Gemini |
+| POST | `/api/ai/movement/analyze` | Temporary selected-rep SAM 3.1 tracking and Muse Spark 1.3 coaching with a Meta key |
 | POST | `/api/ai/keys/verify` | One-request provider-key verification |
 
 AI requests authenticate with the user-supplied key in a Bearer header and select the provider with `x-recognition-provider`. The API accepts only Meta or Gemini. Provider timeouts, authentication, billing, authorization, missing-model, rate-limit, content-policy, and invalid-response conditions are converted into user-readable errors.
@@ -562,6 +585,8 @@ AI requests authenticate with the user-supplied key in a Bearer header and selec
 - Older-adult energy: [Older Adult Compendium](https://pacompendium.com/older-adult-compendium/).
 - Youth energy: [Youth Compendium of Physical Activities](https://www.nccor.org/tools-youthcompendium/met-view-by-individual-category/), including published Schofield equations.
 - Reference validation: [Harvard Health calories burned in 30 minutes](https://www.health.harvard.edu/diet-and-weight-loss/calories-burned-in-30-minutes-for-people-of-three-different-weights).
+- Local movement landmarks: [MediaPipe Pose Landmarker](https://ai.google.dev/edge/mediapipe/solutions/vision/pose_landmarker), with pinned WASM and model assets self-hosted by Eat & Fit.
+- Optional Meta movement evidence: [SAM 3.1](https://dev.meta.ai/docs/sam/overview) and [Muse Spark 1.3 video understanding](https://dev.meta.ai/docs/video-understanding), subject to Meta API and hackathon promotional-credit terms.
 
 ## 20. Analytics, privacy, and security boundaries
 
@@ -572,8 +597,9 @@ AI requests authenticate with the user-supplied key in a Bearer header and selec
 - Remote recipe images and source links contact their respective external hosts when loaded or opened.
 - Opening the unfiltered Recipes screen can submit the visitor IP to Country.is for country-only cuisine localization. Eat & Fit stores neither the raw address nor precise location.
 - Camera access is limited by the deployed Permissions Policy to the application origin.
+- Live movement video and body landmarks stay in browser memory until separate analysis consent. After consent, the temporary full-set recording passes through Eat & Fit only to trim the selected window; only the selected muted repetition is sent to Meta. Temporary server and provider files are deleted after analysis.
 - The web container and API container use read-only filesystems, temporary writable directories, dropped Linux capabilities, and same-origin API proxying.
-- Nginx adds `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, and a camera Permissions Policy. API request bodies through Nginx are limited to 2 MiB.
+- Nginx adds `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, and a camera Permissions Policy. General API request bodies are limited to 2 MiB; the movement-analysis route alone allows 32 MiB for its validated 30 MiB video limit.
 
 ## 21. Deployment and operations
 

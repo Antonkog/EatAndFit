@@ -123,7 +123,7 @@ export function SettingsView() {
       {__SMART_SCANNER__ && (
         <article className="settings-card api-key-settings">
           <h3><KeyRound size={20} /> AI provider keys</h3>
-          <p>Smart Scan, AI recipe generation, adult energy calibration, and personalized training are enabled when the selected provider has a verified key. Your provider may charge your account for API requests.</p>
+          <p>Smart Scan, AI recipe generation, adult energy calibration, and personalized training are enabled when the selected provider has a verified key. Adults with a verified Meta key can also choose post-set movement coaching, even when Gemini is selected for other AI features. Your provider may charge your account for API requests.</p>
           <div className="key-security-note">
             <ShieldCheck size={20} />
             <p>Keys are encrypted.</p>
