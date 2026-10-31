@@ -89,7 +89,7 @@ Muse must not invent or alter repetition counts, calories, timestamps, joint mea
 
 SAM 3D Body is a future experiment, not part of the first release. It reconstructs human pose and body shape from a single image and is available as an open-weight research model rather than the low-latency hosted workflow required here.
 
-Adopting it would require separate GPU hosting, latency and cost measurements, video-frame orchestration, and validation against the five supported exercises. It should be considered only if it demonstrates a measurable improvement over the local landmark engine.
+Adopting it would require separate GPU hosting, latency and cost measurements, video-frame orchestration, and validation against the eight supported exercises. It should be considered only if it demonstrates a measurable improvement over the local landmark engine.
 
 ### Models that should not be added to the critical path
 
@@ -260,7 +260,7 @@ Do not replace the local result. If Meta fails, keep the completed set and show 
 
 ## Initially supported exercises
 
-The first camera-aware release supports five catalog exercises:
+The first camera-aware release supports eight catalog exercises. Three bodyweight profiles are included specifically so the complete camera flow can be tested at home without gym equipment.
 
 | Exercise | Catalog ID | Required view | Primary measurement |
 | --- | --- | --- | --- |
@@ -269,6 +269,11 @@ The first camera-aware release supports five catalog exercises:
 | Barbell Bench Press | `freeexercise:0025` | Side | Elbow extension cycle |
 | Pull-Up / Chin-Up | `freeexercise:drv-chin-ups-pull-ups` | Front | Elbow angle and shoulder elevation |
 | Military Press | `freeexercise:0553` | Front | Elbow lockout and wrist height |
+| Squat | `freeexercise:drv-squat` | Side | Knee angle and hip depth |
+| Push-Up | `freeexercise:drv-push-ups` | Side | Elbow angle and body alignment |
+| Jumping Jack | `freeexercise:new-low-impact-jumping-jack` | Front | Arm elevation and foot separation |
+
+`High Knees` is not included because the current Eat & Fit catalog has no matching exercise. It can be considered only after a real catalog entry, instructions, media, and source attribution are added.
 
 Each profile is versioned and contains required landmarks, camera orientation, confidence threshold, start/peak/return states, timing limits, and measurable cues.
 
@@ -279,6 +284,9 @@ Initial heuristic thresholds:
 - Bench press: extended elbow angle at least 150 degrees, bottom no more than 100 degrees, return at least 145 degrees.
 - Pull-up: ready elbows at least 150 degrees, top elbows no more than 90 degrees with upward shoulder movement, return at least 145 degrees.
 - Military press: start elbows no more than 110 degrees with wrists near shoulder height, lockout at least 155 degrees with wrists above shoulders, return no more than 115 degrees.
+- Bodyweight squat: ready knee angle at least 155 degrees, bottom no more than 105 degrees, return at least 150 degrees, with the hip moving down and back.
+- Push-up: ready elbow angle at least 155 degrees, bottom no more than 95 degrees, return at least 145 degrees, with shoulder, hip, and ankle alignment of at least 150 degrees when those landmarks are visible.
+- Jumping jack: start with wrists below the shoulders and feet within 1.2 shoulder widths, reach the open state when wrists are above the shoulders and feet are at least 1.8 shoulder widths apart, then return to the start state.
 
 A transition requires:
 
@@ -464,7 +472,7 @@ This option is rejected for the first release. FFmpeg WASM would substantially i
 ### Phase 3 — Local movement engine
 
 - Add the lazy MediaPipe worker and self-hosted model assets.
-- Implement the five versioned movement profiles.
+- Implement the eight versioned movement profiles, beginning with the three bodyweight profiles for home testing.
 - Add confidence gating, state transitions, duplicate protection, form cues, and manual count correction.
 - Store repetition timestamps and rank repetitions for optional review.
 - Validate performance on representative mobile hardware before enabling recording.
@@ -540,7 +548,7 @@ This option is rejected for the first release. FFmpeg WASM would substantially i
 
 ## Acceptance criteria
 
-- The five supported exercises reach at least 95% repetition-count accuracy on controlled validation clips.
+- The eight supported exercises reach at least 95% repetition-count accuracy on controlled validation clips.
 - Live feedback appears within approximately 150 ms of analyzed frames on supported test devices.
 - No duplicate repetition is recorded during pauses or threshold jitter.
 - Camera denial and unsupported exercises complete successfully through timer mode.
