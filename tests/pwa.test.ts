@@ -27,6 +27,19 @@ test('iPhone metadata and settings explain Home Screen standalone installation',
   assert.match(settings, /without Safari’s bottom website bar/);
 });
 
+test('standalone mobile navigation remains outside the scrolling page', () => {
+  const app = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
+  const styles = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
+  assert.match(app, /const pageRef = useRef<HTMLElement>\(null\)/);
+  assert.match(app, /pageRef\.current\?\.scrollTo/);
+  assert.match(app, /<main ref=\{pageRef\} className="page">/);
+  assert.match(styles, /@media \(display-mode: standalone\) and \(max-width: 800px\)/);
+  assert.match(styles, /grid-template-rows: auto minmax\(0, 1fr\) auto/);
+  assert.match(styles, /\.page \{[\s\S]*?overflow-y: auto;[\s\S]*?-webkit-overflow-scrolling: touch;/);
+  assert.match(styles, /\.bottom-nav \{[\s\S]*?position: relative;[\s\S]*?inset: auto;/);
+  assert.match(styles, /@media \(max-width: 800px\)[\s\S]*?\.bottom-nav \{ position: fixed; inset: auto 12px 12px;/);
+});
+
 test('service worker caches only the app shell and static same-origin requests', () => {
   const main = readFileSync(new URL('../src/main.tsx', import.meta.url), 'utf8');
   const worker = readFileSync(new URL('../public/sw.js', import.meta.url), 'utf8');

@@ -864,6 +864,35 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 }
 
 @media (display-mode: standalone) and (max-width: 800px) {
-  .app-shell { padding-bottom: calc(92px + env(safe-area-inset-bottom)); }
-  .bottom-nav { bottom: max(12px, env(safe-area-inset-bottom)); }
+  html, body, #root {
+    height: 100%;
+    overflow: hidden;
+  }
+
+  .app-shell {
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr) auto;
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
+    padding-bottom: 0;
+  }
+
+  .topbar {
+    position: relative;
+    top: auto;
+  }
+
+  .page {
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior-y: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .bottom-nav {
+    position: relative;
+    inset: auto;
+    margin: 0 12px max(12px, env(safe-area-inset-bottom));
+  }
 }

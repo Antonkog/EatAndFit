@@ -1,5 +1,5 @@
 import { CalendarDays, Dumbbell, Gauge, ScanLine, Settings, Utensils } from 'lucide-react';
-import { lazy, Suspense, useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { FirebaseAnalytics } from './analytics/FirebaseAnalytics';
 import { BalanceView } from './balance/BalanceView';
 import { CalendarView } from './calendar/CalendarView';
@@ -34,6 +34,7 @@ const AiRecipeView = __SMART_SCANNER__
   : null;
 
 export function App() {
+  const pageRef = useRef<HTMLElement>(null);
   const [view, setView] = useState<View>('balance');
   const [calendarDate, setCalendarDate] = useState(localDate());
   const [calendarMode, setCalendarMode] = useState<'workout' | 'food'>('workout');
@@ -85,6 +86,11 @@ export function App() {
 
   const activePrimary: PrimaryView | null = view === 'ai' ? aiReturnView : view === 'settings' ? null : view;
 
+  const scrollToTop = () => {
+    pageRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
   const showView = (next: PrimaryView) => {
     if (next === 'calendar') {
       setCalendarDate(localDate());
@@ -99,14 +105,14 @@ export function App() {
       setScanMode(aiFeaturesEnabled ? 'photo' : 'barcode');
     }
     setView(next);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    scrollToTop();
   };
 
   const showCalendar = (date: string, mode: 'workout' | 'food') => {
     setCalendarDate(date);
     setCalendarMode(mode);
     setView('calendar');
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    scrollToTop();
   };
 
   const showRecipes = (ingredients: string[] = [], date = localDate(), returnView: 'balance' | 'calendar' = 'calendar') => {
@@ -114,14 +120,14 @@ export function App() {
     setRecipeDate(date);
     setFoodReturnView(returnView);
     setView('recipes');
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    scrollToTop();
   };
 
   const showProductScanner = (date: string) => {
     setScanDate(date);
     setScanMode('barcode');
     setView('scan');
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    scrollToTop();
   };
 
   const showAi = (ingredients: string[] = [], returnView: 'recipes' | 'scan' = 'recipes', date = localDate()) => {
@@ -133,18 +139,18 @@ export function App() {
     setAiDate(date);
     setAiReturnView(returnView);
     setView('ai');
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    scrollToTop();
   };
 
   const showSettings = () => {
     setView('settings');
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    scrollToTop();
   };
 
   const handleFoodAdded = (date: string) => {
     if (foodReturnView === 'balance') {
       setView('balance');
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+      scrollToTop();
       return;
     }
     showCalendar(date, 'food');
@@ -182,7 +188,7 @@ export function App() {
         </div>
       </header>
 
-      <main className="page">
+      <main ref={pageRef} className="page">
         {view === 'exercises' && <ExerciseLibrary aiFeaturesEnabled={aiFeaturesEnabled} onWorkoutAdded={(date) => showCalendar(date, 'workout')} />}
         {view === 'balance' && <BalanceView onAddFood={() => showRecipes([], localDate(), 'balance')} onAddExercise={() => showView('exercises')} />}
         {view === 'calendar' && (
