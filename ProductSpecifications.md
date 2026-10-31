@@ -164,6 +164,8 @@ The action panel is headed `Update your balance`; it does not repeat a separate 
 
 The first Exercises view shows muscle cards. Opening a muscle shows its matching movements. Search is scoped to the opened group and matches exercise name, body part, target, equipment, and aliases, case-insensitively.
 
+Exercise cards display a compact `AI` badge when the exercise has a versioned camera-recognition profile. The badge is derived from the movement-profile registry, so unsupported exercises are never presented as AI-capable.
+
 ### 6.3 Exercise detail
 
 The detail panel can show:
@@ -607,7 +609,7 @@ AI requests authenticate with the user-supplied key in a Bearer header and selec
 
 Eat & Fit is an installable Progressive Web App in both editions. The web manifest uses the product name, lime dumbbell icons, dark theme colors, root scope, and `standalone` display mode. Apple Home Screen metadata supplies the matching touch icon, title, black status bar, and standalone launch behavior.
 
-On mobile, the installed standalone app keeps its header and bottom navigation outside the page's internal scrolling region. This prevents navigation drift during iOS PWA scrolling while preserving the normal browser layout and its toolbar-aware fixed navigation behavior.
+On mobile, both the installed standalone app and ordinary browser view use fixed bottom navigation. Standalone mode raises the bar by the device safe-area inset and reserves matching page space, keeping it above the iPhone home indicator while preserving the normal browser layout and its toolbar-aware positioning.
 
 Settings contains `Install Eat & Fit`. On iPhone and iPad it explains the Safari Share → Add to Home Screen flow. Browsers that provide `beforeinstallprompt` expose a direct install button. When launched from its Home Screen icon, Eat & Fit runs without Safari’s address field or bottom website bar. Browser chrome remains visible during ordinary website browsing because a page cannot hide browser-owned controls.
 

@@ -81,7 +81,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .segmented button.active { color: var(--primary); background: rgba(183,255,79,.12); font-weight: 750; }
 .result-count { color: var(--muted-text); font-size: 13px; }
 .exercise-grid { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 12px; }
-.exercise-card { overflow: hidden; padding: 0; border: 1px solid var(--border); border-radius: 18px; color: var(--text); background: var(--surface); text-align: left; cursor: pointer; transition: transform .25s, border-color .25s, box-shadow .25s; }
+.exercise-card { position: relative; overflow: hidden; padding: 0; border: 1px solid var(--border); border-radius: 18px; color: var(--text); background: var(--surface); text-align: left; cursor: pointer; transition: transform .25s, border-color .25s, box-shadow .25s; }
 .exercise-card:hover { transform: translateY(-2px); border-color: rgba(183,255,79,.35); box-shadow: 0 18px 50px rgba(0,0,0,.28); }
 .exercise-card img { display: block; width: 100%; aspect-ratio: 16/10; object-fit: cover; object-position: center 30%; background: var(--muted); opacity: .78; transition: opacity .3s, transform .5s; }
 .exercise-card:hover img { opacity: .96; transform: scale(1.035); }
@@ -89,6 +89,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .exercise-card small { color: var(--primary); font-size: 10px; font-weight: 750; letter-spacing: .12em; text-transform: uppercase; }
 .exercise-card strong { min-height: 42px; font-size: 15px; line-height: 1.4; }
 .exercise-card em { color: var(--muted-text); font-size: 11px; font-style: normal; text-transform: capitalize; }
+.exercise-ai-badge { position: absolute; top: 10px; right: 10px; display: inline-flex; align-items: center; gap: 4px; min-height: 25px; padding: 5px 9px; border: 1px solid rgba(183,255,79,.5); border-radius: 999px; color: var(--primary); background: rgba(4,8,5,.88); box-shadow: 0 5px 18px rgba(0,0,0,.38), 0 0 18px rgba(183,255,79,.12); font-size: 10px; font-style: normal; font-weight: 850; letter-spacing: .08em; line-height: 1; backdrop-filter: blur(10px); }
 
 .detail-overlay { position: fixed; inset: 0; z-index: 70; overflow: auto; padding: 0; background: rgba(0,0,0,.76); backdrop-filter: blur(9px); }
 .detail-panel { position: relative; display: grid; grid-template-columns: minmax(320px,42%) 1fr; width: min(1180px,100%); min-height: 100vh; margin: 0 0 0 auto; border-left: 1px solid var(--border-strong); background: #111913; box-shadow: -20px 0 70px rgba(0,0,0,.45); }
@@ -930,35 +931,6 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 }
 
 @media (display-mode: standalone) and (max-width: 800px) {
-  html, body, #root {
-    height: 100%;
-    overflow: hidden;
-  }
-
-  .app-shell {
-    display: grid;
-    grid-template-rows: auto minmax(0, 1fr) auto;
-    height: 100%;
-    min-height: 0;
-    overflow: hidden;
-    padding-bottom: 0;
-  }
-
-  .topbar {
-    position: relative;
-    top: auto;
-  }
-
-  .page {
-    min-height: 0;
-    overflow-y: auto;
-    overscroll-behavior-y: contain;
-    -webkit-overflow-scrolling: touch;
-  }
-
-  .bottom-nav {
-    position: relative;
-    inset: auto;
-    margin: 0 12px max(12px, env(safe-area-inset-bottom));
-  }
+  .app-shell { padding-bottom: calc(92px + env(safe-area-inset-bottom)); }
+  .bottom-nav { bottom: max(12px, env(safe-area-inset-bottom)); }
 }

@@ -19,6 +19,15 @@ test('exercise hero omits library statistics and instructional copy', () => {
   assert.doesNotMatch(source, /<span>Muscle groups<\/span>/);
 });
 
+test('camera-supported exercise cards derive an AI badge from movement profiles', () => {
+  const source = readFileSync(new URL('../src/exercises/ExerciseLibrary.tsx', import.meta.url), 'utf8');
+  const styles = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
+  assert.match(source, /movementProfileForExercise\(exercise\.id\)/);
+  assert.match(source, /exercise-ai-badge/);
+  assert.match(source, /<Sparkles size=\{12\} \/> AI/);
+  assert.match(styles, /\.exercise-ai-badge \{[^}]*position: absolute;[^}]*color: var\(--primary\)/);
+});
+
 test('action buttons share the dark style and green pressed feedback', () => {
   const styles = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
   assert.match(styles, /\.primary-button, \.text-button, \.upload-button \{[^}]*background: rgba\(183,255,79,\.08\)/);
