@@ -1,4 +1,16 @@
-export type WorkoutSet = { id: string; reps: number; weightKg: number; durationSeconds?: number; complete: boolean };
+import type { MovementSummary } from '../movement/types';
+
+export type WorkoutSet = {
+  id: string;
+  reps: number;
+  weightKg: number;
+  durationSeconds?: number;
+  complete: boolean;
+  completedReps?: number;
+  actualDurationSeconds?: number;
+  trackingMode?: 'camera' | 'timer' | 'manual';
+  movementSummary?: MovementSummary;
+};
 export type Workout = {
   id: string;
   date: string;

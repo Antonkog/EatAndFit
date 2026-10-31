@@ -17,6 +17,8 @@ test('short, vertical, slow, and non-edge gestures are rejected', () => {
 test('back navigation prioritizes open details before primary-screen history', () => {
   const app = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
   const exercise = readFileSync(new URL('../src/exercises/ExerciseLibrary.tsx', import.meta.url), 'utf8');
+  const movement = readFileSync(new URL('../src/movement/ExerciseSession.tsx', import.meta.url), 'utf8');
   assert.match(app, /useBackNavigation\(backDepth > 0, navigateBack, 10\)/);
   assert.match(exercise, /useBackNavigation\(true, onClose, 100\)/);
+  assert.match(movement, /useBackNavigation\(true, \(\) => \{ releaseSession\(\); onClose\(\); \}, 150\)/);
 });

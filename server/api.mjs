@@ -11,6 +11,7 @@ import { createRecipeProvider, RecipeCatalogError } from './recipe-provider.mjs'
 import { generateRecipes, RecipeGenerationError } from './recipe-generation-provider.mjs';
 import { calibrateTrainingEnergy, generateTrainingPlan, TrainingProviderError, verifyAiCredential } from './training-provider.mjs';
 import { resolveCuisineLocation } from './location-provider.mjs';
+import { analyzeMovementRequest, MovementAnalysisError } from './movement-provider.mjs';
 
 const port = Number(process.env.API_PORT ?? 3000);
 const host = process.env.API_HOST ?? '0.0.0.0';
@@ -32,6 +33,7 @@ export function createApiServer({
   nutritionProvider,
   trainingProvider,
   locationProvider,
+  movementProvider,
 } = {}) {
 const smartScannerEnabled = edition === 'byok';
 let recipeCatalog = recipeProvider;
@@ -61,6 +63,7 @@ return createServer(async (request, response) => {
     if (smartScannerEnabled && url.pathname === '/api/ai/ingredients/detect' && request.method === 'POST') return json(response,200,await detectIngredients(await readBody(request,INGREDIENT_REQUEST_BODY_LIMIT),ingredientProvider,ingredientProvider ? undefined : recognitionCredentials(request)));
     if (smartScannerEnabled && url.pathname === '/api/ai/training/generate' && request.method === 'POST') return json(response,200,await generateTrainingPlan(await readBody(request,1_500_000),trainingProvider,trainingProvider ? undefined : recognitionCredentials(request)));
     if (smartScannerEnabled && url.pathname === '/api/ai/training/calibrate' && request.method === 'POST') return json(response,200,await calibrateTrainingEnergy(await readBody(request),trainingProvider,trainingProvider ? undefined : recognitionCredentials(request)));
+    if (smartScannerEnabled && url.pathname === '/api/ai/movement/analyze' && request.method === 'POST') return json(response, 200, movementProvider ? await movementProvider(request) : await analyzeMovementRequest(request));
     if (smartScannerEnabled && url.pathname === '/api/ai/keys/verify' && request.method === 'POST') return json(response,200,await verifyAiCredential(trainingProvider,trainingProvider ? undefined : recognitionCredentials(request)));
     if (url.pathname.startsWith('/api/products/')) { const product=await findProduct(url.pathname.split('/').at(-1)); return json(response,product?200:404,product??{error:'Product not found.'}); }
     if (url.pathname === '/api/nutrition/healthz') {
@@ -74,7 +77,7 @@ return createServer(async (request, response) => {
     if (url.pathname.startsWith('/api/nutrition/foods/')) { const food=getNutritionCatalog().getFood(url.pathname.split('/').at(-1)); return json(response,food?200:404,food??{error:'Food not found.'}); }
     if (url.pathname === '/api/nutrition/calculate' && request.method === 'POST') return json(response,200,getNutritionCatalog().calculate((await readBody(request)).items));
     return json(response, 404, { error: 'Not found' });
-  } catch (error) { const ai=error instanceof IngredientRecognitionError || error instanceof RecipeGenerationError || error instanceof TrainingProviderError; const catalog=error instanceof RecipeCatalogError || error instanceof NutritionCatalogError; const unavailable=error.code==='SQLITE_CANTOPEN'; const status=ai||catalog?error.status:error.message==='INVALID'?400:unavailable?503:500; const message=ai||catalog?error.message:unavailable?'Data service is not ready.':'Request failed.'; return json(response,status,{error:message}); }
+  } catch (error) { const ai=error instanceof IngredientRecognitionError || error instanceof RecipeGenerationError || error instanceof TrainingProviderError || error instanceof MovementAnalysisError; const catalog=error instanceof RecipeCatalogError || error instanceof NutritionCatalogError; const unavailable=error.code==='SQLITE_CANTOPEN'; const status=ai||catalog?error.status:error.message==='INVALID'?400:unavailable?503:500; const message=ai||catalog?error.message:unavailable?'Data service is not ready.':'Request failed.'; return json(response,status,{error:message}); }
 });
 }
 
