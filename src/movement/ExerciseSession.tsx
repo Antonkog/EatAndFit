@@ -1,4 +1,4 @@
-import { Camera, Check, ChevronRight, Minus, Plus, RotateCcw, Timer, Video, X } from 'lucide-react';
+import { Camera, Check, ChevronRight, Minus, Plus, RotateCcw, Timer, X } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import type { Workout } from '../data/db';
 import { useBackNavigation } from '../navigation/backNavigation';
@@ -9,6 +9,7 @@ import { analyzeMovementWithMeta } from './metaAnalysis';
 import { CompatibilityPoseRuntime, type PoseDetection } from './poseCompatibility';
 import { drawPose } from './poseCanvas';
 import { evaluatePoseReadiness, nextReadinessFrameCount } from './readiness';
+import { cameraSetIsComplete, cameraSetProgress, resolveCameraSetTarget } from './setTarget';
 import type { MovementProfile } from './types';
 
 type Stage = 'consent' | 'setup' | 'countdown' | 'active' | 'camera-paused' | 'timer-ready' | 'timer-active' | 'timer-confirm' | 'rest';
@@ -31,6 +32,26 @@ function haptic(pattern: number | number[]) {
 
 function supportedMimeType() {
   return ['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm'].find((type) => MediaRecorder.isTypeSupported(type)) ?? '';
+}
+
+async function requestFrontExerciseCamera() {
+  const base = {
+    width: { ideal: 1280 },
+    height: { ideal: 720 },
+    frameRate: { ideal: 24, max: 30 },
+  };
+  try {
+    return await navigator.mediaDevices.getUserMedia({
+      audio: false,
+      video: { ...base, facingMode: { exact: 'user' } },
+    });
+  } catch (error) {
+    if (error instanceof DOMException && !['OverconstrainedError', 'NotFoundError'].includes(error.name)) throw error;
+    return navigator.mediaDevices.getUserMedia({
+      audio: false,
+      video: { ...base, facingMode: { ideal: 'user' } },
+    });
+  }
 }
 
 export function ExerciseSession({
@@ -62,6 +83,7 @@ export function ExerciseSession({
   const [poseStatus, setPoseStatus] = useState('Waiting for a stable full-body view…');
   const [cameraError, setCameraError] = useState('');
   const [trackingStable, setTrackingStable] = useState(false);
+  const [cameraStreamVersion, setCameraStreamVersion] = useState(0);
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const frameCanvasRef = useRef<HTMLCanvasElement | undefined>(undefined);
@@ -72,6 +94,7 @@ export function ExerciseSession({
   const trackingReadyRef = useRef(false);
   const trackerRef = useRef(profile ? new MovementTracker(profile) : undefined);
   const workoutRef = useRef(initialWorkout);
+  const onSaveRef = useRef(onSave);
   const setIndexRef = useRef(initialSetIndex);
   const mountedRef = useRef(true);
   const previousRepRef = useRef<NonNullable<ReturnType<typeof selectRepresentativeRep>> | undefined>(undefined);
@@ -92,10 +115,13 @@ export function ExerciseSession({
   const wakeLockRef = useRef<{ release: () => Promise<void> } | undefined>(undefined);
   const stageRef = useRef(stage);
   const pausedByVisibilityRef = useRef(false);
-  const autoResumeSetRef = useRef(false);
+  const startingSetRef = useRef(false);
   const currentSet = workout.sets[setIndex];
-  const targetReps = Math.max(1, currentSet?.reps || 1);
-  const targetSeconds = Math.max(5, currentSet?.durationSeconds || targetReps * 4);
+  const setTarget = useMemo(
+    () => resolveCameraSetTarget(currentSet),
+    [currentSet?.durationSeconds, currentSet?.reps],
+  );
+  const { targetReps, targetSeconds } = setTarget;
 
   useEffect(() => {
     const user = readUserProfile();
@@ -104,6 +130,7 @@ export function ExerciseSession({
   }, []);
 
   useEffect(() => { workoutRef.current = workout; }, [workout]);
+  useEffect(() => { onSaveRef.current = onSave; }, [onSave]);
   useEffect(() => { setIndexRef.current = setIndex; }, [setIndex]);
 
   const cancelFrameLoop = useCallback(() => {
@@ -177,18 +204,21 @@ export function ExerciseSession({
     };
     workoutRef.current = partial;
     setWorkout(partial);
-    onSave(partial);
-  }, [onSave, profile, setIndex]);
+    onSaveRef.current(partial);
+  }, [profile, setIndex]);
 
   useEffect(() => {
     if (stage !== 'countdown') return;
     setCountdown(3);
+    spoken('Three');
     const interval = window.setInterval(() => setCountdown((value) => {
       if (value <= 1) {
         window.clearInterval(interval);
+        spoken('Go');
         setStage('active');
         return 0;
       }
+      spoken(String(value - 1));
       return value - 1;
     }), 1000);
     return () => window.clearInterval(interval);
@@ -223,9 +253,10 @@ export function ExerciseSession({
       reps: trackerRef.current.reps,
       selectedRep: selectRepresentativeRep(trackerRef.current.reps)?.index,
     } as const : undefined;
+    const current = workoutRef.current;
     const next = {
-      ...workout,
-      sets: workout.sets.map((set, index) => index === setIndex ? {
+      ...current,
+      sets: current.sets.map((set, index) => index === setIndex ? {
         ...set,
         complete: true,
         completedReps: reps,
@@ -234,20 +265,21 @@ export function ExerciseSession({
         ...(summary ? { movementSummary: summary } : {}),
       } : set),
     };
+    workoutRef.current = next;
     setWorkout(next);
-    onSave(next);
+    onSaveRef.current(next);
     setRestSeconds(60);
     setStage('rest');
-  }, [elapsedSeconds, onSave, profile, setIndex, targetReps, workout]);
+  }, [elapsedSeconds, profile, setIndex, targetReps]);
 
   useEffect(() => {
-    if (stage !== 'active' || repCount < targetReps) return;
+    if (stage !== 'active' || !cameraSetIsComplete(setTarget, repCount, elapsedSeconds)) return;
     stopRecording();
     stopCamera();
     haptic([120, 80, 180]);
     spoken(`Set ${setIndex + 1} complete.`);
     saveCompletedSet('camera', repCount);
-  }, [repCount, saveCompletedSet, setIndex, stage, stopCamera, stopRecording, targetReps]);
+  }, [elapsedSeconds, repCount, saveCompletedSet, setIndex, setTarget, stage, stopCamera, stopRecording]);
 
   const syncMediaGeometry = useCallback(() => {
     const video = videoRef.current;
@@ -315,7 +347,6 @@ export function ExerciseSession({
 
   const showCameraRecovery = useCallback((error: string) => {
     const currentStage = stageRef.current;
-    autoResumeSetRef.current = currentStage !== 'setup';
     if (currentStage === 'active') {
       const activeSeconds = Math.max(0, Math.round((performance.now() - startedAtRef.current) / 1000));
       const count = baseRepCountRef.current + (trackerRef.current?.reps.length ?? 0);
@@ -442,7 +473,7 @@ export function ExerciseSession({
     worker.postMessage({ type: 'init' });
   }, [handlePoseDetection, scheduleNextFrame, startCompatibilityTracking, stopTrackingBackend]);
 
-  const startCamera = useCallback(async (resumeSet = false) => {
+  const startCamera = useCallback(async () => {
     if (!profile) { setStage('timer-ready'); return; }
     stopCamera();
     setCameraError('');
@@ -450,16 +481,16 @@ export function ExerciseSession({
     setTrackingStable(false);
     setPoseStatus('Loading pose tracking…');
     stablePoseFramesRef.current = 0;
-    autoResumeSetRef.current = resumeSet;
+    startingSetRef.current = false;
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 } } });
+      const stream = await requestFrontExerciseCamera();
       streamRef.current = stream;
       stream.getVideoTracks().forEach((track) => track.addEventListener('ended', () => {
         if (!mountedRef.current || document.hidden || !(['setup', 'countdown', 'active'] as Stage[]).includes(stageRef.current)) return;
-        autoResumeSetRef.current = stageRef.current !== 'setup';
         showCameraRecovery('The camera stream ended. Enable the camera again or continue with the set timer.');
       }, { once: true }));
       setStage('setup');
+      setCameraStreamVersion((version) => version + 1);
       startWorkerTracking();
     } catch (error) {
       const denied = error instanceof DOMException && error.name === 'NotAllowedError';
@@ -472,6 +503,8 @@ export function ExerciseSession({
   useEffect(() => { stageRef.current = stage; }, [stage]);
 
   const startCameraSet = async () => {
+    if (startingSetRef.current) return;
+    startingSetRef.current = true;
     trackerRef.current = profile ? new MovementTracker(profile) : undefined;
     baseRepCountRef.current = workoutRef.current.sets[setIndex]?.completedReps ?? 0;
     baseDurationSecondsRef.current = workoutRef.current.sets[setIndex]?.actualDurationSeconds ?? 0;
@@ -491,35 +524,48 @@ export function ExerciseSession({
       recorder.start(500);
       recorderRef.current = recorder;
     }
+    scheduleNextFrame();
+    setStage('countdown');
     try {
       wakeLockRef.current = await (navigator as Navigator & { wakeLock?: { request: (type: 'screen') => Promise<{ release: () => Promise<void> }> } }).wakeLock?.request('screen');
     } catch { /* exercise remains usable without wake lock */ }
-    scheduleNextFrame();
-    setStage('countdown');
   };
 
+  const cameraPreviewVisible = (['setup', 'countdown', 'active'] as Stage[]).includes(stage);
+
   useEffect(() => {
-    if (!streamRef.current || !videoRef.current || !(['setup', 'countdown', 'active'] as Stage[]).includes(stage)) return;
+    if (!cameraPreviewVisible || !streamRef.current || !videoRef.current) return;
+    const stream = streamRef.current;
     const video = videoRef.current;
+    let disposed = false;
     const sync = () => syncMediaGeometry();
-    video.srcObject = streamRef.current;
     video.addEventListener('loadedmetadata', sync);
     video.addEventListener('resize', sync);
     window.addEventListener('orientationchange', sync);
-    void video.play().then(() => {
-      sync();
-      scheduleNextFrame();
-    }).catch(() => showCameraRecovery('The camera preview could not start. Retry the camera or use the set timer.'));
+    const attachPreview = async () => {
+      if (video.srcObject !== stream) video.srcObject = stream;
+      try {
+        if (video.paused) await video.play();
+        if (disposed) return;
+        sync();
+        scheduleNextFrame();
+      } catch {
+        const streamIsLive = stream.getVideoTracks().some((track) => track.readyState === 'live');
+        if (disposed || video.srcObject !== stream || !streamIsLive) return;
+        showCameraRecovery('The camera preview could not start. Retry the camera or use the set timer.');
+      }
+    };
+    void attachPreview();
     return () => {
+      disposed = true;
       video.removeEventListener('loadedmetadata', sync);
       video.removeEventListener('resize', sync);
       window.removeEventListener('orientationchange', sync);
     };
-  }, [scheduleNextFrame, showCameraRecovery, stage, syncMediaGeometry]);
+  }, [cameraPreviewVisible, cameraStreamVersion, scheduleNextFrame, showCameraRecovery, syncMediaGeometry]);
 
   useEffect(() => {
-    if (stage !== 'setup' || !trackingStable || !autoResumeSetRef.current) return;
-    autoResumeSetRef.current = false;
+    if (stage !== 'setup' || !trackingStable) return;
     void startCameraSet();
   }, [stage, trackingStable]);
 
@@ -529,7 +575,6 @@ export function ExerciseSession({
         const currentStage = stageRef.current;
         if (!(['setup', 'countdown', 'active'] as Stage[]).includes(currentStage)) return;
         pausedByVisibilityRef.current = true;
-        autoResumeSetRef.current = currentStage !== 'setup';
         if (currentStage === 'active') {
           const activeSeconds = Math.max(0, Math.round((performance.now() - startedAtRef.current) / 1000));
           const count = baseRepCountRef.current + (trackerRef.current?.reps.length ?? 0);
@@ -548,17 +593,18 @@ export function ExerciseSession({
       }
       if (!pausedByVisibilityRef.current) return;
       pausedByVisibilityRef.current = false;
-      const resumeSet = autoResumeSetRef.current;
       const streamIsLive = Boolean(streamRef.current?.getVideoTracks().some((track) => track.readyState === 'live'));
+      startingSetRef.current = false;
       setCameraError('');
       setTrackingStable(false);
       stablePoseFramesRef.current = 0;
       setPoseStatus('Restoring camera tracking…');
       if (streamIsLive) {
         setStage('setup');
+        setCameraStreamVersion((version) => version + 1);
         if (!trackingReadyRef.current) startWorkerTracking();
       } else {
-        void startCamera(resumeSet);
+        void startCamera();
       }
     };
     document.addEventListener('visibilitychange', visibilityChanged);
@@ -685,9 +731,9 @@ export function ExerciseSession({
             <video ref={videoRef} muted playsInline />
             <canvas ref={canvasRef} width="1280" height="720" />
             {stage === 'countdown' && <strong className="session-countdown">{countdown || 'Go'}</strong>}
-            {stage === 'active' && <div className="rep-progress" style={{ '--rep-progress': `${Math.min(100, repCount / targetReps * 100)}%` } as CSSProperties}><strong>{repCount}</strong><span>of {targetReps} reps</span></div>}
+            {stage === 'active' && <div className="rep-progress" style={{ '--rep-progress': `${cameraSetProgress(setTarget, repCount, elapsedSeconds)}%` } as CSSProperties}><strong>{repCount}</strong><span>{targetReps > 0 ? `of ${targetReps} reps` : `${Math.min(elapsedSeconds, targetSeconds)} of ${targetSeconds}s`}</span></div>}
           </div>
-          {stage === 'setup' && <div className="camera-setup"><h3>{profile?.cameraView === 'side' ? 'Use a side view' : 'Use a front view'}</h3><p>{profile?.setupInstruction}</p><p className="tracking-status" role="status">{poseStatus}</p>{cameraError && <p className="session-error" role="alert">{cameraError}</p>}<button className="primary-button" disabled={!trackingStable} onClick={() => void startCameraSet()}><Video size={18} /> {trackingStable ? 'Start set' : 'Waiting for stable tracking'}</button></div>}
+          {stage === 'setup' && <div className="camera-setup"><h3>{profile?.cameraView === 'side' ? 'Use a side view' : 'Use a front view'}</h3><p>{profile?.setupInstruction}</p><p className="tracking-status" role="status">{trackingStable ? 'Tracking ready. Starting automatically…' : poseStatus}</p>{cameraError && <p className="session-error" role="alert">{cameraError}</p>}</div>}
           {stage === 'active' && <div className="live-session-controls"><p>{poseStatus}</p><strong>{elapsedSeconds}s</strong><div><button className="text-button" disabled={repCount === 0} onClick={() => adjustRep(-1)}><Minus size={17} /> Undo last rep</button><button className="text-button" onClick={() => adjustRep(1)}><Plus size={17} /> Add rep</button></div></div>}
         </section>
       )}
@@ -698,7 +744,7 @@ export function ExerciseSession({
           <h3>Camera paused</h3>
           <p className="session-message" role="alert">{cameraError || message || 'Camera tracking paused. Enable the camera again or continue with the set timer.'}</p>
           <div className="session-actions">
-            <button className="primary-button" onClick={() => void startCamera(autoResumeSetRef.current)}><Camera size={18} /> Enable camera</button>
+            <button className="primary-button" onClick={() => void startCamera()}><Camera size={18} /> Enable camera</button>
             <button className="text-button" onClick={continueWithTimer}><Timer size={18} /> Start timer</button>
           </div>
         </section>

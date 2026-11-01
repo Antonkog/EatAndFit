@@ -138,22 +138,22 @@ Before counting begins:
 1. Show whether the exercise requires a front or side view.
 2. Display the exercise demonstration and a simple placement silhouette.
 3. Confirm that the required body landmarks are visible.
-4. Require stable tracking for one second.
-5. Run a three-second countdown.
+4. Require stable tracking for the profile's configured consecutive-frame gate.
+5. Start a visible and locally spoken three-second countdown automatically as soon as the gate is satisfied.
 
 If framing is poor, show one instruction at a time, such as `Move farther from the camera` or `Turn your left side toward the camera`. Do not start while essential landmarks are missing.
 
-The setup uses one camera video and one matching canvas. Their intrinsic dimensions are synchronized on metadata load, video resize, and orientation change, and both layers use the same mirroring and `object-fit: contain` geometry. The skeleton appears as soon as any single pose is returned; readiness only controls the start action. The default readiness rule requires both shoulders, wrists, hips, knees, and ankles to remain at least 60% visible for ten consecutive analyzed frames.
+The setup requests the front-facing camera at approximately 1280 × 720, using an exact front-camera constraint first and a preferred front-camera fallback when necessary. Exercise tracking never selects the rear or wide-angle camera. It uses one camera video and one matching canvas. Their intrinsic dimensions are synchronized on metadata load, video resize, and orientation change, and both layers use the same horizontal display flip and `object-fit: contain` geometry so the user's physical right side appears on the right side of the screen. Playback is attached once per camera stream; persisting a counted repetition must not reassign the stream or call `play()` again. The skeleton appears as soon as any single pose is returned. Readiness starts the countdown automatically rather than enabling a button. The default readiness rule requires both shoulders, wrists, hips, knees, and ankles to remain at least 60% visible for ten consecutive analyzed frames.
 
 Bodyweight Squat uses one exercise-specific setup rule for a realistic side view. Either the left or right shoulder–hip–knee–ankle chain is accepted when all four landmarks have at least 45% visibility for five consecutive analyzed frames. Wrists and the naturally occluded far-side limbs are not required. This exception does not change Barbell Back Squat, any other movement profile, repetition confidence, movement thresholds, or form assessment.
 
-On mobile in portrait orientation, the camera occupies `100dvh`. The header remains over the top of the preview, while a 50%-opaque bottom panel contains the required view, placement instruction, tracking status, and start action. Progress and active controls also remain over the video. Desktop and landscape keep their existing layout.
+The camera stage occupies `100dvh` on desktop, mobile, portrait, and landscape. The header remains over the top of the preview. Mobile portrait uses a 50%-opaque bottom panel for the required view, placement instruction, and tracking status until automatic countdown begins; wider viewports place the panel at the right. Progress and active controls remain over the video.
 
 ### Active set
 
 The full-screen session displays:
 
-- a mirrored camera preview;
+- a user-oriented camera preview where physical right appears on screen right;
 - a high-contrast skeleton overlay;
 - current and target repetitions;
 - a large progress ring;
@@ -166,6 +166,8 @@ When a repetition completes, display `Rep 1 complete.`, `Rep 2 complete.`, and s
 Counting pauses when confidence becomes insufficient. The current count remains visible and no repetition is inferred while the body is not reliably tracked.
 
 The application must never stop the user between individual repetitions. Stopping between repetitions would make normal strength-training cadence awkward and potentially distracting. Interaction occurs between sets instead.
+
+A rep-based set ends only after its configured repetition target. A time-based set can continue counting repetitions but ends only when its configured duration expires. Missing rep and duration targets fall back to a 30-second timed set rather than a one-repetition set. Set completion starts the 60-second rest timer.
 
 ### Set completion and rest
 

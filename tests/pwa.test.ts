@@ -45,7 +45,7 @@ test('service worker caches only the app shell and static same-origin requests',
   const worker = readFileSync(new URL('../public/sw.js', import.meta.url), 'utf8');
   assert.match(main, /import\.meta\.env\.PROD/);
   assert.match(main, /serviceWorker\.register\('\/sw\.js'\)/);
-  assert.match(worker, /eat-and-fit-shell-v1/);
+  assert.match(worker, /eat-and-fit-shell-v2/);
   assert.match(worker, /request\.mode === 'navigate'/);
   assert.match(worker, /url\.pathname\.startsWith\('\/api\/'\)/);
   assert.match(worker, /url\.origin !== self\.location\.origin/);

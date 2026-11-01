@@ -144,11 +144,11 @@ export function CalendarView({
     return exercise ? estimateExerciseEnergy(exercise, workout.sets, profile, calibration) : undefined;
   }, [calibration, exerciseMap, profile]);
 
-  const updateWorkout = (workout: Workout) => {
+  const updateWorkout = useCallback((workout: Workout) => {
     const next = applyWorkoutCompletion(workout, estimateWorkout(workout));
     setWorkouts((items) => items.map((item) => item.id === next.id ? next : item));
     void saveWorkout(next);
-  };
+  }, [estimateWorkout]);
 
   return (
     <>

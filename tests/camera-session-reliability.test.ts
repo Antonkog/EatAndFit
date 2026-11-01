@@ -14,7 +14,25 @@ test('camera session renders one live preview and exposes the skeleton before re
   assert.match(session, /loadedmetadata/);
   assert.match(session, /orientationchange/);
   assert.match(session, /\.addEventListener\('resize'/);
-  assert.match(styles, /\.camera-stage video, \.camera-stage canvas[^}]+transform: scaleX\(-1\)/s);
+  assert.match(styles, /\.camera-stage video, \.camera-stage canvas[^}]+transform: scaleX\(-1\)/);
+  assert.doesNotMatch(session, /cameraMirrored|camera-stage\$\{cameraMirrored/);
+});
+
+test('exercise tracking requests only the front camera', () => {
+  assert.match(session, /facingMode: \{ exact: 'user' \}/);
+  assert.match(session, /facingMode: \{ ideal: 'user' \}/);
+  assert.match(session, /width: \{ ideal: 1280 \}/);
+  assert.match(session, /height: \{ ideal: 720 \}/);
+  assert.doesNotMatch(session, /facingMode: \{ ideal: 'environment' \}/);
+  assert.doesNotMatch(session, /zoom/);
+});
+
+test('saving a repetition does not restart the live camera preview', () => {
+  assert.match(session, /onSaveRef\.current\(partial\)/);
+  assert.match(session, /cameraPreviewVisible/);
+  assert.match(session, /if \(video\.srcObject !== stream\) video\.srcObject = stream/);
+  assert.match(session, /if \(video\.paused\) await video\.play\(\)/);
+  assert.doesNotMatch(session, /\[scheduleNextFrame, showCameraRecovery, stage, syncMediaGeometry\]/);
 });
 
 test('camera tracking has worker, CPU, frame, timeout, and compatibility fallbacks', () => {
@@ -52,9 +70,24 @@ test('portrait camera session fills the viewport and overlays a translucent inst
   assert.match(styles, /background: rgba\(4,6,4,\.5\)/);
 });
 
+test('camera video fills the viewport on desktop and landscape as well', () => {
+  assert.match(styles, /\.exercise-session\.camera-session-open[^}]+height: 100dvh/);
+  assert.match(styles, /\.exercise-session\.camera-session-open \.camera-session[^}]+height: 100dvh/);
+  assert.match(styles, /\.exercise-session\.camera-session-open \.camera-stage[^}]+height: 100%/);
+});
+
 test('camera session delegates readiness without delaying skeleton rendering', () => {
   assert.match(session, /evaluatePoseReadiness\(profile\?\.id, landmarks\)/);
   assert.match(readiness, /DEFAULT_REQUIRED_LANDMARKS = \[11, 12, 15, 16, 23, 24, 25, 26, 27, 28\]/);
   assert.match(readiness, /DEFAULT_REQUIRED_LANDMARKS, 0\.6/);
   assert.match(readiness, /requiredConsecutiveFrames: 10/);
+});
+
+test('stable tracking automatically starts the three-second countdown', () => {
+  assert.match(session, /if \(stage !== 'setup' \|\| !trackingStable\) return;/);
+  assert.match(session, /void startCameraSet\(\)/);
+  assert.match(session, /Tracking ready\. Starting automatically…/);
+  assert.match(session, /spoken\('Three'\)/);
+  assert.match(session, /spoken\('Go'\)/);
+  assert.doesNotMatch(session, /> Start set</);
 });
