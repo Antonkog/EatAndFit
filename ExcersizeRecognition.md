@@ -244,13 +244,13 @@ The analysis action must state:
 
 1. The browser keeps the full set only in memory and records at a controlled bitrate.
 2. The browser refuses uploads larger than 30 MiB.
-3. After explicit consent, it uploads the compact recording, MediaPipe count, rep windows, and deterministic evidence to Eat & Fit.
-4. The server removes audio and normalizes the full recording in tmpfs to H.264 MP4 at no more than 720p and 12 FPS.
-5. SAM tracks the athlete across the complete set. Missing-person and multiple-person results stop the review.
-6. Muse receives the full set plus the local count, measured windows, catalog guidance, and authoritative form assessment.
-7. Muse returns an observed segment count, count confidence, and structured coaching.
-8. The server deletes its temporary files and the Meta file in a `finally` path.
-9. The browser displays the sampled SAM track, Muse review, and any count difference.
+3. After explicit consent, it uploads only the recording to Eat & Fit for format normalization; the user's Meta key and movement evidence are not sent to Eat & Fit.
+4. The server removes audio and normalizes the recording in tmpfs to H.264 MP4 at no more than 720p and 12 FPS, returns the bytes, and deletes its temporary files.
+5. The browser uploads the normalized clip directly to Meta with the locally stored key.
+6. SAM tracks the athlete across the complete set. Missing-person and multiple-person results stop the review.
+7. Muse receives the full set plus the local count, measured windows, catalog guidance, and authoritative form assessment directly from the browser.
+8. Muse returns an observed segment count, count confidence, and structured coaching.
+9. The browser deletes the Meta file in a `finally` path, then displays the sampled SAM track, Muse review, and any count difference.
 10. The browser discards its original set recording and SAM track data.
 
 Full-set review costs more than selected-repetition review, so it runs only after the explicit button press. Current pricing and promotional-credit terms must be verified before release.
@@ -344,29 +344,18 @@ When all sets complete, the existing workout-completion path freezes burned calo
 
 No video, landmark timeline, SAM mask, or API key is persisted.
 
-### Meta analysis endpoint
+### Movement preparation endpoint and direct Meta requests
 
 Add a BYOK-only endpoint:
 
 ```text
-POST /api/ai/movement/analyze
-Authorization: Bearer <user Meta key>
+POST /api/ai/movement/prepare
 Content-Type: multipart/form-data
 ```
 
-Request fields:
+The request contains only the temporary full-set recording, limited to 90 seconds and 30 MiB. The server converts it only in container tmpfs with a random filename and returns muted H.264 MP4. It neither receives the user's Meta key nor sends inference requests to Meta.
 
-- `video`: temporary full-set recording, maximum 90 seconds and 30 MiB;
-- `exerciseId`;
-- `setNumber`;
-- `selectedRep`;
-- `repStartMs` and `repEndMs`;
-- `localRepCount` for the uploaded segment and `priorRepCount` already saved before that segment;
-- local repetition windows and the active segment duration;
-- deterministic ROM, cadence, symmetry, visibility, confidence, and cue metrics;
-- adult-confirmation metadata without weight, height, sex, or exact age.
-
-The server validates the key, adult confirmation, size, timestamps, exercise ID, and measurements. It converts files only in container tmpfs and uses random filenames.
+The browser uses the normalized response with the Meta Files and Responses APIs. Local count, rep windows, deterministic evidence, exercise guidance, and adult eligibility remain in the browser and are submitted directly to Meta after consent.
 
 Response shape:
 
@@ -441,7 +430,7 @@ Advantages:
 Disadvantages:
 
 - video leaves the device after consent;
-- the application server temporarily handles the full set for conversion;
+- the application server temporarily handles the full set only for conversion;
 - requires a verified Meta key, connectivity, extra dependencies, and careful cleanup;
 - introduces inference latency and provider charges;
 - SAM still cannot replace the pose engine.
@@ -487,9 +476,9 @@ This option is rejected for the first release. FFmpeg WASM would substantially i
 - Record camera-supported sets locally in memory without audio.
 - Add the explicit `Analyze with Meta AI` full-set review action.
 - Add separate, per-set Meta consent.
-- Add multipart upload, 30 MiB client/server limits, full-set tmpfs normalization, SAM streaming, and Muse count/coaching schema validation.
+- Add multipart normalization, 30 MiB client/server limits, full-set tmpfs conversion, browser-direct Meta Files/Responses requests, SAM streaming, and Muse count/coaching schema validation.
 - Render compact sampled track evidence, reconcile count differences through user choice, and attach one Muse goal to the next set.
-- Guarantee server and Meta-file deletion on success, timeout, cancellation, and parse failure.
+- Guarantee server temporary-file deletion and browser-side Meta-file deletion on success, timeout, cancellation, and parse failure.
 
 ### Phase 5 — Privacy and documentation
 

@@ -1,11 +1,9 @@
-import { createReadStream, createWriteStream } from 'node:fs';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { createWriteStream } from 'node:fs';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawn } from 'node:child_process';
 import Busboy from 'busboy';
-import OpenAI from 'openai';
-import { frameIndexOf, parseVideoStream, recordsOfKind } from '@meta-sam/parser';
 
 const MAX_VIDEO_BYTES = 30 * 1024 * 1024;
 const MAX_SET_MS = 90_000;
@@ -13,21 +11,6 @@ const MIN_REP_MS = 800;
 const MAX_REP_MS = 12_000;
 const MAX_REP_COUNT = 200;
 const OUTPUT_FPS = 12;
-const nullableString = { anyOf: [{ type: 'string' }, { type: 'null' }] };
-const coachingSchema = {
-  type: 'object',
-  properties: {
-    status: { type: 'string', enum: ['good_form', 'correction_needed', 'insufficient_evidence'] },
-    positiveObservation: nullableString,
-    primaryCorrection: nullableString,
-    nextSetGoal: nullableString,
-    evidenceMetric: nullableString,
-    observedRepCount: { type: 'integer', minimum: 0, maximum: MAX_REP_COUNT },
-    countConfidence: { type: 'string', enum: ['low', 'medium', 'high'] },
-  },
-  required: ['status', 'positiveObservation', 'primaryCorrection', 'nextSetGoal', 'evidenceMetric', 'observedRepCount', 'countConfidence'],
-  additionalProperties: false,
-};
 
 export class MovementAnalysisError extends Error {
   constructor(message, status = 400, code = 'invalid_movement_request') {
@@ -35,12 +18,6 @@ export class MovementAnalysisError extends Error {
     this.status = status;
     this.code = code;
   }
-}
-
-function bearerKey(request) {
-  const match = String(request.headers.authorization ?? '').match(/^Bearer\s+(.+)$/i);
-  if (!match?.[1]?.trim()) throw new MovementAnalysisError('Add and verify a Meta API key in Settings first.', 401, 'missing_meta_key');
-  return match[1].trim();
 }
 
 function numeric(value, label) {
@@ -185,90 +162,6 @@ async function probeVideo(path) {
   return { width: stream.width, height: stream.height, duration: Number(stream.duration) || 0 };
 }
 
-function parseJsonObject(text) {
-  const cleaned = String(text ?? '').trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
-  const start = cleaned.indexOf('{');
-  const end = cleaned.lastIndexOf('}');
-  if (start < 0 || end < start) throw new MovementAnalysisError('Muse returned an invalid coaching response.', 502, 'invalid_muse_response');
-  try { return JSON.parse(cleaned.slice(start, end + 1)); }
-  catch { throw new MovementAnalysisError('Muse returned an invalid coaching response.', 502, 'invalid_muse_response'); }
-}
-
-function coachingPrompt(fields) {
-  return `You are the Meta video-review layer for Eat & Fit. Review the complete exercise set and independently count visible, completed movement cycles. The application's MediaPipe count is context, not an answer to copy. The application already measured and classified one representative repetition when available. Do not change that assessment status, invent measurements, create scores, make medical claims, or criticize good form.
-
-Exercise ID: ${fields.exerciseId}
-Exercise: ${fields.exerciseName}
-Validated movement guidance: ${fields.movementGuidance}
-Set: ${fields.setNumber}; selected rep: ${fields.selectedRep || 'none'}
-MediaPipe repetitions visible in this uploaded segment: ${fields.localRepCount}
-Repetitions completed before this uploaded segment: ${fields.priorRepCount}
-Active segment duration: ${fields.activeDurationMs} ms
-MediaPipe repetition windows: ${JSON.stringify(fields.repWindows)}
-Authoritative application assessment:
-${JSON.stringify(fields.assessment)}
-
-Return ONLY this JSON object:
-{"status":"good_form|correction_needed|insufficient_evidence","positiveObservation":string|null,"primaryCorrection":string|null,"nextSetGoal":string|null,"evidenceMetric":string|null,"observedRepCount":integer,"countConfidence":"low|medium|high"}
-
-Count only complete repetitions visible in the uploaded segment; do not include the priorRepCount. If the set cannot be counted reliably, return the best conservative observed count with low confidence. For good_form: give one concise positive observation, primaryCorrection must be null, and optionally reinforce the same technique. For correction_needed: give exactly one actionable correction tied to one supplied evidence metric. evidenceMetric must include the exact label of a supplied evidence item. For insufficient_evidence: do not judge technique and give no correction; nextSetGoal should explain camera placement.`;
-}
-
-async function requestSam(client, fileId, media) {
-  const stream = await client.responses.create({
-    model: 'sam-3.1',
-    input: [{ role: 'user', content: [{ type: 'input_text', text: 'person' }, { type: 'input_video', file_id: fileId }] }],
-    metadata: { mask_encoding: 'one_bit' },
-    stream: true,
-  });
-  const result = await parseVideoStream(stream).finalResult;
-  if (result.outcome.status !== 'completed') throw new MovementAnalysisError('SAM 3.1 did not finish tracking the exercise set.', 502, 'sam_incomplete');
-  const boxes = recordsOfKind(result.records, 'box');
-  const objectIds = new Set(boxes.map((box) => box.objectId));
-  if (objectIds.size > 1) throw new MovementAnalysisError('More than one person was detected. Record again with only the athlete in frame.', 422, 'multiple_people');
-  if (!boxes.length) throw new MovementAnalysisError('SAM 3.1 could not track the athlete in this set.', 422, 'person_not_tracked');
-  const sampleEvery = Math.max(1, Math.ceil(boxes.length / 60));
-  const sampled = boxes.filter((_, index) => index % sampleEvery === 0).map((box) => ({
-    timestampMs: Math.round((frameIndexOf(box) ?? 0) / OUTPUT_FPS * 1000),
-    x: box.left,
-    y: box.top,
-    width: box.right - box.left,
-    height: box.bottom - box.top,
-  }));
-  const expectedFrames = Math.max(1, Math.round(media.duration * OUTPUT_FPS));
-  const trackedFrames = new Set(boxes.map((box) => frameIndexOf(box)).filter(Number.isFinite)).size;
-  const confidences = boxes.map((box) => box.confidence).filter(Number.isFinite);
-  return {
-    model: 'sam-3.1',
-    coverage: Math.min(1, trackedFrames / expectedFrames),
-    confidence: confidences.length ? confidences.reduce((sum, value) => sum + value, 0) / confidences.length : null,
-    sourceWidth: media.width,
-    sourceHeight: media.height,
-    boxes: sampled,
-  };
-}
-
-async function requestMuse(client, fileId, fields) {
-  const response = await client.responses.create({
-    model: 'muse-spark-1.3',
-    input: [{ role: 'user', content: [{ type: 'input_text', text: coachingPrompt(fields) }, { type: 'input_file', file_id: fileId }] }],
-    text: { format: { type: 'json_schema', name: 'movement_coaching', strict: true, schema: coachingSchema } },
-    reasoning: { effort: 'low' },
-    max_output_tokens: 4000,
-  });
-  if (response.status !== 'completed' || !response.output_text?.trim()) {
-    const reason = response.incomplete_details?.reason;
-    throw new MovementAnalysisError(
-      reason === 'max_output_tokens'
-        ? 'Muse could not finish reviewing this set. Try the analysis again.'
-        : 'Muse did not finish reviewing this set.',
-      502,
-      'muse_incomplete',
-    );
-  }
-  return validateMuseReview(parseJsonObject(response.output_text), fields.assessment);
-}
-
 function receiveMultipart(request, directory) {
   return new Promise((resolve, reject) => {
     let settled = false;
@@ -313,47 +206,16 @@ function receiveMultipart(request, directory) {
 // Kept behind a tiny helper so the multipart parser remains easy to replace or test.
 function createWriteStreamCompat(path) { return createWriteStream(path, { flags: 'wx' }); }
 
-export async function analyzeMovementRequest(request, { clientFactory = (apiKey) => new OpenAI({ apiKey, baseURL: 'https://api.meta.ai/v1', timeout: 150_000, maxRetries: 0 }) } = {}) {
-  const apiKey = bearerKey(request);
+export async function prepareMovementVideoRequest(request) {
   const directory = await mkdtemp(join(tmpdir(), 'eatfit-movement-'));
-  let uploadedFileId;
-  let client;
   try {
-    const { fields, videoPath } = await receiveMultipart(request, directory);
-    const validated = validateMovementFields(fields);
+    const { videoPath } = await receiveMultipart(request, directory);
     const sourceMedia = await probeVideo(videoPath);
     if (sourceMedia.duration > MAX_SET_MS / 1000) throw new MovementAnalysisError('The exercise recording must be 90 seconds or shorter.', 413, 'video_too_long');
     const normalizedPath = join(directory, 'exercise-set.mp4');
     await convertFullSet(videoPath, normalizedPath);
-    const media = await probeVideo(normalizedPath);
-    client = clientFactory(apiKey);
-    const uploaded = await client.files.create({ file: createReadStream(normalizedPath), purpose: 'user_data', expires_after: { anchor: 'created_at', seconds: 3600 } });
-    uploadedFileId = uploaded.id;
-    const sam = await requestSam(client, uploadedFileId, media);
-    const muse = await requestMuse(client, uploadedFileId, validated);
-    if (validated.priorRepCount + muse.observedRepCount > MAX_REP_COUNT) throw new MovementAnalysisError('Muse returned an invalid repetition count.', 502, 'invalid_muse_response');
-    return {
-      sam,
-      countReview: {
-        localRepCount: validated.priorRepCount + validated.localRepCount,
-        observedRepCount: muse.observedRepCount,
-        suggestedSetRepCount: validated.priorRepCount + muse.observedRepCount,
-        confidence: muse.countConfidence,
-      },
-      coaching: muse.coaching,
-      museModel: 'muse-spark-1.3',
-      processedAt: new Date().toISOString(),
-    };
-  } catch (error) {
-    if (error instanceof MovementAnalysisError) throw error;
-    if (error?.status === 401) throw new MovementAnalysisError('Wrong Meta API key.', 401, 'wrong_meta_key');
-    if (error?.status === 403) throw new MovementAnalysisError('The Meta API key cannot use movement analysis.', 403, 'meta_forbidden');
-    if (error?.status === 404) throw new MovementAnalysisError('The Meta movement models are not available for this API key.', 404, 'meta_model_unavailable');
-    if (error?.status === 429) throw new MovementAnalysisError('Meta rate limit reached. Your local workout result is safe.', 429, 'meta_rate_limit');
-    if ([408, 504].includes(error?.status) || error?.name === 'APIConnectionTimeoutError') throw new MovementAnalysisError('Meta movement analysis timed out. Your local workout result is safe.', 504, 'meta_timeout');
-    throw new MovementAnalysisError('Meta movement analysis is temporarily unavailable. Your local workout result is safe.', 502, 'meta_unavailable');
+    return readFile(normalizedPath);
   } finally {
-    if (uploadedFileId && client) await client.files.delete(uploadedFileId).catch(() => undefined);
     await rm(directory, { recursive: true, force: true });
   }
 }

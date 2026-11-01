@@ -703,7 +703,7 @@ export function ExerciseSession({
   }, [profile, selectedRep]);
   const runMetaAnalysis = async () => {
     if (!recording) return;
-    if (!window.confirm('Upload this muted set recording temporarily to Eat & Fit and Meta? SAM 3.1 will track the athlete and Muse Spark 1.3 will review the repetition count and coaching evidence. All temporary files are deleted after processing.')) return;
+    if (!window.confirm('Send this muted set recording temporarily to Eat & Fit for video preparation, then directly from this browser to Meta? SAM 3.1 will track the athlete and Muse Spark 1.3 will review the repetition count and coaching evidence. All temporary files are deleted after processing.')) return;
     setAnalyzing(true);
     setAnalysisError('');
     const analyzedSetIndex = setIndex;

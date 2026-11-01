@@ -13,7 +13,8 @@ test('Calendar exposes guided exercise only for incomplete workouts on the curre
 test('guided sessions separate local camera permission from explicit Meta full-set review', () => {
   assert.match(session, /Enable camera\?/);
   assert.match(session, /Video is not uploaded unless you later choose/);
-  assert.match(session, /Upload this muted set recording temporarily/);
+  assert.match(session, /Send this muted set recording temporarily/);
+  assert.match(session, /directly from this browser to Meta/);
   assert.match(session, /Analyze with Meta AI/);
   assert.match(session, /MediaPipe counted/);
   assert.match(session, /Muse observed/);
