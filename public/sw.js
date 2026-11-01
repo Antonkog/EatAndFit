@@ -1,4 +1,4 @@
-const CACHE_NAME = 'eat-and-fit-shell-v1';
+const CACHE_NAME = 'eat-and-fit-shell-v3';
 const APP_SHELL = [
   '/',
   '/manifest.webmanifest',
