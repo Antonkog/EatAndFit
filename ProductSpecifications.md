@@ -549,7 +549,7 @@ Import validates the top-level schema version and array presence, clears the exi
 | POST | `/api/ai/recipes/generate` | Server-side recipe path used by Gemini |
 | POST | `/api/ai/training/generate` | Server-side training path used by Gemini |
 | POST | `/api/ai/training/calibrate` | Server-side calibration path used by Gemini |
-| POST | `/api/ai/keys/verify` | One-request provider-key verification |
+| POST | `/api/ai/keys/verify` | One-request credential verification; Meta validates authentication through its model-list endpoint without requiring a region-specific inference model |
 
 AI requests authenticate with the user-supplied key in a Bearer header and select the provider with `x-recognition-provider`. The API accepts only Meta or Gemini. Provider timeouts, authentication, billing, authorization, missing-model, rate-limit, content-policy, and invalid-response conditions are converted into user-readable errors.
 

@@ -86,20 +86,14 @@ export class TrainingProvider {
   calibrate(input) { return this.request(calibrationPrompt(input), calibrationSchema, 'energy_calibration'); }
   async verify() {
     if (this.provider === 'META') {
-      const models = this.model ? [this.model] : ['muse-spark-1.3-contributor', 'muse-spark-1.3'];
-      for (const model of models) {
-        const response = await this.fetch(`${(this.baseUrl || META_API_BASE_URL).replace(/\/$/, '')}/chat/completions`, {
-          method: 'POST', headers: { Authorization: `Bearer ${this.apiKey}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ model, temperature: 0, messages: [{ role: 'user', content: 'Reply OK.' }] }),
-          signal: AbortSignal.timeout(20_000),
-        }).catch(() => { throw new TrainingProviderError('Meta is temporarily unavailable.', 502, 'provider_unavailable'); });
-        const body = await response.json().catch(() => ({}));
-        if (response.status === 401) throw new TrainingProviderError('Wrong API key', 401, 'invalid_api_key');
-        if (response.status === 404 && body?.error?.code === 'model_not_found') continue;
-        if (!response.ok) throw new TrainingProviderError(body?.error?.message || 'Meta key verification failed.', response.status || 502);
-        return { ok: true, provider: 'META' };
-      }
-      throw new TrainingProviderError('The Meta AI model is not available for this API key.', 503, 'model_unavailable');
+      const response = await this.fetch(`${(this.baseUrl || META_API_BASE_URL).replace(/\/$/, '')}/models`, {
+        method: 'GET', headers: { Authorization: `Bearer ${this.apiKey}` }, signal: AbortSignal.timeout(20_000),
+      }).catch(() => { throw new TrainingProviderError('Meta is temporarily unavailable.', 502, 'provider_unavailable'); });
+      const body = await response.json().catch(() => ({}));
+      if (response.status === 401) throw new TrainingProviderError('Wrong API key', 401, 'invalid_api_key');
+      if (response.status === 429) throw new TrainingProviderError('Meta rate limit reached.', 429, 'rate_limited');
+      if (!response.ok) throw new TrainingProviderError(body?.error?.message || 'Meta key verification failed.', response.status || 502);
+      return { ok: true, provider: 'META' };
     }
     const response = await this.fetch(`${GEMINI_API_ROOT}/${encodeURIComponent(this.model || 'gemini-3.1-flash-lite')}:generateContent`, {
       method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': this.apiKey },

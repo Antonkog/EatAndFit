@@ -27,6 +27,15 @@ test('Meta and Gemini training providers use only the explicitly selected provid
 test('provider key verification maps invalid credentials and succeeds without storing keys', async () => {
   const invalid = createTrainingProvider({ provider: 'META', apiKey: 'bad' }, { fetchImpl: async () => new Response(JSON.stringify({ error: {} }), { status: 401 }) });
   await assert.rejects(() => invalid.verify(), /Wrong API key/);
+  const requests: Array<{ url: string; init: RequestInit }> = [];
+  const validMeta = createTrainingProvider({ provider: 'META', apiKey: 'good' }, { fetchImpl: async (url: string, init: RequestInit) => {
+    requests.push({ url, init });
+    return new Response(JSON.stringify({ object: 'list', data: [] }), { status: 200 });
+  } });
+  assert.deepEqual(await validMeta.verify(), { ok: true, provider: 'META' });
+  assert.match(requests[0].url, /\/v1\/models$/);
+  assert.equal(requests[0].init.method, 'GET');
+  assert.equal(requests[0].init.body, undefined);
   const valid = createTrainingProvider({ provider: 'GEMINI', apiKey: 'good' }, { fetchImpl: async () => new Response('{}', { status: 200 }) });
   assert.deepEqual(await valid.verify(), { ok: true, provider: 'GEMINI' });
 });
