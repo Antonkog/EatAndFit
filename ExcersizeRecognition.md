@@ -37,7 +37,7 @@ The selected model roles are therefore:
 
 ### MediaPipe Pose Landmarker
 
-MediaPipe runs locally in a dedicated web worker at approximately 10–12 analyzed frames per second. The implementation should try GPU acceleration first and fall back to CPU when required.
+MediaPipe runs locally at approximately 10–12 analyzed frames per second. The normal path uses a dedicated web worker, tries GPU acceleration first, and falls back to CPU. A 12-second initialization timeout, repeated frame failures, or unavailable worker transport activate a main-thread compatibility mode using the same pinned model. Frame scheduling prefers `requestVideoFrameCallback`, falls back to animation frames, and uses a canvas when the browser cannot create an image bitmap directly from the video.
 
 It produces:
 
@@ -143,6 +143,10 @@ Before counting begins:
 
 If framing is poor, show one instruction at a time, such as `Move farther from the camera` or `Turn your left side toward the camera`. Do not start while essential landmarks are missing.
 
+The setup uses one camera video and one matching canvas. Their intrinsic dimensions are synchronized on metadata load, video resize, and orientation change, and both layers use the same mirroring and `object-fit: contain` geometry. The skeleton appears as soon as any single pose is returned; readiness only controls the start action. The current readiness rule requires both shoulders, wrists, hips, knees, and ankles to remain at least 60% visible for ten consecutive analyzed frames.
+
+On mobile in portrait orientation, the camera occupies `100dvh`. The header remains over the top of the preview, while a 50%-opaque bottom panel contains the required view, placement instruction, tracking status, and start action. Progress and active controls also remain over the video. Desktop and landscape keep their existing layout.
+
 ### Active set
 
 The full-screen session displays:
@@ -195,7 +199,7 @@ The timer then continues through the same rest and next-set workflow as camera m
 
 ### Session lifecycle
 
-When the session closes, the page hides, or the component unmounts:
+When the session closes or the component unmounts:
 
 - stop every camera track;
 - stop recording;
@@ -205,7 +209,9 @@ When the session closes, the page hides, or the component unmounts:
 - discard unsubmitted video buffers;
 - save completed and partially counted repetitions.
 
-Returning to the workout resumes from the saved partial count without restoring camera video.
+When the page hides, browsers may pause animation frames or suspend media. Eat & Fit therefore pauses pose processing and recording, saves the partial count and active duration, and excludes hidden time rather than promising background tracking. When the page becomes visible, a still-live stream resumes automatically and the set continues after tracking becomes stable. If the browser ended the stream, Eat & Fit requests camera access again. Failed automatic recovery displays both `Enable camera` and `Start timer`.
+
+Worker/model initialization and frame-processing failures are surfaced as visible session status. GPU failure falls back to CPU, worker failure falls back to main-thread compatibility mode, and terminal failure never removes locally saved progress.
 
 ## Meta analysis experience
 

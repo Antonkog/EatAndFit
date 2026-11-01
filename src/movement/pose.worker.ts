@@ -25,12 +25,14 @@ async function createLandmarker(delegate: 'GPU' | 'CPU') {
 
 async function initialize() {
   if (landmarker) return;
+  let delegate: 'GPU' | 'CPU' = 'GPU';
   try {
     landmarker = await createLandmarker('GPU');
   } catch {
+    delegate = 'CPU';
     landmarker = await createLandmarker('CPU');
   }
-  postMessage({ type: 'ready' });
+  postMessage({ type: 'ready', delegate });
 }
 
 function serialize(landmarks: NormalizedLandmark[]) {
@@ -40,7 +42,7 @@ function serialize(landmarks: NormalizedLandmark[]) {
 self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
   if (event.data.type === 'init') {
     try { await initialize(); }
-    catch (error) { postMessage({ type: 'error', message: error instanceof Error ? error.message : 'Pose tracking could not start.' }); }
+    catch (error) { postMessage({ type: 'error', phase: 'init', message: error instanceof Error ? error.message : 'Pose tracking could not start.' }); }
     return;
   }
 
@@ -56,7 +58,7 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
       worldPoses: result.worldLandmarks.map(serialize),
     });
   } catch (error) {
-    postMessage({ type: 'error', message: error instanceof Error ? error.message : 'Pose tracking failed.' });
+    postMessage({ type: 'error', phase: 'frame', message: error instanceof Error ? error.message : 'Pose tracking failed.' });
   } finally {
     frame.close();
     running = false;

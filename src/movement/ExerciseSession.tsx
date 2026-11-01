@@ -6,10 +6,17 @@ import { readUserProfile } from '../profile/userProfile';
 import { getRecognitionKeyStatus } from '../settings/secureKeys';
 import { MovementTracker, selectRepresentativeRep } from './engine';
 import { analyzeMovementWithMeta } from './metaAnalysis';
+import { CompatibilityPoseRuntime, type PoseDetection } from './poseCompatibility';
 import { drawPose } from './poseCanvas';
 import type { MovementProfile } from './types';
 
-type Stage = 'consent' | 'setup' | 'countdown' | 'active' | 'timer-ready' | 'timer-active' | 'timer-confirm' | 'rest';
+type Stage = 'consent' | 'setup' | 'countdown' | 'active' | 'camera-paused' | 'timer-ready' | 'timer-active' | 'timer-confirm' | 'rest';
+type ScheduledFrame = { kind: 'video' | 'animation'; id: number };
+
+type FrameVideo = HTMLVideoElement & {
+  requestVideoFrameCallback?: (callback: (now: number) => void) => number;
+  cancelVideoFrameCallback?: (id: number) => void;
+};
 
 function spoken(message: string) {
   if (!('speechSynthesis' in window)) return;
@@ -52,17 +59,27 @@ export function ExerciseSession({
   const [analyzing, setAnalyzing] = useState(false);
   const [metaEligible, setMetaEligible] = useState(false);
   const [poseStatus, setPoseStatus] = useState('Waiting for a stable full-body view…');
+  const [cameraError, setCameraError] = useState('');
   const [trackingStable, setTrackingStable] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const frameCanvasRef = useRef<HTMLCanvasElement | undefined>(undefined);
   const streamRef = useRef<MediaStream | undefined>(undefined);
   const workerRef = useRef<Worker | undefined>(undefined);
+  const compatibilityRuntimeRef = useRef<CompatibilityPoseRuntime | undefined>(undefined);
+  const trackingBackendRef = useRef<'worker' | 'compatibility' | undefined>(undefined);
+  const trackingReadyRef = useRef(false);
   const trackerRef = useRef(profile ? new MovementTracker(profile) : undefined);
   const workoutRef = useRef(initialWorkout);
   const setIndexRef = useRef(initialSetIndex);
   const mountedRef = useRef(true);
   const previousRepRef = useRef<NonNullable<ReturnType<typeof selectRepresentativeRep>> | undefined>(undefined);
-  const frameLoopRef = useRef<number | undefined>(undefined);
+  const frameLoopRef = useRef<ScheduledFrame | undefined>(undefined);
+  const workerInitTimerRef = useRef<number | undefined>(undefined);
+  const workerResponseTimerRef = useRef<number | undefined>(undefined);
+  const processingFrameRef = useRef(false);
+  const frameFailureRef = useRef(0);
+  const frameHandlerRef = useRef<(now: number) => void>(() => undefined);
   const lastFrameRef = useRef(0);
   const stablePoseFramesRef = useRef(0);
   const baseRepCountRef = useRef(initialWorkout.sets[initialSetIndex]?.completedReps ?? 0);
@@ -72,6 +89,9 @@ export function ExerciseSession({
   const recordingOffsetMsRef = useRef(0);
   const chunksRef = useRef<Blob[]>([]);
   const wakeLockRef = useRef<{ release: () => Promise<void> } | undefined>(undefined);
+  const stageRef = useRef(stage);
+  const pausedByVisibilityRef = useRef(false);
+  const autoResumeSetRef = useRef(false);
   const currentSet = workout.sets[setIndex];
   const targetReps = Math.max(1, currentSet?.reps || 1);
   const targetSeconds = Math.max(5, currentSet?.durationSeconds || targetReps * 4);
@@ -85,15 +105,34 @@ export function ExerciseSession({
   useEffect(() => { workoutRef.current = workout; }, [workout]);
   useEffect(() => { setIndexRef.current = setIndex; }, [setIndex]);
 
-  const stopCamera = useCallback(() => {
-    if (frameLoopRef.current) cancelAnimationFrame(frameLoopRef.current);
+  const cancelFrameLoop = useCallback(() => {
+    const scheduled = frameLoopRef.current;
+    if (scheduled?.kind === 'video') (videoRef.current as FrameVideo | null)?.cancelVideoFrameCallback?.(scheduled.id);
+    if (scheduled?.kind === 'animation') cancelAnimationFrame(scheduled.id);
     frameLoopRef.current = undefined;
+    processingFrameRef.current = false;
+    if (workerResponseTimerRef.current) window.clearTimeout(workerResponseTimerRef.current);
+    workerResponseTimerRef.current = undefined;
+  }, []);
+
+  const stopTrackingBackend = useCallback(() => {
+    cancelFrameLoop();
+    if (workerInitTimerRef.current) window.clearTimeout(workerInitTimerRef.current);
+    workerInitTimerRef.current = undefined;
     workerRef.current?.terminate();
     workerRef.current = undefined;
+    compatibilityRuntimeRef.current?.close();
+    compatibilityRuntimeRef.current = undefined;
+    trackingBackendRef.current = undefined;
+    trackingReadyRef.current = false;
+  }, [cancelFrameLoop]);
+
+  const stopCamera = useCallback(() => {
+    stopTrackingBackend();
     streamRef.current?.getTracks().forEach((track) => track.stop());
     streamRef.current = undefined;
     if (videoRef.current) videoRef.current.srcObject = null;
-  }, []);
+  }, [stopTrackingBackend]);
 
   const stopRecording = useCallback(() => {
     const recorder = recorderRef.current;
@@ -114,22 +153,6 @@ export function ExerciseSession({
     mountedRef.current = true;
     return () => { mountedRef.current = false; releaseSession(); };
   }, [releaseSession]);
-  useEffect(() => {
-    const hidden = () => { if (document.hidden && (stage === 'active' || stage === 'setup')) { setMessage('Camera tracking paused because Eat & Fit is no longer visible.'); stopCamera(); setStage('timer-ready'); } };
-    document.addEventListener('visibilitychange', hidden);
-    return () => document.removeEventListener('visibilitychange', hidden);
-  }, [stage, stopCamera]);
-
-  useEffect(() => {
-    if (!streamRef.current || !videoRef.current || !['setup', 'countdown', 'active'].includes(stage)) return;
-    const video = videoRef.current;
-    video.srcObject = streamRef.current;
-    void video.play().then(() => {
-      if (!canvasRef.current) return;
-      canvasRef.current.width = video.videoWidth || 1280;
-      canvasRef.current.height = video.videoHeight || 720;
-    }).catch(() => undefined);
-  }, [stage]);
 
   const persistCameraProgress = useCallback((count: number, seconds: number, reps = trackerRef.current?.reps ?? []) => {
     const current = workoutRef.current;
@@ -225,70 +248,227 @@ export function ExerciseSession({
     saveCompletedSet('camera', repCount);
   }, [repCount, saveCompletedSet, setIndex, stage, stopCamera, stopRecording, targetReps]);
 
-  const processFrame = useCallback(async (now: number) => {
-    if (!workerRef.current || !videoRef.current || videoRef.current.readyState < 2) {
-      frameLoopRef.current = requestAnimationFrame(processFrame);
-      return;
+  const syncMediaGeometry = useCallback(() => {
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+    if (!video || !canvas || !video.videoWidth || !video.videoHeight) return;
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    if (frameCanvasRef.current) {
+      frameCanvasRef.current.width = video.videoWidth;
+      frameCanvasRef.current.height = video.videoHeight;
     }
-    if (now - lastFrameRef.current >= 82) {
-      lastFrameRef.current = now;
-      try {
-        const bitmap = await createImageBitmap(videoRef.current);
-        workerRef.current.postMessage({ type: 'frame', frame: bitmap, timestampMs: now }, [bitmap]);
-      } catch { /* the next animation frame will retry */ }
-    }
-    frameLoopRef.current = requestAnimationFrame(processFrame);
   }, []);
 
-  const startCamera = async () => {
+  const scheduleNextFrame = useCallback(() => {
+    if (frameLoopRef.current || !trackingReadyRef.current || !(['setup', 'countdown', 'active'] as Stage[]).includes(stageRef.current)) return;
+    const video = videoRef.current as FrameVideo | null;
+    if (!video) return;
+    if (video.requestVideoFrameCallback) {
+      const id = video.requestVideoFrameCallback((now) => {
+        frameLoopRef.current = undefined;
+        frameHandlerRef.current(now);
+      });
+      frameLoopRef.current = { kind: 'video', id };
+      return;
+    }
+    const id = requestAnimationFrame((now) => {
+      frameLoopRef.current = undefined;
+      frameHandlerRef.current(now);
+    });
+    frameLoopRef.current = { kind: 'animation', id };
+  }, []);
+
+  const handlePoseDetection = useCallback((detection: PoseDetection, timestampMs: number) => {
+    if (workerResponseTimerRef.current) window.clearTimeout(workerResponseTimerRef.current);
+    workerResponseTimerRef.current = undefined;
+    processingFrameRef.current = false;
+    frameFailureRef.current = 0;
+    const poses = detection.poses;
+    if (poses.length !== 1) {
+      stablePoseFramesRef.current = 0;
+      setTrackingStable(false);
+      const context = canvasRef.current?.getContext('2d');
+      if (context && canvasRef.current) context.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+      setPoseStatus(poses.length > 1 ? 'Only one person can be in frame.' : 'Move back until your full body is visible.');
+      return;
+    }
+    const landmarks = poses[0];
+    if (canvasRef.current) drawPose(canvasRef.current, landmarks);
+    const required = [11, 12, 15, 16, 23, 24, 25, 26, 27, 28];
+    const fullBodyVisible = required.every((index) => (landmarks[index]?.visibility ?? 0) >= 0.6);
+    stablePoseFramesRef.current = fullBodyVisible ? stablePoseFramesRef.current + 1 : 0;
+    const stable = stablePoseFramesRef.current >= 10;
+    setTrackingStable(stable);
+    setPoseStatus(stable ? 'Full body tracked on this device' : 'Hold still with your full body in frame…');
+    if (stageRef.current !== 'active') return;
+    const exerciseTimestampMs = timestampMs - startedAtRef.current;
+    const rep = trackerRef.current?.process({ timestampMs: exerciseTimestampMs, landmarks });
+    if (rep) {
+      const count = baseRepCountRef.current + (trackerRef.current?.reps.length ?? 0);
+      setRepCount(count);
+      persistCameraProgress(count, baseDurationSecondsRef.current + Math.round(exerciseTimestampMs / 1000));
+      haptic(70);
+      spoken(`Rep ${count} complete.`);
+    }
+  }, [persistCameraProgress]);
+
+  const showCameraRecovery = useCallback((error: string) => {
+    const currentStage = stageRef.current;
+    autoResumeSetRef.current = currentStage !== 'setup';
+    if (currentStage === 'active') {
+      const activeSeconds = Math.max(0, Math.round((performance.now() - startedAtRef.current) / 1000));
+      const count = baseRepCountRef.current + (trackerRef.current?.reps.length ?? 0);
+      const accumulatedSeconds = baseDurationSecondsRef.current + activeSeconds;
+      setElapsedSeconds(activeSeconds);
+      persistCameraProgress(count, accumulatedSeconds);
+      baseRepCountRef.current = count;
+      baseDurationSecondsRef.current = accumulatedSeconds;
+    }
+    stopRecording();
+    cancelFrameLoop();
+    setCameraError(error);
+    setMessage(error);
+    setTrackingStable(false);
+    setStage('camera-paused');
+  }, [cancelFrameLoop, persistCameraProgress, stopRecording]);
+
+  const startCompatibilityTracking = useCallback(async (reason: string) => {
+    if (trackingBackendRef.current === 'compatibility') return;
+    if (workerInitTimerRef.current) window.clearTimeout(workerInitTimerRef.current);
+    workerInitTimerRef.current = undefined;
+    workerRef.current?.terminate();
+    workerRef.current = undefined;
+    trackingReadyRef.current = false;
+    setPoseStatus(`${reason} Starting compatibility tracking…`);
+    try {
+      compatibilityRuntimeRef.current?.close();
+      compatibilityRuntimeRef.current = await CompatibilityPoseRuntime.create();
+      if (!mountedRef.current) {
+        compatibilityRuntimeRef.current.close();
+        compatibilityRuntimeRef.current = undefined;
+        return;
+      }
+      trackingBackendRef.current = 'compatibility';
+      trackingReadyRef.current = true;
+      setCameraError('');
+      setPoseStatus('Compatibility tracking ready. Keep your full body in frame.');
+      scheduleNextFrame();
+    } catch {
+      showCameraRecovery('Pose tracking could not start on this device. Retry the camera or use the set timer.');
+    }
+  }, [scheduleNextFrame, showCameraRecovery]);
+
+  const createWorkerBitmap = useCallback(async (video: HTMLVideoElement) => {
+    try {
+      return await createImageBitmap(video);
+    } catch {
+      const canvas = frameCanvasRef.current ?? document.createElement('canvas');
+      frameCanvasRef.current = canvas;
+      canvas.width = video.videoWidth || 640;
+      canvas.height = video.videoHeight || 480;
+      const context = canvas.getContext('2d', { willReadFrequently: false });
+      if (!context) throw new Error('Camera frame canvas is unavailable.');
+      context.drawImage(video, 0, 0, canvas.width, canvas.height);
+      return createImageBitmap(canvas);
+    }
+  }, []);
+
+  const processFrame = useCallback(async (now: number) => {
+    const video = videoRef.current;
+    if (!video || video.readyState < 2 || !trackingReadyRef.current) {
+      scheduleNextFrame();
+      return;
+    }
+    if (now - lastFrameRef.current < 82 || processingFrameRef.current) {
+      scheduleNextFrame();
+      return;
+    }
+    lastFrameRef.current = now;
+    processingFrameRef.current = true;
+    try {
+      if (trackingBackendRef.current === 'compatibility' && compatibilityRuntimeRef.current) {
+        handlePoseDetection(compatibilityRuntimeRef.current.detect(video, now), now);
+      } else if (workerRef.current) {
+        const bitmap = await createWorkerBitmap(video);
+        workerRef.current.postMessage({ type: 'frame', frame: bitmap, timestampMs: now }, [bitmap]);
+        workerResponseTimerRef.current = window.setTimeout(() => {
+          processingFrameRef.current = false;
+          void startCompatibilityTracking('The background tracker stopped responding.');
+        }, 5000);
+      } else {
+        processingFrameRef.current = false;
+      }
+    } catch {
+      processingFrameRef.current = false;
+      frameFailureRef.current += 1;
+      if (frameFailureRef.current >= 3) await startCompatibilityTracking('Camera frames could not reach the background tracker.');
+    } finally {
+      scheduleNextFrame();
+    }
+  }, [createWorkerBitmap, handlePoseDetection, scheduleNextFrame, startCompatibilityTracking]);
+  frameHandlerRef.current = (now) => { void processFrame(now); };
+
+  const startWorkerTracking = useCallback(() => {
+    stopTrackingBackend();
+    const worker = new Worker(new URL('./pose.worker.ts', import.meta.url), { type: 'module' });
+    workerRef.current = worker;
+    trackingBackendRef.current = 'worker';
+    workerInitTimerRef.current = window.setTimeout(() => {
+      void startCompatibilityTracking('The background tracker took too long to load.');
+    }, 12_000);
+    worker.onmessage = (event) => {
+      if (event.data.type === 'ready') {
+        if (workerInitTimerRef.current) window.clearTimeout(workerInitTimerRef.current);
+        workerInitTimerRef.current = undefined;
+        trackingReadyRef.current = true;
+        setCameraError('');
+        setPoseStatus(`Tracking ready${event.data.delegate === 'CPU' ? ' in compatibility mode' : ''}. Keep your full body in frame.`);
+        scheduleNextFrame();
+        return;
+      }
+      if (event.data.type === 'error') {
+        processingFrameRef.current = false;
+        if (event.data.phase === 'init') void startCompatibilityTracking('The background tracker could not load.');
+        else {
+          frameFailureRef.current += 1;
+          if (frameFailureRef.current >= 3) void startCompatibilityTracking('The background tracker could not process camera frames.');
+        }
+        return;
+      }
+      handlePoseDetection({ poses: event.data.poses, worldPoses: event.data.worldPoses }, event.data.timestampMs);
+      scheduleNextFrame();
+    };
+    worker.postMessage({ type: 'init' });
+  }, [handlePoseDetection, scheduleNextFrame, startCompatibilityTracking, stopTrackingBackend]);
+
+  const startCamera = useCallback(async (resumeSet = false) => {
     if (!profile) { setStage('timer-ready'); return; }
+    stopCamera();
+    setCameraError('');
+    setMessage('');
+    setTrackingStable(false);
+    setPoseStatus('Loading pose tracking…');
+    stablePoseFramesRef.current = 0;
+    autoResumeSetRef.current = resumeSet;
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 } } });
       streamRef.current = stream;
-      const worker = new Worker(new URL('./pose.worker.ts', import.meta.url), { type: 'module' });
-      workerRef.current = worker;
-      worker.onmessage = (event) => {
-        if (event.data.type === 'ready') {
-          setPoseStatus('Tracking ready. Keep your full body in frame.');
-          if (!frameLoopRef.current) frameLoopRef.current = requestAnimationFrame(processFrame);
-          return;
-        }
-        if (event.data.type === 'error') { setMessage(event.data.message); return; }
-        const poses = event.data.poses as import('./types').PoseLandmark[][];
-        if (poses.length !== 1) {
-          stablePoseFramesRef.current = 0;
-          setTrackingStable(false);
-          setPoseStatus(poses.length > 1 ? 'Only one person can be in frame.' : 'Move back until your full body is visible.');
-          return;
-        }
-        const landmarks = poses[0];
-        if (canvasRef.current) drawPose(canvasRef.current, landmarks);
-        const required = [11, 12, 15, 16, 23, 24, 25, 26, 27, 28];
-        const fullBodyVisible = required.every((index) => (landmarks[index]?.visibility ?? 0) >= 0.6);
-        stablePoseFramesRef.current = fullBodyVisible ? stablePoseFramesRef.current + 1 : 0;
-        const stable = stablePoseFramesRef.current >= 10;
-        setTrackingStable(stable);
-        setPoseStatus(stable ? 'Full body tracked on this device' : 'Hold still with your full body in frame…');
-        if (stageRef.current !== 'active') return;
-        const exerciseTimestampMs = event.data.timestampMs - startedAtRef.current;
-        const rep = trackerRef.current?.process({ timestampMs: exerciseTimestampMs, landmarks });
-        if (rep) {
-          const count = baseRepCountRef.current + (trackerRef.current?.reps.length ?? 0);
-          setRepCount(count);
-          persistCameraProgress(count, baseDurationSecondsRef.current + Math.round(exerciseTimestampMs / 1000));
-          haptic(70);
-          spoken(`Rep ${count} complete.`);
-        }
-      };
-      worker.postMessage({ type: 'init' });
+      stream.getVideoTracks().forEach((track) => track.addEventListener('ended', () => {
+        if (!mountedRef.current || document.hidden || !(['setup', 'countdown', 'active'] as Stage[]).includes(stageRef.current)) return;
+        autoResumeSetRef.current = stageRef.current !== 'setup';
+        showCameraRecovery('The camera stream ended. Enable the camera again or continue with the set timer.');
+      }, { once: true }));
       setStage('setup');
-    } catch {
-      setMessage('Camera access was not available. You can still complete this exercise with the set timer.');
-      setStage('timer-ready');
+      startWorkerTracking();
+    } catch (error) {
+      const denied = error instanceof DOMException && error.name === 'NotAllowedError';
+      showCameraRecovery(denied
+        ? 'Camera access is blocked. Allow camera access in your browser settings, then try again.'
+        : 'Camera access was not available. Retry the camera or use the set timer.');
     }
-  };
+  }, [profile, showCameraRecovery, startWorkerTracking, stopCamera]);
 
-  const stageRef = useRef(stage);
   useEffect(() => { stageRef.current = stage; }, [stage]);
 
   const startCameraSet = async () => {
@@ -314,14 +494,87 @@ export function ExerciseSession({
     try {
       wakeLockRef.current = await (navigator as Navigator & { wakeLock?: { request: (type: 'screen') => Promise<{ release: () => Promise<void> }> } }).wakeLock?.request('screen');
     } catch { /* exercise remains usable without wake lock */ }
-    if (!frameLoopRef.current) frameLoopRef.current = requestAnimationFrame(processFrame);
+    scheduleNextFrame();
     setStage('countdown');
   };
+
+  useEffect(() => {
+    if (!streamRef.current || !videoRef.current || !(['setup', 'countdown', 'active'] as Stage[]).includes(stage)) return;
+    const video = videoRef.current;
+    const sync = () => syncMediaGeometry();
+    video.srcObject = streamRef.current;
+    video.addEventListener('loadedmetadata', sync);
+    video.addEventListener('resize', sync);
+    window.addEventListener('orientationchange', sync);
+    void video.play().then(() => {
+      sync();
+      scheduleNextFrame();
+    }).catch(() => showCameraRecovery('The camera preview could not start. Retry the camera or use the set timer.'));
+    return () => {
+      video.removeEventListener('loadedmetadata', sync);
+      video.removeEventListener('resize', sync);
+      window.removeEventListener('orientationchange', sync);
+    };
+  }, [scheduleNextFrame, showCameraRecovery, stage, syncMediaGeometry]);
+
+  useEffect(() => {
+    if (stage !== 'setup' || !trackingStable || !autoResumeSetRef.current) return;
+    autoResumeSetRef.current = false;
+    void startCameraSet();
+  }, [stage, trackingStable]);
+
+  useEffect(() => {
+    const visibilityChanged = () => {
+      if (document.hidden) {
+        const currentStage = stageRef.current;
+        if (!(['setup', 'countdown', 'active'] as Stage[]).includes(currentStage)) return;
+        pausedByVisibilityRef.current = true;
+        autoResumeSetRef.current = currentStage !== 'setup';
+        if (currentStage === 'active') {
+          const activeSeconds = Math.max(0, Math.round((performance.now() - startedAtRef.current) / 1000));
+          const count = baseRepCountRef.current + (trackerRef.current?.reps.length ?? 0);
+          const accumulatedSeconds = baseDurationSecondsRef.current + activeSeconds;
+          setElapsedSeconds(activeSeconds);
+          persistCameraProgress(count, accumulatedSeconds);
+          baseRepCountRef.current = count;
+          baseDurationSecondsRef.current = accumulatedSeconds;
+        }
+        stopRecording();
+        cancelFrameLoop();
+        videoRef.current?.pause();
+        setMessage('Camera tracking paused because Eat & Fit is no longer visible.');
+        setStage('camera-paused');
+        return;
+      }
+      if (!pausedByVisibilityRef.current) return;
+      pausedByVisibilityRef.current = false;
+      const resumeSet = autoResumeSetRef.current;
+      const streamIsLive = Boolean(streamRef.current?.getVideoTracks().some((track) => track.readyState === 'live'));
+      setCameraError('');
+      setTrackingStable(false);
+      stablePoseFramesRef.current = 0;
+      setPoseStatus('Restoring camera tracking…');
+      if (streamIsLive) {
+        setStage('setup');
+        if (!trackingReadyRef.current) startWorkerTracking();
+      } else {
+        void startCamera(resumeSet);
+      }
+    };
+    document.addEventListener('visibilitychange', visibilityChanged);
+    return () => document.removeEventListener('visibilitychange', visibilityChanged);
+  }, [cancelFrameLoop, persistCameraProgress, startCamera, startWorkerTracking, stopRecording]);
 
   const startTimer = () => {
     setElapsedSeconds(0);
     startedAtRef.current = performance.now();
     setStage('timer-active');
+  };
+
+  const continueWithTimer = () => {
+    stopRecording();
+    stopCamera();
+    setStage('timer-ready');
   };
 
   const adjustRep = (delta: number) => {
@@ -405,8 +658,10 @@ export function ExerciseSession({
     }
   };
 
+  const cameraSessionOpen = stage === 'setup' || stage === 'countdown' || stage === 'active';
+
   return (
-    <div className="exercise-session" role="dialog" aria-modal="true" aria-labelledby="exercise-session-title">
+    <div className={`exercise-session${cameraSessionOpen ? ' camera-session-open' : ''}`} role="dialog" aria-modal="true" aria-labelledby="exercise-session-title">
       <header className="exercise-session-header">
         <div><small>Set {setIndex + 1} of {workout.sets.length}</small><h2 id="exercise-session-title">{workout.exerciseName}</h2></div>
         <button className="icon-button" aria-label="Close exercise session" onClick={() => { releaseSession(); onClose(); }}><X /></button>
@@ -419,7 +674,7 @@ export function ExerciseSession({
           {profile ? <><p>Eat &amp; Fit uses your camera to count repetitions and evaluate movement. Live analysis runs on this device.</p><p>Video is not uploaded unless you later choose to analyze one rep with Meta.</p></> : <p>This exercise does not have a validated camera profile yet. You can complete it with a set timer.</p>}
           <div className="session-actions">
             {profile && <button className="primary-button" onClick={() => void startCamera()}><Camera size={18} /> Enable camera</button>}
-            <button className="text-button" onClick={() => setStage('timer-ready')}><Timer size={18} /> Use timer instead</button>
+            <button className="text-button" onClick={continueWithTimer}><Timer size={18} /> Use timer instead</button>
           </div>
         </section>
       )}
@@ -432,8 +687,20 @@ export function ExerciseSession({
             {stage === 'countdown' && <strong className="session-countdown">{countdown || 'Go'}</strong>}
             {stage === 'active' && <div className="rep-progress" style={{ '--rep-progress': `${Math.min(100, repCount / targetReps * 100)}%` } as CSSProperties}><strong>{repCount}</strong><span>of {targetReps} reps</span></div>}
           </div>
-          {stage === 'setup' && <div className="camera-setup"><h3>{profile?.cameraView === 'side' ? 'Use a side view' : 'Use a front view'}</h3><p>{profile?.setupInstruction}</p><p className="tracking-status">{poseStatus}</p><button className="primary-button" disabled={!trackingStable} onClick={() => void startCameraSet()}><Video size={18} /> {trackingStable ? 'Start set' : 'Waiting for stable tracking'}</button></div>}
+          {stage === 'setup' && <div className="camera-setup"><h3>{profile?.cameraView === 'side' ? 'Use a side view' : 'Use a front view'}</h3><p>{profile?.setupInstruction}</p><p className="tracking-status" role="status">{poseStatus}</p>{cameraError && <p className="session-error" role="alert">{cameraError}</p>}<button className="primary-button" disabled={!trackingStable} onClick={() => void startCameraSet()}><Video size={18} /> {trackingStable ? 'Start set' : 'Waiting for stable tracking'}</button></div>}
           {stage === 'active' && <div className="live-session-controls"><p>{poseStatus}</p><strong>{elapsedSeconds}s</strong><div><button className="text-button" disabled={repCount === 0} onClick={() => adjustRep(-1)}><Minus size={17} /> Undo last rep</button><button className="text-button" onClick={() => adjustRep(1)}><Plus size={17} /> Add rep</button></div></div>}
+        </section>
+      )}
+
+      {stage === 'camera-paused' && (
+        <section className="timer-session camera-recovery">
+          <span className="session-icon"><Camera /></span>
+          <h3>Camera paused</h3>
+          <p className="session-message" role="alert">{cameraError || message || 'Camera tracking paused. Enable the camera again or continue with the set timer.'}</p>
+          <div className="session-actions">
+            <button className="primary-button" onClick={() => void startCamera(autoResumeSetRef.current)}><Camera size={18} /> Enable camera</button>
+            <button className="text-button" onClick={continueWithTimer}><Timer size={18} /> Start timer</button>
+          </div>
         </section>
       )}
 
