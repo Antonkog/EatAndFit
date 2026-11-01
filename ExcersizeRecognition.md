@@ -143,7 +143,9 @@ Before counting begins:
 
 If framing is poor, show one instruction at a time, such as `Move farther from the camera` or `Turn your left side toward the camera`. Do not start while essential landmarks are missing.
 
-The setup uses one camera video and one matching canvas. Their intrinsic dimensions are synchronized on metadata load, video resize, and orientation change, and both layers use the same mirroring and `object-fit: contain` geometry. The skeleton appears as soon as any single pose is returned; readiness only controls the start action. The current readiness rule requires both shoulders, wrists, hips, knees, and ankles to remain at least 60% visible for ten consecutive analyzed frames.
+The setup uses one camera video and one matching canvas. Their intrinsic dimensions are synchronized on metadata load, video resize, and orientation change, and both layers use the same mirroring and `object-fit: contain` geometry. The skeleton appears as soon as any single pose is returned; readiness only controls the start action. The default readiness rule requires both shoulders, wrists, hips, knees, and ankles to remain at least 60% visible for ten consecutive analyzed frames.
+
+Bodyweight Squat uses one exercise-specific setup rule for a realistic side view. Either the left or right shoulder–hip–knee–ankle chain is accepted when all four landmarks have at least 45% visibility for five consecutive analyzed frames. Wrists and the naturally occluded far-side limbs are not required. This exception does not change Barbell Back Squat, any other movement profile, repetition confidence, movement thresholds, or form assessment.
 
 On mobile in portrait orientation, the camera occupies `100dvh`. The header remains over the top of the preview, while a 50%-opaque bottom panel contains the required view, placement instruction, tracking status, and start action. Progress and active controls also remain over the video. Desktop and landscape keep their existing layout.
 

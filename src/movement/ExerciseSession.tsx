@@ -8,6 +8,7 @@ import { MovementTracker, selectRepresentativeRep } from './engine';
 import { analyzeMovementWithMeta } from './metaAnalysis';
 import { CompatibilityPoseRuntime, type PoseDetection } from './poseCompatibility';
 import { drawPose } from './poseCanvas';
+import { evaluatePoseReadiness, nextReadinessFrameCount } from './readiness';
 import type { MovementProfile } from './types';
 
 type Stage = 'consent' | 'setup' | 'countdown' | 'active' | 'camera-paused' | 'timer-ready' | 'timer-active' | 'timer-confirm' | 'rest';
@@ -295,12 +296,11 @@ export function ExerciseSession({
     }
     const landmarks = poses[0];
     if (canvasRef.current) drawPose(canvasRef.current, landmarks);
-    const required = [11, 12, 15, 16, 23, 24, 25, 26, 27, 28];
-    const fullBodyVisible = required.every((index) => (landmarks[index]?.visibility ?? 0) >= 0.6);
-    stablePoseFramesRef.current = fullBodyVisible ? stablePoseFramesRef.current + 1 : 0;
-    const stable = stablePoseFramesRef.current >= 10;
+    const readiness = evaluatePoseReadiness(profile?.id, landmarks);
+    stablePoseFramesRef.current = nextReadinessFrameCount(stablePoseFramesRef.current, readiness.landmarksVisible);
+    const stable = stablePoseFramesRef.current >= readiness.requiredConsecutiveFrames;
     setTrackingStable(stable);
-    setPoseStatus(stable ? 'Full body tracked on this device' : 'Hold still with your full body in frame…');
+    setPoseStatus(stable ? readiness.readyMessage : readiness.waitingMessage);
     if (stageRef.current !== 'active') return;
     const exerciseTimestampMs = timestampMs - startedAtRef.current;
     const rep = trackerRef.current?.process({ timestampMs: exerciseTimestampMs, landmarks });
@@ -311,7 +311,7 @@ export function ExerciseSession({
       haptic(70);
       spoken(`Rep ${count} complete.`);
     }
-  }, [persistCameraProgress]);
+  }, [persistCameraProgress, profile?.id]);
 
   const showCameraRecovery = useCallback((error: string) => {
     const currentStage = stageRef.current;

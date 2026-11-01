@@ -5,11 +5,12 @@ import test from 'node:test';
 const session = readFileSync(new URL('../src/movement/ExerciseSession.tsx', import.meta.url), 'utf8');
 const worker = readFileSync(new URL('../src/movement/pose.worker.ts', import.meta.url), 'utf8');
 const compatibility = readFileSync(new URL('../src/movement/poseCompatibility.ts', import.meta.url), 'utf8');
+const readiness = readFileSync(new URL('../src/movement/readiness.ts', import.meta.url), 'utf8');
 const styles = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
 
 test('camera session renders one live preview and exposes the skeleton before readiness', () => {
   assert.equal(session.match(/<video ref=\{videoRef\}/g)?.length, 1);
-  assert.ok(session.indexOf('drawPose(canvasRef.current, landmarks)') < session.indexOf('const fullBodyVisible'));
+  assert.ok(session.indexOf('drawPose(canvasRef.current, landmarks)') < session.indexOf('evaluatePoseReadiness(profile?.id, landmarks)'));
   assert.match(session, /loadedmetadata/);
   assert.match(session, /orientationchange/);
   assert.match(session, /\.addEventListener\('resize'/);
@@ -51,8 +52,9 @@ test('portrait camera session fills the viewport and overlays a translucent inst
   assert.match(styles, /background: rgba\(4,6,4,\.5\)/);
 });
 
-test('first reliability commit retains the existing bilateral readiness gate', () => {
-  assert.match(session, /const required = \[11, 12, 15, 16, 23, 24, 25, 26, 27, 28\]/);
-  assert.match(session, />= 0\.6/);
-  assert.match(session, /stablePoseFramesRef\.current >= 10/);
+test('camera session delegates readiness without delaying skeleton rendering', () => {
+  assert.match(session, /evaluatePoseReadiness\(profile\?\.id, landmarks\)/);
+  assert.match(readiness, /DEFAULT_REQUIRED_LANDMARKS = \[11, 12, 15, 16, 23, 24, 25, 26, 27, 28\]/);
+  assert.match(readiness, /DEFAULT_REQUIRED_LANDMARKS, 0\.6/);
+  assert.match(readiness, /requiredConsecutiveFrames: 10/);
 });
