@@ -36,13 +36,14 @@ Eat & Fit is built in two free editions.
 | Barcode and packaged-product lookup | Yes | Yes |
 | Photo ingredient recognition | Hidden | Available after a verified key is saved |
 | AI recipe generation | Hidden | Available after a verified key is saved |
+| AI recipe photos | Hidden | Generated automatically when the build flag is enabled |
 | Adult AI energy calibration | No | Automatic when an eligible profile and key exist |
 | Personalized two-week training | Hidden | Available to eligible adults after a verified key is saved |
 | Local camera-guided exercise sessions | Yes | Yes |
 | Post-set SAM/Muse movement coaching | Hidden | Available to adults with a verified Meta key and separate per-rep consent |
 | Provider-key settings | Hidden | Yes |
 
-The build-time edition flag is `APP_EDITION=core` or `APP_EDITION=byok`. The Core API does not expose AI routes. The application never stores a model API key in source control, `.env`, Docker configuration, or server environment variables.
+The shared application configuration resolves `APP_EDITION=core` or `APP_EDITION=byok` and all feature availability used by the browser and API. `RECIPE_PHOTO_GENERATION_ENABLED` defaults to true for BYOK and is always false for Core. Firebase Analytics availability is derived from its public configuration rather than treated as a user-facing switch. The Core API does not expose AI routes. The application never stores a model API key in source control, `.env`, Docker configuration, or server environment variables.
 
 ## 3. Navigation and global behavior
 
@@ -462,6 +463,14 @@ The selected provider must return exactly two recipes. Each recipe requires a ti
 
 Users can inspect a generated recipe, run the USDA nutrition check, choose date/meal/servings, and save it to Calendar. AI values are always presented as estimates requiring review.
 
+### 13.3 Generated photos
+
+When recipe photo generation is enabled, the selected recipe provider also supplies the image: Meta uses Muse Image 1.0 directly from the browser and Gemini uses the same-origin forwarding endpoint. There is no automatic provider fallback.
+
+After both recipe objects are validated, their image requests run concurrently. The result grid remains hidden until both requests settle. A failed image uses the normal placeholder without hiding or regenerating its valid recipe. Successful images are labelled `AI-generated image`; they are representative and do not affect ingredients, nutrition, USDA checks, or serving calculations.
+
+Generated images remain in memory while recipes are reviewed. Adding a photographed recipe to Calendar compresses its image and saves it in local IndexedDB. Provider keys and temporary remote image URLs are never stored.
+
 ## 14. Scan tools
 
 ### 14.1 Photo ingredient recognition
@@ -529,13 +538,14 @@ The legal disclosure attributes and links the exercise catalog, Adult/Older Adul
 
 ### 17.1 Main IndexedDB database
 
-Database: `eat-and-fit`, schema version 1.
+Database: `eat-and-fit`, schema version 2.
 
 Object stores:
 
 - `workouts`, keyed by workout ID.
 - `food`, keyed by food-entry ID.
 - `products`, keyed by barcode.
+- `recipeImages`, keyed by generated image ID and containing bounded local image Blobs.
 
 ### 17.2 Other browser storage
 
@@ -552,8 +562,9 @@ JSON backups use `schemaVersion: 1` and contain export time, workouts, food entr
 - Exercise-demonstration preference.
 - Cached AI calibration.
 - Welcome-dialog dismissal timestamp and cached cuisine location.
+- AI-generated recipe image Blobs and their local references.
 
-Import validates the top-level schema version and array presence, clears the existing three history stores, and then restores their records. `Delete local history` clears those same three stores; it does not delete profile or encrypted AI settings.
+Import validates the top-level schema version and array presence, clears the existing history and image stores, strips any unsupported local image references, and then restores the records. `Delete local history` clears the history and generated-image stores; it does not delete profile or encrypted AI settings.
 
 ## 18. Backend API contract
 
@@ -579,6 +590,7 @@ Import validates the top-level schema version and array presence, clears the exi
 | POST | `/api/ai/ingredients/detect` | Server-side recognition path used by Gemini |
 | GET | `/api/ai/recipes/healthz` | Supported recipe providers |
 | POST | `/api/ai/recipes/generate` | Server-side recipe path used by Gemini |
+| POST | `/api/ai/recipes/image` | Server-side recipe-image path used by Gemini when enabled |
 | POST | `/api/ai/training/generate` | Server-side training path used by Gemini |
 | POST | `/api/ai/training/calibrate` | Server-side calibration path used by Gemini |
 | POST | `/api/ai/movement/prepare` | Temporarily normalize a consented movement recording to muted MP4; no Meta key is sent to Eat & Fit |
@@ -653,7 +665,7 @@ npm run build:byok
 docker compose config
 ```
 
-Feature tests cover provider selection and validation, scanner behavior, secure-key encryption, recipe recommendations/search and USDA calculations, profile reminder boundaries, global numeric-zero replacement, exercise-energy formulas and provenance, calibration limits, training-plan validation, Calendar numeric editing and bulk operations, Balance calculations and gauge behavior, backup validation, legal content, favicon branding, and core/BYOK design visibility.
+Feature tests cover centralized configuration, provider selection and validation, recipe image generation and local persistence, scanner behavior, secure-key encryption, recipe recommendations/search and USDA calculations, profile reminder boundaries, global numeric-zero replacement, exercise-energy formulas and provenance, calibration limits, training-plan validation, Calendar numeric editing and bulk operations, Balance calculations and gauge behavior, backup validation, legal content, favicon branding, and core/BYOK design visibility.
 
 ## 23. Explicit non-features and current limitations
 
@@ -666,5 +678,5 @@ Feature tests cover provider selection and validation, scanner behavior, secure-
 - No body-weight history or macro targets.
 - No manual generic activity entry.
 - No video technique analysis, repetition counting, live form-error alerts, or rest timer yet.
-- Backups do not include profile, AI keys, provider preference, or calibration.
+- Backups do not include profile, AI keys, provider preference, calibration, or locally generated recipe photos.
 - Editing the quantity of an already saved food row does not currently recompute its stored nutrients.

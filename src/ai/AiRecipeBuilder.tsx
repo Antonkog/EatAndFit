@@ -12,14 +12,17 @@ import {
   Utensils,
   X,
 } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { readJsonResponse } from '../api/readJsonResponse';
-import { localDate, saveFood, type MealType } from '../data/db';
+import { RECIPE_PHOTO_GENERATION_ENABLED } from '../config/appConfig';
+import { localDate, removeRecipeImage, saveFood, saveRecipeImage, type MealType } from '../data/db';
 import { useBackNavigation } from '../navigation/backNavigation';
 import { ingredientSearchQuery, nutritionPerServing, suggestIngredientGrams, type UsdaNutrient, type UsdaPortion } from '../nutrition/recipeNutrition';
 import { IngredientScannerTrigger } from '../scanner/ScanView';
 import { getRecognitionCredential } from '../settings/secureKeys';
 import { generateRecipesWithMeta } from './metaRecipeGeneration';
+import { compressRecipeImage } from './recipeImageStorage';
+import { attachGeneratedRecipeImages, createRecipeImageGenerationProvider, type GeneratedAiRecipe, type GeneratedRecipeImage } from './recipeImageProvider';
 import { validateAiFilters, type AiRecipe } from './validation';
 
 type Range = { min: string; max: string };
@@ -67,9 +70,10 @@ export function AiRecipeView({
   const [maxTime, setMaxTime] = useState('');
   const [servings, setServings] = useState('2');
   const [filtersOpen, setFiltersOpen] = useState(false);
-  const [recipes, setRecipes] = useState<AiRecipe[]>([]);
-  const [selected, setSelected] = useState<AiRecipe>();
+  const [recipes, setRecipes] = useState<GeneratedAiRecipe[]>([]);
+  const [selected, setSelected] = useState<GeneratedAiRecipe>();
   const [loading, setLoading] = useState(false);
+  const [loadingStage, setLoadingStage] = useState<'recipes' | 'photos'>('recipes');
   const [error, setError] = useState('');
 
   const activeFilterCount = [cuisine, dishType, mealType, excluded, maxTime, calories.min, calories.max, protein.min, protein.max, carbs.min, carbs.max, fat.min, fat.max, ...selectedDiets, ...selectedAllergens].filter(Boolean).length;
@@ -86,7 +90,10 @@ export function AiRecipeView({
       }
     }
     setLoading(true);
+    setLoadingStage('recipes');
     setError('');
+    setRecipes([]);
+    setSelected(undefined);
     try {
       const credential = await getRecognitionCredential();
       if (!credential) throw new Error('Add a Meta or Google Gemini API key in Settings first.');
@@ -102,22 +109,29 @@ export function AiRecipeView({
         nutrition: { calories, protein, carbs, fat },
         maxTime,
       };
-      if (credential.provider === 'META') {
-        setRecipes(await generateRecipesWithMeta(filters, credential.apiKey));
+      let generated: AiRecipe[];
+      if (credential.provider === 'META') generated = await generateRecipesWithMeta(filters, credential.apiKey);
+      else {
+        const response = await fetch('/api/ai/recipes/generate', {
+          method: 'POST',
+          headers: {
+            authorization: `Bearer ${credential.apiKey}`,
+            'content-type': 'application/json',
+            'x-recognition-provider': credential.provider,
+          },
+          body: JSON.stringify(filters),
+        });
+        const data = await readJsonResponse<{ error?: string; recipes: AiRecipe[] }>(response, 'Recipe generation');
+        if (!response.ok) throw new Error(data.error || 'Recipe generation failed.');
+        generated = data.recipes;
+      }
+      if (!RECIPE_PHOTO_GENERATION_ENABLED) {
+        setRecipes(generated);
         return;
       }
-      const response = await fetch('/api/ai/recipes/generate', {
-        method: 'POST',
-        headers: {
-          authorization: `Bearer ${credential.apiKey}`,
-          'content-type': 'application/json',
-          'x-recognition-provider': credential.provider,
-        },
-        body: JSON.stringify(filters),
-      });
-      const data = await readJsonResponse<{ error?: string; recipes: AiRecipe[] }>(response, 'Recipe generation');
-      if (!response.ok) throw new Error(data.error || 'Recipe generation failed.');
-      setRecipes(data.recipes);
+      setLoadingStage('photos');
+      const imageProvider = createRecipeImageGenerationProvider(credential);
+      setRecipes(await attachGeneratedRecipeImages(generated, imageProvider));
     } catch (value) {
       setError(value instanceof Error ? value.message : 'Recipe generation failed.');
     } finally {
@@ -161,7 +175,7 @@ export function AiRecipeView({
           </div>
         </details>
         {error && <div className="error-state compact"><AlertTriangle /><div><strong>{error}</strong><button type="button" className="text-button" onClick={() => void submit()}><RefreshCw size={15} /> Retry</button><button type="button" className="text-button" onClick={onOpenSettings}>Open settings</button></div></div>}
-        <button className="primary-button large full" type="submit" disabled={loading}>{loading ? <LoaderCircle className="spin" /> : <Sparkles size={18} />}{loading ? 'Generating two recipes…' : 'Generate recipes'}</button>
+        <button className="primary-button large full" type="submit" disabled={loading}>{loading ? <LoaderCircle className="spin" /> : <Sparkles size={18} />}{loading ? loadingStage === 'photos' ? 'Creating recipe photos…' : 'Generating two recipes…' : 'Generate recipes'}</button>
       </form>
 
       <p className="estimate-warning">AI and database values are estimates and are not medical advice.</p>
@@ -185,11 +199,23 @@ function NumberField({ label, unit, value, onChange, min, max }: { label: string
   return <label>{label}<span><input type="number" min={min} max={max} value={value} onChange={(event) => onChange(event.target.value)} /><i>{unit}</i></span></label>;
 }
 
-function AiRecipeCard({ recipe, onClick }: { recipe: AiRecipe; onClick: () => void }) {
-  return <button className="ai-recipe-card" onClick={onClick}><span><Utensils /></span><div><div className="badge-row"><i className="badge solid">AI recipe</i><i className="badge outline">{recipe.minutes} min</i></div><h2>{recipe.title}</h2><p>{recipe.description}</p><small>{recipe.nutrition.calories} kcal · Protein {recipe.nutrition.protein.toFixed(1)}g · Fat {recipe.nutrition.fat.toFixed(1)}g</small></div></button>;
+function useGeneratedImage(image?: GeneratedRecipeImage) {
+  const [source, setSource] = useState('');
+  useEffect(() => {
+    if (!image) { setSource(''); return; }
+    const url = URL.createObjectURL(image.blob);
+    setSource(url);
+    return () => URL.revokeObjectURL(url);
+  }, [image]);
+  return source;
 }
 
-function AiRecipeDetail({ recipe, initialDate, onClose, onAdded }: { recipe: AiRecipe; initialDate: string; onClose: () => void; onAdded: (date: string) => void }) {
+function AiRecipeCard({ recipe, onClick }: { recipe: GeneratedAiRecipe; onClick: () => void }) {
+  const imageSource = useGeneratedImage(recipe.generatedImage);
+  return <button className="ai-recipe-card" onClick={onClick}><span>{imageSource ? <img src={imageSource} alt="" /> : <Utensils />}</span><div><div className="badge-row"><i className="badge solid">AI recipe</i>{imageSource && <i className="badge outline">AI-generated image</i>}<i className="badge outline">{recipe.minutes} min</i></div><h2>{recipe.title}</h2><p>{recipe.description}</p><small>{recipe.nutrition.calories} kcal · Protein {recipe.nutrition.protein.toFixed(1)}g · Fat {recipe.nutrition.fat.toFixed(1)}g</small></div></button>;
+}
+
+function AiRecipeDetail({ recipe, initialDate, onClose, onAdded }: { recipe: GeneratedAiRecipe; initialDate: string; onClose: () => void; onAdded: (date: string) => void }) {
   useBackNavigation(true, onClose, 100);
   const [mode, setMode] = useState<'ai' | 'usda'>('ai');
   const [matchOpen, setMatchOpen] = useState(false);
@@ -199,9 +225,28 @@ function AiRecipeDetail({ recipe, initialDate, onClose, onAdded }: { recipe: AiR
   const [added, setAdded] = useState(false);
   const [usdaNutrition, setUsdaNutrition] = useState<typeof recipe.nutrition>();
   const nutrition = mode === 'usda' && usdaNutrition ? usdaNutrition : recipe.nutrition;
+  const imageSource = useGeneratedImage(recipe.generatedImage);
 
   const save = async () => {
-    await saveFood({ id: crypto.randomUUID(), date, title: recipe.title, provider: 'ai', mealType: meal, quantity, quantityUnit: 'serving', calories: nutrition.calories * quantity, protein: nutrition.protein * quantity, carbs: nutrition.carbs * quantity, fat: nutrition.fat * quantity, payload: recipe });
+    let localImageId: string | undefined;
+    const { generatedImage, ...storedRecipe } = recipe;
+    if (generatedImage) {
+      try {
+        localImageId = await saveRecipeImage({
+          blob: await compressRecipeImage(generatedImage.blob),
+          provider: generatedImage.provider,
+          model: generatedImage.model,
+        });
+      } catch {
+        localImageId = undefined;
+      }
+    }
+    try {
+      await saveFood({ id: crypto.randomUUID(), date, title: recipe.title, provider: 'ai', mealType: meal, quantity, quantityUnit: 'serving', localImageId, calories: nutrition.calories * quantity, protein: nutrition.protein * quantity, carbs: nutrition.carbs * quantity, fat: nutrition.fat * quantity, payload: storedRecipe });
+    } catch (error) {
+      if (localImageId) await removeRecipeImage(localImageId).catch(() => undefined);
+      throw error;
+    }
     setAdded(true);
     onAdded(date);
     onClose();
@@ -213,9 +258,9 @@ function AiRecipeDetail({ recipe, initialDate, onClose, onAdded }: { recipe: AiR
         <button className="sheet-close" aria-label="Close" onClick={onClose}><X /></button>
         <header><h2>{recipe.title}</h2><p>Generated by the configured AI model with an optional nutrition check.</p></header>
         <div className="sheet-content">
-          <div className="recipe-detail-placeholder"><Utensils /></div>
+          {imageSource ? <img className="recipe-detail-image" src={imageSource} alt="" /> : <div className="recipe-detail-placeholder"><Utensils /></div>}
           <p>{recipe.description}</p>
-          <div className="badge-row"><span className="badge solid">AI recipe</span><span className="badge outline"><Clock3 size={13} /> {recipe.minutes} min</span></div>
+          <div className="badge-row"><span className="badge solid">AI recipe</span>{imageSource && <span className="badge outline">AI-generated image</span>}<span className="badge outline"><Clock3 size={13} /> {recipe.minutes} min</span></div>
           <div className="nutrition-mode"><button className={mode === 'ai' ? 'active' : ''} onClick={() => setMode('ai')}>AI estimate</button><button className={mode === 'usda' ? 'active' : ''} onClick={() => usdaNutrition ? setMode('usda') : setMatchOpen(true)}>Nutrition check</button></div>
           <MacroGrid values={nutrition} />
           <section><h3>Ingredients</h3><div className="ai-ingredient-list">{recipe.ingredients.map((item) => <div key={item}><strong>{item}</strong><small>{mode === 'usda' ? 'USDA database' : 'AI estimate'}</small></div>)}</div></section>

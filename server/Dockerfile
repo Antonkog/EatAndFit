@@ -3,6 +3,7 @@ WORKDIR /app
 RUN apk add --no-cache ffmpeg
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev
+COPY app.config.mjs ./
 COPY server ./server
 USER node
 EXPOSE 3000

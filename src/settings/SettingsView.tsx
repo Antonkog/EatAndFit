@@ -1,5 +1,6 @@
 import { ChevronDown, Download, ExternalLink, KeyRound, Share2, ShieldCheck, Smartphone, Trash2, Upload, UserRound } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
+import { BYOK_AI_ENABLED, RECIPE_PHOTO_GENERATION_ENABLED } from '../config/appConfig';
 import { APP_EDITION_LABEL } from '../config/edition';
 import { clearData, exportBackup, importBackup, isBackup } from '../data/db';
 import { ProfileForm } from '../profile/ProfileForm';
@@ -26,7 +27,7 @@ export function SettingsView() {
   const [installMessage, setInstallMessage] = useState('');
 
   useEffect(() => {
-    if (!__SMART_SCANNER__) return;
+    if (!BYOK_AI_ENABLED) return;
     const refresh = () => void getRecognitionKeyStatus().then(setKeyStatus).catch(() => setKeyMessage('Secure key storage is unavailable in this browser.'));
     refresh();
     window.addEventListener(RECOGNITION_KEYS_CHANGED, refresh);
@@ -120,10 +121,10 @@ export function SettingsView() {
         )}
         {installMessage && <p className="key-message" role="status">{installMessage}</p>}
       </article>
-      {__SMART_SCANNER__ && (
+      {BYOK_AI_ENABLED && (
         <article className="settings-card api-key-settings">
           <h3><KeyRound size={20} /> AI provider keys</h3>
-          <p>Smart Scan, AI recipe generation, adult energy calibration, and personalized training are enabled when the selected provider has a verified key. Adults with a verified Meta key can also choose post-set movement coaching, even when Gemini is selected for other AI features. Your provider may charge your account for API requests.</p>
+          <p>Smart Scan, AI recipe generation{RECIPE_PHOTO_GENERATION_ENABLED ? ' with AI-generated food photos' : ''}, adult energy calibration, and personalized training are enabled when the selected provider has a verified key. Adults with a verified Meta key can also choose post-set movement coaching, even when Gemini is selected for other AI features. Your provider may charge your account for API requests.</p>
           <div className="key-security-note">
             <ShieldCheck size={20} />
             <p>Keys are encrypted.</p>
@@ -144,7 +145,7 @@ export function SettingsView() {
       )}
       <article className="settings-card">
         <h3>Local data</h3>
-        <p>Your workout and food history stays in this browser unless you export it.{__SMART_SCANNER__ ? ' API keys are intentionally excluded from backups.' : ''}</p>
+        <p>Your workout and food history stays in this browser unless you export it.{BYOK_AI_ENABLED ? ' API keys and locally generated recipe photos are intentionally excluded from backups.' : ''}</p>
         <div className="settings-actions">
           <button className="text-button" onClick={() => void download()}><Download size={17} /> Export backup</button>
           <button className="text-button" onClick={() => input.current?.click()}><Upload size={17} /> Import backup</button>

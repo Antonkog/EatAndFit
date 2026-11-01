@@ -27,12 +27,13 @@ export type Workout = {
   trainingPlanId?: string;
 };
 export type MealType = 'breakfast' | 'lunch' | 'dinner' | 'snack';
-export type FoodEntry = { id: string; date: string; title: string; calories?: number; protein?: number; carbs?: number; fat?: number; provider: string; mealType?: MealType; quantity?: number; quantityUnit?: 'serving' | 'g' | 'ml'; imageUrl?: string; payload?: unknown };
+export type FoodEntry = { id: string; date: string; title: string; calories?: number; protein?: number; carbs?: number; fat?: number; provider: string; mealType?: MealType; quantity?: number; quantityUnit?: 'serving' | 'g' | 'ml'; imageUrl?: string; localImageId?: string; payload?: unknown };
 export type LocalProduct = { barcode: string; name: string; calories?: number; protein?: number; carbs?: number; fat?: number };
+export type StoredRecipeImage = { id: string; blob: Blob; provider: 'META' | 'GEMINI'; model: string; createdAt: string };
 export type Backup = { schemaVersion: 1; exportedAt: string; workouts: Workout[]; food: FoodEntry[]; products: LocalProduct[] };
 
 const DATABASE = 'eat-and-fit';
-const VERSION = 1;
+const VERSION = 2;
 
 function openDatabase(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
@@ -42,6 +43,7 @@ function openDatabase(): Promise<IDBDatabase> {
       if (!db.objectStoreNames.contains('workouts')) db.createObjectStore('workouts', { keyPath: 'id' });
       if (!db.objectStoreNames.contains('food')) db.createObjectStore('food', { keyPath: 'id' });
       if (!db.objectStoreNames.contains('products')) db.createObjectStore('products', { keyPath: 'barcode' });
+      if (!db.objectStoreNames.contains('recipeImages')) db.createObjectStore('recipeImages', { keyPath: 'id' });
     };
     request.onsuccess = () => resolve(request.result);
     request.onerror = () => reject(request.error);
@@ -189,15 +191,43 @@ export async function saveFood(entry: FoodEntry) { await put('food', entry); win
 export async function foodForDate(date: string) { return (await all<FoodEntry>('food')).filter((item) => item.date === date); }
 export async function removeFood(id: string) {
   const db = await openDatabase();
-  await requestResult(db.transaction('food', 'readwrite').objectStore('food').delete(id));
-  db.close();
+  try {
+    const transaction = db.transaction(['food', 'recipeImages'], 'readwrite');
+    const entry = await requestResult(transaction.objectStore('food').get(id)) as FoodEntry | undefined;
+    transaction.objectStore('food').delete(id);
+    if (entry?.localImageId) transaction.objectStore('recipeImages').delete(entry.localImageId);
+    await transactionDone(transaction);
+  } finally {
+    db.close();
+  }
   window.dispatchEvent(new Event('eatfit-data-change'));
+}
+export async function saveRecipeImage(image: Omit<StoredRecipeImage, 'id' | 'createdAt'>) {
+  const value: StoredRecipeImage = { id: crypto.randomUUID(), createdAt: new Date().toISOString(), ...image };
+  await put('recipeImages', value);
+  return value.id;
+}
+export async function getRecipeImage(id: string) {
+  const db = await openDatabase();
+  const result = await requestResult(db.transaction('recipeImages').objectStore('recipeImages').get(id)) as StoredRecipeImage | undefined;
+  db.close();
+  return result;
+}
+export async function removeRecipeImage(id: string) {
+  const db = await openDatabase();
+  await requestResult(db.transaction('recipeImages', 'readwrite').objectStore('recipeImages').delete(id));
+  db.close();
 }
 export async function saveProduct(product: LocalProduct) { await put('products', product); }
 export async function getProduct(barcode: string) { const db = await openDatabase(); const result = await requestResult(db.transaction('products').objectStore('products').get(barcode)); db.close(); return result as LocalProduct | undefined; }
 
+export function foodEntriesForBackup(entries: FoodEntry[]) {
+  return entries.map(({ localImageId: _localImageId, ...entry }) => entry);
+}
+
 export async function exportBackup(): Promise<Backup> {
-  return { schemaVersion: 1, exportedAt: new Date().toISOString(), workouts: await all('workouts'), food: await all('food'), products: await all('products') };
+  const food = foodEntriesForBackup(await all<FoodEntry>('food'));
+  return { schemaVersion: 1, exportedAt: new Date().toISOString(), workouts: await all('workouts'), food, products: await all('products') };
 }
 
 export function isBackup(value: unknown): value is Backup {
@@ -210,15 +240,15 @@ export async function importBackup(backup: Backup) {
   if (!isBackup(backup)) throw new Error('This is not a valid Eat & Fit backup.');
   await clearData();
   for (const item of backup.workouts) await put('workouts', item);
-  for (const item of backup.food) await put('food', item);
+  for (const { localImageId: _localImageId, ...item } of backup.food) await put('food', item);
   for (const item of backup.products) await put('products', item);
   window.dispatchEvent(new Event('eatfit-data-change'));
 }
 
 export async function clearData() {
   const db = await openDatabase();
-  const transaction = db.transaction(['workouts', 'food', 'products'], 'readwrite');
-  transaction.objectStore('workouts').clear(); transaction.objectStore('food').clear(); transaction.objectStore('products').clear();
+  const transaction = db.transaction(['workouts', 'food', 'products', 'recipeImages'], 'readwrite');
+  transaction.objectStore('workouts').clear(); transaction.objectStore('food').clear(); transaction.objectStore('products').clear(); transaction.objectStore('recipeImages').clear();
   await transactionDone(transaction);
   db.close();
 }

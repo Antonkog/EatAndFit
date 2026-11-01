@@ -10,6 +10,7 @@ import {
   X,
 } from 'lucide-react';
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
+import { BYOK_AI_ENABLED } from '../config/appConfig';
 import { localDate, scheduleWorkout } from '../data/db';
 import { estimateSetDurationSeconds } from '../energy/estimates';
 import { classifyExercise } from '../energy/sources';
@@ -22,7 +23,7 @@ import type { Exercise, ExerciseCatalog } from './types';
 type Gender = ProfileSex;
 type MuscleGroup = { name: string; targets: string[] };
 
-const SmartTrainingPlanner = typeof __SMART_SCANNER__ !== 'undefined' && __SMART_SCANNER__
+const SmartTrainingPlanner = BYOK_AI_ENABLED
   ? lazy(() => import('../training/TrainingPlanner').then((module) => ({ default: module.TrainingPlanner })))
   : null;
 

@@ -15,6 +15,7 @@ import {
   X,
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
+import { BYOK_AI_ENABLED } from '../config/appConfig';
 import { localDate, saveFood, type MealType } from '../data/db';
 import { useBackNavigation } from '../navigation/backNavigation';
 import { recipeSearchParams } from './filters';
@@ -165,7 +166,7 @@ export function RecipeView({
         <h1>Recipes</h1>
         <div className="recipe-heading-actions">
           {recommendationsEnabled && <button className="text-button recipe-refresh-button" type="button" onClick={() => { setRecommendationVariation((value) => value + 1); setPage(1); }}><RefreshCw size={17} /> Refresh suggestions</button>}
-          {__SMART_SCANNER__ && onOpenAi && <button className="primary-button large recipe-action-button" onClick={onOpenAi}><Sparkles size={18} /> Generate AI recipe</button>}
+          {BYOK_AI_ENABLED && onOpenAi && <button className="primary-button large recipe-action-button" onClick={onOpenAi}><Sparkles size={18} /> Generate AI recipe</button>}
         </div>
       </div>
 

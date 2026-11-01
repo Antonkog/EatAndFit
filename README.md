@@ -7,7 +7,7 @@ Workout and meal history is stored in the browser. There are no user accounts or
 ## Free editions
 
 - **Core** contains every feature that does not require a private model API key. Barcode lookup remains available, while the ingredient-recognition and AI-recipe controls are hidden.
-- **BYOK AI** adds photo ingredient recognition, AI recipe generation, conservative adult energy calibration, and personalized two-week training plans. The user stores either a Meta or Google Gemini key in Settings and chooses the active provider. A key is checked once before it is encrypted and saved. Saving or removing a key updates the available UI immediately. There is no automatic provider fallback.
+- **BYOK AI** adds photo ingredient recognition, AI recipe generation with optional generated food photos, conservative adult energy calibration, and personalized two-week training plans. The user stores either a Meta or Google Gemini key in Settings and chooses the active provider. A key is checked once before it is encrypted and saved. Saving or removing a key updates the available UI immediately. There is no automatic provider fallback.
 
 BYOK keys are encrypted with AES-GCM using a non-exportable device-local key and stored in browser IndexedDB. They are excluded from backups and analytics. Meta requests go from the browser to Meta; Gemini requests are forwarded over HTTPS for that request. Eat & Fit does not persist the key or submitted content. Local encryption protects keys at rest, but it cannot protect an unlocked browser, compromised device, or compromised application origin.
 
@@ -49,6 +49,8 @@ Docker defaults to Core. Select BYOK at build time with the non-secret edition f
 ```bash
 APP_EDITION=byok docker compose up -d --build api web
 ```
+
+BYOK builds generate photos for AI recipes by default. Set `RECIPE_PHOTO_GENERATION_ENABLED=false` to retain text-only AI recipes. Core always disables this feature regardless of the value.
 
 Firebase Analytics is optional and remains disabled when its public configuration is absent.
 

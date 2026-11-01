@@ -3,7 +3,7 @@ import test from 'node:test';
 import { legalSources } from '../src/settings/legal';
 
 test('settings identify all external data sources and licenses', () => {
-  assert.equal(legalSources.length, 11);
+  assert.equal(legalSources.length, 12);
   assert.match(legalSources.find((item) => item.title === 'Recipe catalog')!.license, /NC/);
   assert.match(legalSources.find((item) => item.title === 'Nutrition data')!.license, /CC0/);
   const joined = legalSources.map((item) => `${item.title} ${item.license} ${item.body}`).join(' ');
@@ -16,4 +16,6 @@ test('settings identify all external data sources and licenses', () => {
   assert.match(joined, /MediaPipe/);
   assert.match(joined, /SAM 3\.1/);
   assert.match(joined, /Muse Spark 1\.3/);
+  assert.match(joined, /AI-generated recipe photos/);
+  assert.match(joined, /excluded from backups/);
 });

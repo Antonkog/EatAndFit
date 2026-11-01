@@ -13,11 +13,13 @@ test('device secrets use authenticated encryption and do not contain plaintext',
 
 test('build editions keep key-dependent features out of Core navigation', () => {
   const edition = readFileSync(new URL('../src/config/edition.ts', import.meta.url), 'utf8');
+  const configuration = readFileSync(new URL('../src/config/appConfig.ts', import.meta.url), 'utf8');
   const app = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
   const recipe = readFileSync(new URL('../src/recipes/RecipeView.tsx', import.meta.url), 'utf8');
-  assert.match(edition, /__SMART_SCANNER__/);
+  assert.match(edition, /BYOK_AI_ENABLED/);
+  assert.match(configuration, /__APP_CONFIG__/);
   assert.match(app, /lazy\(\(\) => import\('\.\/scanner\/ScanView'\)/);
   assert.match(app, /lazy\(\(\) => import\('\.\/ai\/AiRecipeBuilder'\)/);
-  assert.match(recipe, /__SMART_SCANNER__ && onOpenAi/);
+  assert.match(recipe, /BYOK_AI_ENABLED && onOpenAi/);
   assert.match(recipe, /Generate AI recipe/);
 });

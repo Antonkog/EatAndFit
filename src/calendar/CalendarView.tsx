@@ -14,6 +14,7 @@ import {
   X,
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { BYOK_AI_ENABLED } from '../config/appConfig';
 import {
   allFood,
   allWorkouts,
@@ -43,6 +44,7 @@ import { CalendarFoodDetail } from './CalendarEntryDetail';
 import { ExerciseDetail } from '../exercises/ExerciseLibrary';
 import type { Exercise } from '../exercises/types';
 import { ExerciseSession } from '../movement/ExerciseSession';
+import { useFoodImage } from '../data/useFoodImage';
 import { movementProfileForExercise } from '../movement/profiles';
 import { useBackNavigation } from '../navigation/backNavigation';
 
@@ -116,7 +118,7 @@ export function CalendarView({
     const refreshEnergyProfile = () => {
       const nextProfile = readUserProfile();
       setProfile(nextProfile);
-      if (!__SMART_SCANNER__) { setCalibration(undefined); return; }
+      if (!BYOK_AI_ENABLED) { setCalibration(undefined); return; }
       void getRecognitionKeyStatus().then((status) => setCalibration(readEnergyCalibration(nextProfile, status.activeProvider))).catch(() => setCalibration(undefined));
     };
     refreshEnergyProfile();
@@ -546,10 +548,11 @@ function FoodRow({ entry, onOpenDetails }: { entry: FoodEntry; onOpenDetails: ()
   const [date, setDate] = useState(entry.date);
   const [meal, setMeal] = useState<MealType>(entry.mealType ?? 'dinner');
   const [quantity, setQuantity] = useState(entry.quantity ?? 1);
+  const imageSource = useFoodImage(entry);
   return (
     <article className="food-log-card">
       <button className="food-log-summary calendar-entry-open" type="button" onClick={onOpenDetails} aria-label={`View ${entry.title} details`}>
-        {entry.imageUrl ? <img src={entry.imageUrl} alt="" /> : <span><Utensils /></span>}
+        {imageSource ? <img src={imageSource} alt="" /> : <span><Utensils /></span>}
         <div><small>{titleCase(entry.mealType ?? 'dinner')}</small><h3>{entry.title}</h3><p>{Math.round(entry.calories ?? 0)} kcal · Protein {(entry.protein ?? 0).toFixed(1)}g · Fat {(entry.fat ?? 0).toFixed(1)}g</p></div>
       </button>
       <div className="food-log-controls">

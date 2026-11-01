@@ -1,6 +1,7 @@
 import { Barcode, ExternalLink, Utensils, X } from 'lucide-react';
 import { useEffect } from 'react';
 import type { FoodEntry } from '../data/db';
+import { useFoodImage } from '../data/useFoodImage';
 import { useBackNavigation } from '../navigation/backNavigation';
 
 type StoredPayload = {
@@ -66,6 +67,7 @@ export function CalendarFoodDetail({ entry, onClose }: { entry: FoodEntry; onClo
   const isProduct = entry.provider === 'openfoodfacts' || entry.provider === 'manual';
   const ingredients = payload.ingredientLines ?? payload.ingredients ?? [];
   const labels = [...(payload.cuisine ?? []), ...(payload.dish ?? []), ...(payload.meal ?? []), ...(payload.diet ?? []), ...(payload.health ?? [])];
+  const imageSource = useFoodImage(entry);
 
   useEffect(() => {
     const close = (event: KeyboardEvent) => event.key === 'Escape' && onClose();
@@ -79,8 +81,8 @@ export function CalendarFoodDetail({ entry, onClose }: { entry: FoodEntry; onClo
         <button className="sheet-close" aria-label="Close" onClick={onClose}><X /></button>
         <header><h2>{entry.title}</h2><p>{providerLabel(entry, payload)}</p></header>
         <div className="sheet-content">
-          {entry.imageUrl
-            ? <img className="calendar-entry-detail-image" src={entry.imageUrl} alt="" referrerPolicy="no-referrer" />
+          {imageSource
+            ? <img className="calendar-entry-detail-image" src={imageSource} alt="" referrerPolicy="no-referrer" />
             : <div className="recipe-detail-placeholder">{isProduct ? <Barcode /> : <Utensils />}</div>}
 
           <div className="badge-row">

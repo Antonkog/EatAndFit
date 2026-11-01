@@ -1,5 +1,6 @@
 import { Camera, Check, ChevronRight, Minus, Plus, RotateCcw, Timer, X } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { BYOK_AI_ENABLED } from '../config/appConfig';
 import type { Workout } from '../data/db';
 import { useBackNavigation } from '../navigation/backNavigation';
 import { readUserProfile } from '../profile/userProfile';
@@ -154,7 +155,7 @@ export function ExerciseSession({
 
   useEffect(() => {
     const user = readUserProfile();
-    if (!__SMART_SCANNER__ || Number(user.age) < 19) return;
+    if (!BYOK_AI_ENABLED || Number(user.age) < 19) return;
     void getRecognitionKeyStatus().then((status) => setMetaEligible(status.metaConfigured));
   }, []);
 

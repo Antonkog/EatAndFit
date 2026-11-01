@@ -1,1 +1,8 @@
-declare const __SMART_SCANNER__: boolean;
+declare const __APP_CONFIG__: {
+  edition: 'core' | 'byok';
+  features: {
+    byokAi: boolean;
+    recipePhotoGeneration: boolean;
+    firebaseAnalytics: boolean;
+  };
+};

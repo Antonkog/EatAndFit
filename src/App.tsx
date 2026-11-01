@@ -3,6 +3,7 @@ import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { FirebaseAnalytics } from './analytics/FirebaseAnalytics';
 import { BalanceView } from './balance/BalanceView';
 import { CalendarView } from './calendar/CalendarView';
+import { BYOK_AI_ENABLED } from './config/appConfig';
 import { localDate } from './data/db';
 import { ExerciseLibrary } from './exercises/ExerciseLibrary';
 import { useBackNavigation } from './navigation/backNavigation';
@@ -27,10 +28,10 @@ const navigation: Array<{ id: PrimaryView; label: string; icon: typeof Dumbbell 
   { id: 'scan', label: 'Scan', icon: ScanLine },
 ];
 
-const SmartScanView = __SMART_SCANNER__
+const SmartScanView = BYOK_AI_ENABLED
   ? lazy(() => import('./scanner/ScanView').then((module) => ({ default: module.ScanView })))
   : null;
-const AiRecipeView = __SMART_SCANNER__
+const AiRecipeView = BYOK_AI_ENABLED
   ? lazy(() => import('./ai/AiRecipeBuilder').then((module) => ({ default: module.AiRecipeView })))
   : null;
 
@@ -53,7 +54,7 @@ export function App() {
   const [profileSetupOpen, setProfileSetupOpen] = useState(shouldShowProfileSetup);
 
   useEffect(() => {
-    if (!__SMART_SCANNER__) return;
+    if (!BYOK_AI_ENABLED) return;
     let disposed = false;
     const refresh = () => void getRecognitionKeyStatus().then((status) => {
       if (!disposed) setAiFeaturesEnabled(status.activeProvider === 'META' ? status.metaConfigured : status.geminiConfigured);
@@ -67,7 +68,7 @@ export function App() {
   }, []);
 
   useEffect(() => {
-    if (!__SMART_SCANNER__) return;
+    if (!BYOK_AI_ENABLED) return;
     let disposed = false;
     const calibrate = async () => {
       const profile = readUserProfile();
@@ -233,13 +234,13 @@ export function App() {
           />
         )}
         {view === 'scan' && (
-          __SMART_SCANNER__ && SmartScanView ? (
+          BYOK_AI_ENABLED && SmartScanView ? (
             <Suspense fallback={<div className="loading-state">Loading Smart Scan…</div>}>
               <SmartScanView key={`${scanDate}-${scanMode}`} initialDate={scanDate} initialMode={scanMode} onChooseRecipes={showRecipes} onOpenAi={(ingredients) => showAi(ingredients, 'scan', scanDate)} onOpenSettings={showSettings} onAdded={(date) => showCalendar(date, 'food')} />
             </Suspense>
           ) : <CoreScanView key={scanDate} initialDate={scanDate} onChooseRecipes={showRecipes} onAdded={(date) => showCalendar(date, 'food')} />
         )}
-        {view === 'ai' && __SMART_SCANNER__ && AiRecipeView && (
+        {view === 'ai' && BYOK_AI_ENABLED && AiRecipeView && (
           <Suspense fallback={<div className="loading-state">Loading AI recipes…</div>}>
             <AiRecipeView
               initialDate={aiDate}

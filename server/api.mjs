@@ -1,5 +1,6 @@
 import { createServer } from 'node:http';
 import { pathToFileURL } from 'node:url';
+import { resolveAppConfiguration } from '../app.config.mjs';
 import {
   detectIngredients,
   INGREDIENT_REQUEST_BODY_LIMIT,
@@ -9,6 +10,7 @@ import { findProduct } from './openfoodfacts.mjs';
 import { createNutritionProvider, NutritionCatalogError } from './nutrition-provider.mjs';
 import { createRecipeProvider, RecipeCatalogError } from './recipe-provider.mjs';
 import { generateRecipes, RecipeGenerationError } from './recipe-generation-provider.mjs';
+import { generateRecipeImage, RecipeImageGenerationError } from './recipe-image-provider.mjs';
 import { calibrateTrainingEnergy, generateTrainingPlan, TrainingProviderError, verifyAiCredential } from './training-provider.mjs';
 import { resolveCuisineLocation } from './location-provider.mjs';
 import { MovementAnalysisError, prepareMovementVideoRequest } from './movement-provider.mjs';
@@ -29,6 +31,8 @@ export function createApiServer({
   edition = process.env.APP_EDITION === 'byok' ? 'byok' : 'core',
   ingredientProvider,
   recipeGenerationProvider,
+  recipeImageProvider,
+  recipePhotoGenerationEnabled,
   recipeProvider,
   nutritionProvider,
   trainingProvider,
@@ -36,6 +40,12 @@ export function createApiServer({
   movementProvider,
 } = {}) {
 const smartScannerEnabled = edition === 'byok';
+const appConfiguration = resolveAppConfiguration({
+  ...process.env,
+  APP_EDITION: edition,
+  ...(recipePhotoGenerationEnabled === undefined ? {} : { RECIPE_PHOTO_GENERATION_ENABLED: String(recipePhotoGenerationEnabled) }),
+});
+const recipePhotosEnabled = appConfiguration.features.recipePhotoGeneration;
 let recipeCatalog = recipeProvider;
 const getRecipeCatalog = () => recipeCatalog ??= createRecipeProvider();
 let nutritionCatalog = nutritionProvider;
@@ -59,6 +69,7 @@ return createServer(async (request, response) => {
     if (url.pathname.startsWith('/api/recipes/')) return json(response, 200, getRecipeCatalog().getRecipe(decodeURIComponent(url.pathname.slice('/api/recipes/'.length))));
     if (smartScannerEnabled && url.pathname === '/api/ai/recipes/healthz') return json(response,200,{ok:true,keySource:'user-device',configured:false,supportedProviders:['meta','gemini']});
     if (smartScannerEnabled && url.pathname === '/api/ai/recipes/generate' && request.method === 'POST') return json(response,200,await generateRecipes(await readBody(request),recipeGenerationProvider,recipeGenerationProvider ? undefined : recognitionCredentials(request)));
+    if (recipePhotosEnabled && url.pathname === '/api/ai/recipes/image' && request.method === 'POST') return json(response,200,await generateRecipeImage(await readBody(request),recipeImageProvider,recipeImageProvider ? undefined : recognitionCredentials(request)));
     if (smartScannerEnabled && url.pathname === '/api/ai/ingredients/healthz') return json(response,200,{ok:true,keySource:'user-device',configured:false,supportedProviders:['meta','gemini']});
     if (smartScannerEnabled && url.pathname === '/api/ai/ingredients/detect' && request.method === 'POST') return json(response,200,await detectIngredients(await readBody(request,INGREDIENT_REQUEST_BODY_LIMIT),ingredientProvider,ingredientProvider ? undefined : recognitionCredentials(request)));
     if (smartScannerEnabled && url.pathname === '/api/ai/training/generate' && request.method === 'POST') return json(response,200,await generateTrainingPlan(await readBody(request,1_500_000),trainingProvider,trainingProvider ? undefined : recognitionCredentials(request)));
@@ -82,7 +93,7 @@ return createServer(async (request, response) => {
     if (url.pathname.startsWith('/api/nutrition/foods/')) { const food=getNutritionCatalog().getFood(url.pathname.split('/').at(-1)); return json(response,food?200:404,food??{error:'Food not found.'}); }
     if (url.pathname === '/api/nutrition/calculate' && request.method === 'POST') return json(response,200,getNutritionCatalog().calculate((await readBody(request)).items));
     return json(response, 404, { error: 'Not found' });
-  } catch (error) { const ai=error instanceof IngredientRecognitionError || error instanceof RecipeGenerationError || error instanceof TrainingProviderError || error instanceof MovementAnalysisError; const catalog=error instanceof RecipeCatalogError || error instanceof NutritionCatalogError; const unavailable=error.code==='SQLITE_CANTOPEN'; const status=ai||catalog?error.status:error.message==='INVALID'?400:unavailable?503:500; const message=ai||catalog?error.message:unavailable?'Data service is not ready.':'Request failed.'; return json(response,status,{error:message}); }
+  } catch (error) { const ai=error instanceof IngredientRecognitionError || error instanceof RecipeGenerationError || error instanceof RecipeImageGenerationError || error instanceof TrainingProviderError || error instanceof MovementAnalysisError; const catalog=error instanceof RecipeCatalogError || error instanceof NutritionCatalogError; const unavailable=error.code==='SQLITE_CANTOPEN'; const status=ai||catalog?error.status:error.message==='INVALID'?400:unavailable?503:500; const message=ai||catalog?error.message:unavailable?'Data service is not ready.':'Request failed.'; return json(response,status,{error:message}); }
 });
 }
 

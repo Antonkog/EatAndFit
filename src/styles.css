@@ -629,6 +629,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .ai-recipe-card:hover { transform: translateY(-2px); border-color: rgba(183,255,79,.35); }
 .ai-recipe-card > span { display: grid; aspect-ratio: 2/1; place-items: center; color: var(--primary); background: linear-gradient(135deg,rgba(183,255,79,.15),var(--muted)); }
 .ai-recipe-card > span svg { width: 38px; height: 38px; }
+.ai-recipe-card > span img { width: 100%; height: 100%; object-fit: cover; }
 .ai-recipe-card > div { padding: 16px; }
 .ai-recipe-card h2 { margin: 10px 0 7px; font-size: 18px; }
 .ai-recipe-card p { display: -webkit-box; overflow: hidden; color: var(--muted-text); font-size: 12px; line-height: 1.55; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
