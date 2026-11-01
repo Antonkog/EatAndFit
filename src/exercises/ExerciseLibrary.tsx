@@ -13,6 +13,7 @@ import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { localDate, scheduleWorkout } from '../data/db';
 import { estimateSetDurationSeconds } from '../energy/estimates';
 import { classifyExercise } from '../energy/sources';
+import { movementProfileForExercise } from '../movement/profiles';
 import { useBackNavigation } from '../navigation/backNavigation';
 import { preferredExerciseSex, profileIssue, readUserProfile, setExerciseModelPreference, type ProfileSex } from '../profile/userProfile';
 import { exerciseMatches, exerciseSearchSuggestions } from './search';
@@ -361,9 +362,11 @@ export function ExerciseLibrary({ onWorkoutAdded, aiFeaturesEnabled = false }: {
       <section className="exercise-grid">
         {visible.map((exercise) => {
           const media = mediaFor(exercise, preferredGender());
+          const aiAvailable = Boolean(movementProfileForExercise(exercise.id));
           return (
             <button className="exercise-card" key={exercise.id} onClick={() => setSelected(exercise)} aria-label={exercise.name}>
               {media.thumbnail && <img loading="lazy" src={media.thumbnail} alt="" />}
+              {aiAvailable && <i className="exercise-ai-badge"><Sparkles size={12} /> AI</i>}
               <span><small>{exercise.body_part}</small><strong>{exercise.name}</strong><em>7 sec</em></span>
             </button>
           );

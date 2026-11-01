@@ -166,6 +166,8 @@ The action panel is headed `Update your balance`; it does not repeat a separate 
 
 The first Exercises view shows muscle cards and a catalog-wide exercise autocomplete. Typing a term such as `Press` displays up to five matching exercises; users can choose with a pointer or keyboard to open the existing exercise detail directly. Opening a muscle continues to show its matching movements with a search scoped to that group. Both searches match exercise name, body part, target, equipment, and aliases case-insensitively.
 
+Exercise cards display a compact `AI` badge when the exercise has a versioned camera-recognition profile. The badge is derived from the movement-profile registry, so unsupported exercises are never presented as AI-capable.
+
 ### 6.3 Exercise detail
 
 The detail panel can show:
