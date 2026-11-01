@@ -7,6 +7,7 @@ import type { PoseLandmark } from '../src/movement/types';
 function squatPose(kneeAngle: number, visibility = 1) {
   const points: PoseLandmark[] = Array.from({ length: 33 }, () => ({ x: 0.5, y: 0.5, z: 0, visibility: 0.1 }));
   const radians = kneeAngle * Math.PI / 180;
+  points[11] = { x: 0.5, y: 0.1, z: 0, visibility };
   points[23] = { x: 0.5, y: 0.3, z: 0, visibility };
   points[25] = { x: 0.5, y: 0.5, z: 0, visibility };
   points[27] = { x: 0.5 + Math.sin(radians) * 0.2, y: 0.5 - Math.cos(radians) * 0.2, z: 0, visibility };

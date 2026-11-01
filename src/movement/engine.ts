@@ -6,9 +6,9 @@ import type {
   PoseLandmark,
   RepMeasurement,
 } from './types';
+import { averageLandmarkVisibility, MIN_COUNTING_VISIBILITY, selectBodyweightSquatSide } from './trackingConfidence';
 
 const STABLE_FRAMES = 5;
-const MIN_VISIBILITY = 0.6;
 const MIN_REP_MS = 800;
 const MAX_REP_MS = 8000;
 const DUPLICATE_GUARD_MS = 700;
@@ -35,19 +35,15 @@ export function angle(a: PoseLandmark, b: PoseLandmark, c: PoseLandmark) {
   return Math.acos(cosine) * 180 / Math.PI;
 }
 
-function landmarkVisibility(points: PoseLandmark[]) {
-  return average(points.map((point) => point.visibility ?? 1));
-}
-
 function bestSide(landmarks: PoseLandmark[], joints: [number, number, number]) {
   const left = joints.map((index) => landmarks[index]);
   const right = joints.map((index) => landmarks[index + 1]);
-  return landmarkVisibility(left) >= landmarkVisibility(right) ? left : right;
+  return averageLandmarkVisibility(left) >= averageLandmarkVisibility(right) ? left : right;
 }
 
 function angleMetric(landmarks: PoseLandmark[], joints: [number, number, number]) {
   const points = bestSide(landmarks, joints);
-  return { value: angle(points[0], points[1], points[2]), confidence: landmarkVisibility(points) };
+  return { value: angle(points[0], points[1], points[2]), confidence: averageLandmarkVisibility(points) };
 }
 
 function distance(a: PoseLandmark, b: PoseLandmark) {
@@ -60,31 +56,36 @@ function metricFor(profile: MovementProfile, frame: PoseFrame): MetricFrame {
 
   if (profile.id === 'jumping-jack') {
     const required = [landmarks[11], landmarks[12], landmarks[15], landmarks[16], landmarks[27], landmarks[28]];
-    const confidence = landmarkVisibility(required);
+    const confidence = averageLandmarkVisibility(required);
     const shoulderWidth = Math.max(distance(landmarks[11], landmarks[12]), 0.02);
     const stanceRatio = distance(landmarks[27], landmarks[28]) / shoulderWidth;
     const handsDown = landmarks[15].y > landmarks[11].y && landmarks[16].y > landmarks[12].y;
     const handsUp = landmarks[15].y < landmarks[11].y && landmarks[16].y < landmarks[12].y;
-    return { visible: confidence >= MIN_VISIBILITY, confidence, start: stanceRatio <= 1.25 && handsDown, peak: stanceRatio >= 1.55 && handsUp, value: stanceRatio };
+    return { visible: confidence >= MIN_COUNTING_VISIBILITY, confidence, start: stanceRatio <= 1.25 && handsDown, peak: stanceRatio >= 1.55 && handsUp, value: stanceRatio };
   }
 
   if (profile.id === 'military-press') {
     const { value, confidence } = angleMetric(landmarks, [11, 13, 15]);
-    return { visible: confidence >= MIN_VISIBILITY, confidence, start: value <= 115, peak: value >= 145, value };
+    return { visible: confidence >= MIN_COUNTING_VISIBILITY, confidence, start: value <= 115, peak: value >= 145, value };
   }
 
-  const joints: [number, number, number] = profile.id === 'bodyweight-squat' || profile.id === 'barbell-back-squat'
+  const joints: [number, number, number] = profile.id === 'barbell-back-squat'
     ? [23, 25, 27]
     : profile.id === 'dumbbell-deadlift'
       ? [11, 23, 25]
       : [11, 13, 15];
-  const { value, confidence } = angleMetric(landmarks, joints);
+  const squatSide = profile.id === 'bodyweight-squat' ? selectBodyweightSquatSide(landmarks) : undefined;
+  const { value, confidence } = squatSide
+    ? { value: angle(squatSide.joints[0], squatSide.joints[1], squatSide.joints[2]), confidence: squatSide.confidence }
+    : profile.id === 'bodyweight-squat'
+      ? { value: 0, confidence: 0 }
+      : angleMetric(landmarks, joints);
   const thresholds = profile.id === 'pull-up'
     ? { start: 145, peak: 110 }
     : profile.id === 'barbell-bench-press' || profile.id === 'push-up'
       ? { start: 145, peak: 115 }
       : { start: 150, peak: 125 };
-  return { visible: confidence >= MIN_VISIBILITY, confidence, start: value >= thresholds.start, peak: value <= thresholds.peak, value };
+  return { visible: confidence >= MIN_COUNTING_VISIBILITY, confidence, start: value >= thresholds.start, peak: value <= thresholds.peak, value };
 }
 
 function evidenceFor(profile: MovementProfile, value: number, durationMs: number, confidence: number): MovementEvidence[] {

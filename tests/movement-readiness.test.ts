@@ -10,8 +10,8 @@ function landmarksWithVisibility(entries: Array<[number, number]>) {
   return landmarks;
 }
 
-const leftSquatSide: Array<[number, number]> = [[11, 0.45], [23, 0.45], [25, 0.45], [27, 0.45]];
-const rightSquatSide: Array<[number, number]> = [[12, 0.45], [24, 0.45], [26, 0.45], [28, 0.45]];
+const leftSquatSide: Array<[number, number]> = [[11, 0.45], [23, 0.6], [25, 0.6], [27, 0.6]];
+const rightSquatSide: Array<[number, number]> = [[12, 0.45], [24, 0.6], [26, 0.6], [28, 0.6]];
 const defaultBilateral: Array<[number, number]> = [11, 12, 15, 16, 23, 24, 25, 26, 27, 28].map((index) => [index, 0.6]);
 
 test('bodyweight squat accepts either complete shoulder-hip-knee-ankle side', () => {
@@ -23,9 +23,10 @@ test('bodyweight squat accepts either complete shoulder-hip-knee-ankle side', ()
   assert.equal(right.requiredConsecutiveFrames, 5);
 });
 
-test('bodyweight squat rejects a missing or low-confidence knee or ankle', () => {
-  assert.equal(evaluatePoseReadiness('bodyweight-squat', landmarksWithVisibility(leftSquatSide.filter(([index]) => index !== 25))).landmarksVisible, false);
-  assert.equal(evaluatePoseReadiness('bodyweight-squat', landmarksWithVisibility(leftSquatSide.map(([index, visibility]) => [index, index === 27 ? 0.44 : visibility]))).landmarksVisible, false);
+test('bodyweight squat readiness uses the same average confidence required for counting', () => {
+  assert.equal(evaluatePoseReadiness('bodyweight-squat', landmarksWithVisibility([[11, 0.45], [23, 0.5], [25, 0.6], [27, 0.7]])).landmarksVisible, true);
+  assert.equal(evaluatePoseReadiness('bodyweight-squat', landmarksWithVisibility([[11, 0.45], [23, 0.5], [25, 0.59], [27, 0.7]])).landmarksVisible, false);
+  assert.equal(evaluatePoseReadiness('bodyweight-squat', landmarksWithVisibility(leftSquatSide.map(([index, visibility]) => [index, index === 11 ? 0.44 : visibility]))).landmarksVisible, false);
 });
 
 test('bodyweight squat requires five consecutive frames and resets after an invalid frame', () => {
