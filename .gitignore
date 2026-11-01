@@ -5,6 +5,7 @@ dist/
 !.env.example
 *.sqlite
 *.sqlite-*
+/data/usda-cache/
 .DS_Store
 coverage/
 *.tsbuildinfo

@@ -15,7 +15,7 @@ Profiles are also local. Ages 6–18 use Youth Compendium estimates, ages 19–5
 
 ## Local development
 
-Requires Node.js 24+, Python 3.12+, and the separately obtained DataHive and USDA source files.
+Requires Node.js 24+, Python 3.12+, and the separately obtained DataHive and USDA source files for the normal import workflow.
 
 ```bash
 npm install
@@ -25,6 +25,14 @@ python3 nutrition-import/import_usda.py /path/to/usda-csv data/nutrition.sqlite
 npm run api
 npm run dev
 ```
+
+If the original USDA CSV directory is unavailable, the standalone recovery importer can download pinned public Foundation Foods, SR Legacy, and FNDDS releases and rebuild the same normalized local database. It uses USDA bulk downloads and does not require an API key:
+
+```bash
+python3 nutrition-import/recover_usda.py
+```
+
+By default, downloaded archives are cached under `data/usda-cache` and the recovered database is written to `data/nutrition.sqlite`. Use `--cache-dir`, `--output`, `--source`, or `--force` when a recovery needs different locations or archive overrides. This tool is not part of the normal Docker deployment.
 
 Use `npm run api` with `npm run dev` for Core. For BYOK AI, run `npm run api:byok` with `npm run dev:byok`. The Core API does not expose AI routes. No model API key belongs in `.env`, Docker configuration, source files, or server environment variables.
 
