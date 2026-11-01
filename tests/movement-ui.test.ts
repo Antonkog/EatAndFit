@@ -19,7 +19,7 @@ test('guided sessions separate local camera permission from explicit Meta full-s
   assert.match(session, /Muse observed/);
   assert.match(session, /Keep \{review\.localRepCount\}/);
   assert.match(session, /Use \{review\.suggestedSetRepCount\}/);
-  assert.match(session, /Counted on this device/);
+  assert.doesNotMatch(session, /Counted on this device/);
   assert.match(session, /Tracked with SAM 3\.1/);
   assert.match(session, /Reviewed by Muse Spark 1\.3/);
   assert.match(session, /storedAnalysis/);

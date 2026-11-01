@@ -14,16 +14,20 @@ test('camera session renders one live preview and exposes the skeleton before re
   assert.match(session, /loadedmetadata/);
   assert.match(session, /orientationchange/);
   assert.match(session, /\.addEventListener\('resize'/);
-  assert.match(styles, /\.camera-stage video, \.camera-stage canvas[^}]+transform: scaleX\(-1\)/);
-  assert.doesNotMatch(session, /cameraMirrored|camera-stage\$\{cameraMirrored/);
+  assert.match(styles, /\.camera-stage\.camera-facing-user video, \.camera-stage\.camera-facing-user canvas[^}]+transform: scaleX\(-1\)/);
+  assert.match(styles, /\.camera-stage\.camera-facing-environment video, \.camera-stage\.camera-facing-environment canvas[^}]+transform: none/);
+  assert.match(session, /camera-facing-\$\{cameraFacing\}/);
 });
 
-test('exercise tracking requests only the front camera', () => {
-  assert.match(session, /facingMode: \{ exact: 'user' \}/);
-  assert.match(session, /facingMode: \{ ideal: 'user' \}/);
+test('exercise tracking defaults to selfie camera and permits an explicit rear-camera switch', () => {
+  assert.match(session, /useState<CameraFacing>\('user'\)/);
+  assert.match(session, /facingMode: \{ exact: facing \}/);
+  assert.match(session, /facingMode: \{ ideal: facing \}/);
   assert.match(session, /width: \{ ideal: 1280 \}/);
   assert.match(session, /height: \{ ideal: 720 \}/);
-  assert.doesNotMatch(session, /facingMode: \{ ideal: 'environment' \}/);
+  assert.match(session, /Enable selfie camera/);
+  assert.match(session, /Use rear camera/);
+  assert.match(session, /cameraFacing === 'user' \? 'environment' : 'user'/);
   assert.doesNotMatch(session, /zoom/);
 });
 

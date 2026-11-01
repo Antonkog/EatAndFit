@@ -254,8 +254,18 @@ async function requestMuse(client, fileId, fields) {
     input: [{ role: 'user', content: [{ type: 'input_text', text: coachingPrompt(fields) }, { type: 'input_file', file_id: fileId }] }],
     text: { format: { type: 'json_schema', name: 'movement_coaching', strict: true, schema: coachingSchema } },
     reasoning: { effort: 'low' },
-    max_output_tokens: 500,
+    max_output_tokens: 4000,
   });
+  if (response.status !== 'completed' || !response.output_text?.trim()) {
+    const reason = response.incomplete_details?.reason;
+    throw new MovementAnalysisError(
+      reason === 'max_output_tokens'
+        ? 'Muse could not finish reviewing this set. Try the analysis again.'
+        : 'Muse did not finish reviewing this set.',
+      502,
+      'muse_incomplete',
+    );
+  }
   return validateMuseReview(parseJsonObject(response.output_text), fields.assessment);
 }
 
