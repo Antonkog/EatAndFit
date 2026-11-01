@@ -27,6 +27,11 @@ test('exercise tracking requests only the front camera', () => {
   assert.doesNotMatch(session, /zoom/);
 });
 
+test('exercise recording uses a controlled bitrate for Meta uploads', () => {
+  assert.match(session, /MOVEMENT_VIDEO_BITS_PER_SECOND = 1_200_000/);
+  assert.match(session, /videoBitsPerSecond: MOVEMENT_VIDEO_BITS_PER_SECOND/);
+});
+
 test('saving a repetition does not restart the live camera preview', () => {
   assert.match(session, /onSaveRef\.current\(partial\)/);
   assert.match(session, /cameraPreviewVisible/);

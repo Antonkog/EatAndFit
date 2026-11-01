@@ -10,7 +10,7 @@ import { CompatibilityPoseRuntime, type PoseDetection } from './poseCompatibilit
 import { drawPose } from './poseCanvas';
 import { evaluatePoseReadiness, nextReadinessFrameCount } from './readiness';
 import { cameraSetIsComplete, cameraSetProgress, resolveCameraSetTarget } from './setTarget';
-import type { MovementProfile } from './types';
+import type { FormAssessment, MetaMovementAnalysis, MovementProfile, StoredMetaMovementAnalysis } from './types';
 
 type Stage = 'consent' | 'setup' | 'countdown' | 'active' | 'camera-paused' | 'timer-ready' | 'timer-active' | 'timer-confirm' | 'rest';
 type ScheduledFrame = { kind: 'video' | 'animation'; id: number };
@@ -31,7 +31,30 @@ function haptic(pattern: number | number[]) {
 }
 
 function supportedMimeType() {
-  return ['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm'].find((type) => MediaRecorder.isTypeSupported(type)) ?? '';
+  return ['video/webm;codecs=vp8', 'video/webm', 'video/mp4;codecs=avc1.42E01E', 'video/mp4'].find((type) => MediaRecorder.isTypeSupported(type)) ?? '';
+}
+
+const MOVEMENT_VIDEO_BITS_PER_SECOND = 1_200_000;
+
+function storedMetaAnalysis(
+  result: MetaMovementAnalysis,
+  countDecision: StoredMetaMovementAnalysis['countDecision'],
+  acceptedRepCount?: number,
+): StoredMetaMovementAnalysis {
+  return {
+    samModel: result.sam.model,
+    trackingCoverage: result.sam.coverage,
+    trackingConfidence: result.sam.confidence,
+    localRepCount: result.countReview.localRepCount,
+    observedRepCount: result.countReview.observedRepCount,
+    suggestedSetRepCount: result.countReview.suggestedSetRepCount,
+    countConfidence: result.countReview.confidence,
+    countDecision,
+    ...(acceptedRepCount === undefined ? {} : { acceptedRepCount }),
+    coaching: result.coaching,
+    museModel: result.museModel,
+    processedAt: result.processedAt,
+  };
 }
 
 async function requestFrontExerciseCamera() {
@@ -79,6 +102,7 @@ export function ExerciseSession({
   const [analysis, setAnalysis] = useState<Awaited<ReturnType<typeof analyzeMovementWithMeta>>>();
   const [analysisError, setAnalysisError] = useState('');
   const [analyzing, setAnalyzing] = useState(false);
+  const [countDecision, setCountDecision] = useState<StoredMetaMovementAnalysis['countDecision']>('pending');
   const [metaEligible, setMetaEligible] = useState(false);
   const [poseStatus, setPoseStatus] = useState('Waiting for a stable full-body view…');
   const [cameraError, setCameraError] = useState('');
@@ -111,6 +135,7 @@ export function ExerciseSession({
   const startedAtRef = useRef(0);
   const recorderRef = useRef<MediaRecorder | undefined>(undefined);
   const recordingOffsetMsRef = useRef(0);
+  const recordingBaseRepCountRef = useRef(initialWorkout.sets[initialSetIndex]?.completedReps ?? 0);
   const chunksRef = useRef<Blob[]>([]);
   const wakeLockRef = useRef<{ release: () => Promise<void> } | undefined>(undefined);
   const stageRef = useRef(stage);
@@ -207,6 +232,23 @@ export function ExerciseSession({
     onSaveRef.current(partial);
   }, [profile, setIndex]);
 
+  const startMovementRecording = useCallback(() => {
+    setRecording(undefined);
+    chunksRef.current = [];
+    recordingBaseRepCountRef.current = baseRepCountRef.current;
+    recordingOffsetMsRef.current = 0;
+    if (!streamRef.current || typeof MediaRecorder === 'undefined') return;
+    const mimeType = supportedMimeType();
+    const recorder = new MediaRecorder(streamRef.current, {
+      ...(mimeType ? { mimeType } : {}),
+      videoBitsPerSecond: MOVEMENT_VIDEO_BITS_PER_SECOND,
+    });
+    recorder.ondataavailable = (event) => { if (event.data.size) chunksRef.current.push(event.data); };
+    recorder.onstop = () => setRecording(new Blob(chunksRef.current, { type: recorder.mimeType || 'video/webm' }));
+    recorder.start(500);
+    recorderRef.current = recorder;
+  }, []);
+
   useEffect(() => {
     if (stage !== 'countdown') return;
     setCountdown(3);
@@ -214,6 +256,8 @@ export function ExerciseSession({
     const interval = window.setInterval(() => setCountdown((value) => {
       if (value <= 1) {
         window.clearInterval(interval);
+        startedAtRef.current = performance.now();
+        startMovementRecording();
         spoken('Go');
         setStage('active');
         return 0;
@@ -222,7 +266,7 @@ export function ExerciseSession({
       return value - 1;
     }), 1000);
     return () => window.clearInterval(interval);
-  }, [stage]);
+  }, [stage, startMovementRecording]);
 
   useEffect(() => {
     if (stage !== 'active' && stage !== 'timer-active') return;
@@ -513,17 +557,7 @@ export function ExerciseSession({
     setRecording(undefined);
     setAnalysis(undefined);
     setAnalysisError('');
-    const recordingStartedAt = performance.now();
-    startedAtRef.current = recordingStartedAt + 3000;
-    recordingOffsetMsRef.current = startedAtRef.current - recordingStartedAt;
-    chunksRef.current = [];
-    if (streamRef.current && typeof MediaRecorder !== 'undefined') {
-      const recorder = new MediaRecorder(streamRef.current, supportedMimeType() ? { mimeType: supportedMimeType() } : undefined);
-      recorder.ondataavailable = (event) => { if (event.data.size) chunksRef.current.push(event.data); };
-      recorder.onstop = () => setRecording(new Blob(chunksRef.current, { type: recorder.mimeType || 'video/webm' }));
-      recorder.start(500);
-      recorderRef.current = recorder;
-    }
+    setCountDecision('pending');
     scheduleNextFrame();
     setStage('countdown');
     try {
@@ -644,6 +678,7 @@ export function ExerciseSession({
     setRecording(undefined);
     setAnalysis(undefined);
     setAnalysisError('');
+    setCountDecision('pending');
     setStage(profile ? 'consent' : 'timer-ready');
   };
 
@@ -659,34 +694,42 @@ export function ExerciseSession({
     return improved ? `Improvement verified: ${profile.countMetricLabel.toLowerCase()} changed from ${before} to ${after}.` : '';
   }, [profile, selectedRep]);
   const runMetaAnalysis = async () => {
-    if (!recording || !selectedRep) return;
-    if (!window.confirm('Upload this set recording temporarily to Eat & Fit so the selected repetition can be trimmed? Only the muted selected repetition is sent to Meta for SAM 3.1 tracking and Muse Spark 1.3 coaching. All temporary files are deleted after processing.')) return;
+    if (!recording) return;
+    if (!window.confirm('Upload this muted set recording temporarily to Eat & Fit and Meta? SAM 3.1 will track the athlete and Muse Spark 1.3 will review the repetition count and coaching evidence. All temporary files are deleted after processing.')) return;
     setAnalyzing(true);
     setAnalysisError('');
     const analyzedSetIndex = setIndex;
     const analyzedSetId = workout.sets[setIndex]?.id;
     try {
+      const localReps = trackerRef.current?.reps ?? [];
+      const localSegmentRepCount = Math.max(0, repCount - recordingBaseRepCountRef.current);
+      const fallbackAssessment: FormAssessment = { status: 'insufficient_evidence', reason: 'tracking_lost', evidence: [] };
       const result = await analyzeMovementWithMeta({
         video: recording,
         exerciseId: workout.exerciseId,
         exerciseName: profile?.displayName ?? workout.exerciseName,
         movementGuidance: profile ? `${profile.countMetricLabel}; good-form target ${profile.goodFormTarget}. ${profile.setupInstruction}` : workout.exerciseName,
         setNumber: setIndex + 1,
-        selectedRep: { ...selectedRep, startMs: selectedRep.startMs + recordingOffsetMsRef.current, endMs: selectedRep.endMs + recordingOffsetMsRef.current },
-        assessment: selectedRep.assessment,
-        videoWidth: videoRef.current?.videoWidth || 1280,
-        videoHeight: videoRef.current?.videoHeight || 720,
+        selectedRep: selectedRep ? { ...selectedRep, startMs: selectedRep.startMs + recordingOffsetMsRef.current, endMs: selectedRep.endMs + recordingOffsetMsRef.current } : undefined,
+        localRepCount: localSegmentRepCount,
+        priorRepCount: recordingBaseRepCountRef.current,
+        repWindows: localReps
+          .filter((rep) => rep.endMs > rep.startMs)
+          .map((rep) => ({
+            index: rep.index,
+            startMs: rep.startMs + recordingOffsetMsRef.current,
+            endMs: rep.endMs + recordingOffsetMsRef.current,
+            confidence: rep.confidence,
+          })),
+        activeDurationMs: Math.max(0, Math.round(elapsedSeconds * 1000)),
+        assessment: selectedRep?.assessment ?? fallbackAssessment,
       });
       if (!mountedRef.current) return;
       if (mountedRef.current && setIndexRef.current === analyzedSetIndex) setAnalysis(result);
-      const storedAnalysis = {
-        samModel: result.sam.model,
-        trackingCoverage: result.sam.coverage,
-        trackingConfidence: result.sam.confidence,
-        coaching: result.coaching,
-        museModel: result.museModel,
-        processedAt: result.processedAt,
-      };
+      const countsMatch = result.countReview.localRepCount === result.countReview.suggestedSetRepCount;
+      const initialDecision = countsMatch ? 'matched' : 'pending';
+      setCountDecision(initialDecision);
+      const storedAnalysis = storedMetaAnalysis(result, initialDecision, countsMatch ? result.countReview.localRepCount : undefined);
       const current = workoutRef.current;
       const next = {
         ...current,
@@ -696,12 +739,40 @@ export function ExerciseSession({
       };
       workoutRef.current = next;
       if (mountedRef.current) setWorkout(next);
-      onSave(next);
+      onSaveRef.current(next);
     } catch (error) {
       if (mountedRef.current && setIndexRef.current === analyzedSetIndex) setAnalysisError(error instanceof Error ? error.message : 'Meta analysis failed. Your local workout result is safe.');
     } finally {
       if (mountedRef.current && setIndexRef.current === analyzedSetIndex) setAnalyzing(false);
     }
+  };
+
+  const chooseMetaCount = (choice: 'local' | 'muse') => {
+    if (!analysis) return;
+    const acceptedRepCount = choice === 'local'
+      ? analysis.countReview.localRepCount
+      : analysis.countReview.suggestedSetRepCount;
+    const current = workoutRef.current;
+    const currentSetId = current.sets[setIndex]?.id;
+    const next = {
+      ...current,
+      sets: current.sets.map((set) => set.id === currentSetId && set.movementSummary
+        ? {
+            ...set,
+            completedReps: acceptedRepCount,
+            movementSummary: {
+              ...set.movementSummary,
+              completedReps: acceptedRepCount,
+              metaAnalysis: storedMetaAnalysis(analysis, choice, acceptedRepCount),
+            },
+          }
+        : set),
+    };
+    setCountDecision(choice);
+    setRepCount(acceptedRepCount);
+    workoutRef.current = next;
+    setWorkout(next);
+    onSaveRef.current(next);
   };
 
   const cameraSessionOpen = stage === 'setup' || stage === 'countdown' || stage === 'active';
@@ -717,7 +788,7 @@ export function ExerciseSession({
         <section className="exercise-consent">
           <span className="session-icon"><Camera /></span>
           <h3>{profile ? 'Enable camera?' : 'Start with a set timer'}</h3>
-          {profile ? <><p>Eat &amp; Fit uses your camera to count repetitions and evaluate movement. Live analysis runs on this device.</p><p>Video is not uploaded unless you later choose to analyze one rep with Meta.</p></> : <p>This exercise does not have a validated camera profile yet. You can complete it with a set timer.</p>}
+          {profile ? <><p>Eat &amp; Fit uses your camera to count repetitions and evaluate movement. Live analysis runs on this device.</p><p>Video is not uploaded unless you later choose to analyze the set with Meta AI.</p></> : <p>This exercise does not have a validated camera profile yet. You can complete it with a set timer.</p>}
           <div className="session-actions">
             {profile && <button className="primary-button" onClick={() => void startCamera()}><Camera size={18} /> Enable camera</button>}
             <button className="text-button" onClick={continueWithTimer}><Timer size={18} /> Use timer instead</button>
@@ -766,10 +837,10 @@ export function ExerciseSession({
           <div className="set-complete-heading"><span><Check /></span><div><small>Set {setIndex + 1} complete</small><h3>{restSeconds ? `Rest ${restSeconds}s` : 'Ready for your next set'}</h3></div></div>
           {selectedRep && <LocalAssessment rep={selectedRep} />}
           {improvement && <p className="improvement-verified"><Check size={16} /> {improvement}</p>}
-          {recording && selectedRep && metaEligible && !analysis && <button className="text-button analyze-rep" disabled={analyzing} onClick={() => void runMetaAnalysis()}>{analyzing ? 'Analyzing selected rep…' : `Analyze rep ${selectedRep.index} with Meta`}</button>}
+          {recording && metaEligible && !analysis && <button className="text-button analyze-rep" disabled={analyzing} onClick={() => void runMetaAnalysis()}>{analyzing ? 'Analyzing set with Meta AI…' : 'Analyze with Meta AI'}</button>}
           {analysisError && <p className="session-error" role="alert">{analysisError}</p>}
-          {analysis && <MetaResult analysis={analysis} recording={recording} />}
-          <div className="session-attributions"><span>Counted on this device</span>{analysis && <><span>Tracked with SAM 3.1</span><span>Coached by Muse Spark 1.3</span></>}</div>
+          {analysis && <MetaResult analysis={analysis} recording={recording} countDecision={countDecision} onCountChoice={chooseMetaCount} />}
+          <div className="session-attributions"><span>Counted on this device</span>{analysis && <><span>Tracked with SAM 3.1</span><span>Reviewed by Muse Spark 1.3</span></>}</div>
           <button className="primary-button next-set-button" onClick={beginNextSet}>{nextSetIndex >= 0 ? 'Start next set' : 'Finish exercise'} <ChevronRight size={18} /></button>
         </section>
       )}
@@ -786,10 +857,31 @@ function LocalAssessment({ rep }: { rep: NonNullable<ReturnType<typeof selectRep
   return <article className="assessment-card insufficient"><small>Local assessment</small><h3>We could not assess this rep reliably</h3><p>Reposition the camera so your full body remains visible and keep only one person in frame.</p></article>;
 }
 
-function MetaResult({ analysis, recording }: { analysis: Awaited<ReturnType<typeof analyzeMovementWithMeta>>; recording?: Blob }) {
+function MetaResult({
+  analysis,
+  recording,
+  countDecision,
+  onCountChoice,
+}: {
+  analysis: Awaited<ReturnType<typeof analyzeMovementWithMeta>>;
+  recording?: Blob;
+  countDecision: StoredMetaMovementAnalysis['countDecision'];
+  onCountChoice: (choice: 'local' | 'muse') => void;
+}) {
   const coaching = analysis.coaching;
+  const review = analysis.countReview;
+  const countsDiffer = review.localRepCount !== review.suggestedSetRepCount;
   return <article className={`meta-coaching ${coaching.status}`}>
-    <small>Meta coaching</small>
+    <small>Meta full-set review</small>
+    <section className="meta-count-review">
+      {countsDiffer
+        ? <p>MediaPipe counted <strong>{review.localRepCount}</strong> repetitions. Muse observed <strong>{review.suggestedSetRepCount}</strong>.</p>
+        : <p>MediaPipe and Muse both counted <strong>{review.localRepCount}</strong> repetitions.</p>}
+      <small>Muse count confidence: {review.confidence}</small>
+      {countsDiffer && countDecision === 'pending' && <div className="session-actions"><button className="text-button" onClick={() => onCountChoice('local')}>Keep {review.localRepCount}</button><button className="primary-button" onClick={() => onCountChoice('muse')}>Use {review.suggestedSetRepCount}</button></div>}
+      {countsDiffer && countDecision === 'local' && <p>Saved the MediaPipe count: {review.localRepCount}.</p>}
+      {countsDiffer && countDecision === 'muse' && <p>Saved the Muse-reviewed count: {review.suggestedSetRepCount}.</p>}
+    </section>
     <h3>{coaching.status === 'good_form' ? 'Good rep' : coaching.status === 'correction_needed' ? 'One adjustment for your next set' : 'We could not assess this rep reliably'}</h3>
     {recording && analysis.sam.boxes.length > 0 && <SamReplay video={recording} analysis={analysis} />}
     {coaching.positiveObservation && <p>{coaching.positiveObservation}</p>}

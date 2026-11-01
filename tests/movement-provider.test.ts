@@ -1,12 +1,16 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { validateAssessment, validateCoaching, validateMovementFields } from '../server/movement-provider.mjs';
+import { validateAssessment, validateCoaching, validateMovementFields, validateMuseReview } from '../server/movement-provider.mjs';
 
 const evidence = [{ metric: 'primary_range', label: 'Lowest knee angle', value: 101, unit: 'degrees', target: '110° or lower' }];
+const requestFields = {
+  exerciseId: 'freeexercise:drv-squat', exerciseName: 'Squat', movementGuidance: 'Lowest knee angle', setNumber: '1', selectedRep: '2', repStartMs: '1000', repEndMs: '3400', adultConfirmed: 'true',
+  localRepCount: '3', priorRepCount: '0', activeDurationMs: '15000', repWindows: JSON.stringify([{ index: 1, startMs: 1000, endMs: 2200, confidence: 0.9 }]),
+};
 
 test('movement request validation preserves the authoritative local assessment', () => {
   const value = validateMovementFields({
-    exerciseId: 'freeexercise:drv-squat', exerciseName: 'Squat', movementGuidance: 'Lowest knee angle', setNumber: '1', selectedRep: '2', repStartMs: '1000', repEndMs: '3400', adultConfirmed: 'true',
+    ...requestFields,
     assessment: JSON.stringify({ status: 'good_form', evidence }),
   });
   assert.equal(value.assessment.status, 'good_form');
@@ -15,8 +19,23 @@ test('movement request validation preserves the authoritative local assessment',
 });
 
 test('movement request validation rejects invalid windows and non-adult requests', () => {
-  assert.throws(() => validateMovementFields({ setNumber: '1', selectedRep: '1', repStartMs: '0', repEndMs: '300', adultConfirmed: 'true', assessment: JSON.stringify({ status: 'good_form', evidence }) }), /0.8 and 12 seconds/);
-  assert.throws(() => validateMovementFields({ setNumber: '1', selectedRep: '1', repStartMs: '0', repEndMs: '2000', adultConfirmed: 'false', assessment: JSON.stringify({ status: 'good_form', evidence }) }), /confirmed adults/);
+  assert.throws(() => validateMovementFields({ ...requestFields, repEndMs: '1200', assessment: JSON.stringify({ status: 'good_form', evidence }) }), /0.8 and 12 seconds/);
+  assert.throws(() => validateMovementFields({ ...requestFields, adultConfirmed: 'false', assessment: JSON.stringify({ status: 'good_form', evidence }) }), /confirmed adults/);
+});
+
+test('Muse full-set review returns a separate count without changing local assessment', () => {
+  const assessment = validateAssessment({ status: 'good_form', evidence });
+  const result = validateMuseReview({
+    status: 'good_form', positiveObservation: 'Controlled range.', primaryCorrection: null, nextSetGoal: 'Repeat it.', evidenceMetric: 'Lowest knee angle: 101 degrees',
+    observedRepCount: 4, countConfidence: 'medium',
+  }, assessment);
+  assert.equal(result.observedRepCount, 4);
+  assert.equal(result.countConfidence, 'medium');
+  assert.equal(result.coaching.status, 'good_form');
+  assert.throws(() => validateMuseReview({
+    status: 'good_form', positiveObservation: 'Controlled range.', primaryCorrection: null, nextSetGoal: null, evidenceMetric: null,
+    observedRepCount: 2.5, countConfidence: 'high',
+  }, assessment), /invalid repetition count/);
 });
 
 test('Muse cannot invent a correction for application-selected good form', () => {

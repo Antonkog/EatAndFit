@@ -9,7 +9,7 @@ The first release uses a hybrid architecture:
 - MediaPipe Pose Landmarker performs live, on-device body-landmark detection and deterministic repetition counting.
 - Meta SAM 3.1 optionally supplies post-set person segmentation and tracking evidence.
 - Meta Muse Spark 1.3 optionally converts measured movement evidence into concise coaching.
-- Meta models never determine the authoritative repetition count, change completed workout history, or invent numerical scores.
+- Meta Muse may propose a second full-set repetition count, but it never changes completed workout history until the user explicitly accepts it and never invents deterministic movement measurements or numerical scores.
 - Camera tracking and the timer fallback remain useful without an API key. Meta analysis is an optional BYOK enhancement.
 
 This separation keeps the live workout responsive and reliable while giving Meta models a visible, useful role that matches their documented capabilities.
@@ -18,7 +18,7 @@ This separation keeps the live workout responsive and reliable while giving Meta
 
 SAM 3.1 detects, segments, and tracks an object through image or video frames. It returns boxes, masks, and stable track identities, but it does not return skeletal joints. It therefore cannot, by itself, reliably measure elbow or knee angles or count repetitions.
 
-Muse Spark 1.3 can interpret video and reason over structured measurements, but a generative model is not an appropriate source of frame-accurate repetition counts. It should explain evidence produced by a deterministic motion engine rather than create the evidence.
+Muse Spark 1.3 can interpret the complete set and provide an advisory second repetition count, but it is not the frame-accurate live counter. MediaPipe remains authoritative during exercise; any Muse difference is presented to the user for confirmation. Muse also explains evidence produced by the deterministic motion engine rather than creating joint measurements.
 
 MediaPipe Pose Landmarker provides the low-latency body landmarks required for live joint-angle calculations. Running it in the browser avoids a cloud call for every frame and allows the workout to continue when Meta is unavailable.
 
@@ -27,10 +27,10 @@ The selected model roles are therefore:
 | Responsibility | Model or component | Authority |
 | --- | --- | --- |
 | Live skeleton and framing | MediaPipe Pose Landmarker | Local and deterministic |
-| Rep state and count | Eat & Fit movement engine | Authoritative |
+| Live rep state and count | Eat & Fit movement engine | Authoritative until an explicit user count choice |
 | ROM, cadence, symmetry, and confidence | Eat & Fit movement engine | Authoritative |
 | Person mask and cross-frame tracking | Meta SAM 3.1 | Supporting visual evidence |
-| Human-readable coaching | Meta Muse Spark 1.3 | Advisory only |
+| Full-set count review and human-readable coaching | Meta Muse Spark 1.3 | Advisory; user confirmation required |
 | Workout completion and calories | Existing Eat & Fit workout logic | Authoritative |
 
 ## Model responsibilities
@@ -58,10 +58,10 @@ The preferred request uses the first stable athlete bounding box calculated loca
 
 SAM output is used for:
 
-- a stable athlete track through the selected rep;
+- a stable athlete track through the complete uploaded set;
 - tracking coverage and visibility evidence;
-- compact segmentation masks for a short replay;
-- detecting when the selected athlete leaves or is substantially occluded in the frame.
+- a compact sampled track replay;
+- detecting when the athlete leaves or is substantially occluded in the frame.
 
 The streamed response should be decoded with the official `@meta-sam/parser`. The result screen should visibly label the replay `Tracked with SAM 3.1`.
 
@@ -69,7 +69,8 @@ The streamed response should be decoded with the official `@meta-sam/parser`. Th
 
 Muse receives:
 
-- the selected repetition clip;
+- the compact muted full-set video;
+- MediaPipe's local count and measured repetition windows;
 - the exercise name and catalog instructions;
 - relevant form cues and common mistakes from the catalog;
 - deterministic ROM, cadence, symmetry, visibility, and confidence measurements;
@@ -77,13 +78,14 @@ Muse receives:
 
 Muse returns strict structured data containing:
 
+- an independently observed repetition count and low, medium, or high confidence;
 - one positive observation;
 - one primary correction;
 - one next-set goal;
 - the input measurement that supports the correction;
 - a short educational disclaimer when appropriate.
 
-Muse must not invent or alter repetition counts, calories, timestamps, joint measurements, completion state, or numerical scores. A correction that does not reference supplied evidence is rejected. The result should be labelled `Coached by Muse Spark 1.3`.
+Muse must not alter repetition counts silently, calories, timestamps, joint measurements, completion state, or numerical scores. Any count difference is advisory until the user chooses it. A correction that does not reference supplied evidence is rejected. The result is labelled `Reviewed by Muse Spark 1.3`.
 
 ### Assessment contract
 
@@ -177,7 +179,7 @@ When the target is reached:
 2. Display `Set 1 complete.`
 3. Start a skippable 60-second rest timer.
 4. Offer `Start next set`.
-5. If eligible, offer analysis of one selected repetition with Meta.
+5. If eligible, offer explicit full-set analysis with Meta AI.
 
 Meta processing runs asynchronously during rest and never blocks the next set. If the result arrives later, it becomes the single focus cue for the following set.
 
@@ -219,46 +221,38 @@ Worker/model initialization and frame-processing failures are surfaced as visibl
 
 ## Meta analysis experience
 
-### Analyze one useful repetition, not the whole set
+### Analyze the completed set explicitly
 
-The complete set is recorded locally in memory without audio. The deterministic engine records start and end timestamps for each repetition and ranks repetitions by measurable issues.
+The complete set is recorded locally in memory without audio at a controlled bitrate. MediaPipe records its local repetition count, start/end windows, and deterministic evidence. The recording is never uploaded automatically.
 
-Selection order:
+After the set, eligible users see:
 
-1. The repetition with the largest valid ROM, symmetry, cadence, or visibility issue.
-2. When no meaningful issue exists, a representative median-confidence repetition.
-3. Never select a repetition whose tracking confidence is too low to support a conclusion.
+**Analyze with Meta AI**
 
-After the set, show a card such as:
-
-**Analyze rep 3 with Meta**
-
-> Rep 3 was selected because its knee range of motion differed most from the other repetitions.
-
-The user can preview the locally stored window before consenting. This makes the analysis understandable and avoids sending more video than Meta needs.
+The action reviews the complete uploaded segment so Muse can provide an advisory count even when MediaPipe missed a visible repetition. A locally selected questionable or representative repetition still supplies the authoritative form-assessment status and evidence used for coaching. When no locally valid repetition exists, Muse may review the count but must return insufficient evidence for technique.
 
 ### Separate upload consent
 
 The analysis action must state:
 
-> This set recording will temporarily pass through Eat & Fit so the selected repetition can be converted. Only the selected 4–12 second muted clip will be sent to Meta. Temporary Eat & Fit and Meta files are deleted after analysis. This uses your Meta API key and may incur provider charges.
+> This muted set recording will temporarily pass through Eat & Fit and Meta. SAM 3.1 will track the athlete, and Muse Spark 1.3 will review the repetition count and coaching evidence. Temporary Eat & Fit and Meta files are deleted after analysis. This uses your Meta API key and may incur provider charges.
 
-`Analyze with Meta` is an explicit action for each set. It is never preselected or triggered automatically.
+`Analyze with Meta AI` is an explicit action for each set. It is never preselected or triggered automatically.
 
 ### Processing flow
 
-1. The browser keeps the full set only in memory.
-2. The user previews and approves the selected repetition.
-3. The browser uploads the temporary full-set recording and selected timestamps to Eat & Fit.
-4. The server trims the approved window, removes audio, and converts it to H.264 MP4 at no more than 720p and 12 FPS.
-5. Only the 4–12 second result is uploaded to Meta.
-6. SAM tracks the athlete and produces masks.
-7. Muse receives the same selected clip plus deterministic evidence.
+1. The browser keeps the full set only in memory and records at a controlled bitrate.
+2. The browser refuses uploads larger than 30 MiB.
+3. After explicit consent, it uploads the compact recording, MediaPipe count, rep windows, and deterministic evidence to Eat & Fit.
+4. The server removes audio and normalizes the full recording in tmpfs to H.264 MP4 at no more than 720p and 12 FPS.
+5. SAM tracks the athlete across the complete set. Missing-person and multiple-person results stop the review.
+6. Muse receives the full set plus the local count, measured windows, catalog guidance, and authoritative form assessment.
+7. Muse returns an observed segment count, count confidence, and structured coaching.
 8. The server deletes its temporary files and the Meta file in a `finally` path.
-9. The browser displays the short SAM overlay and Muse coaching.
-10. The browser discards its original set recording and mask data.
+9. The browser displays the sampled SAM track, Muse review, and any count difference.
+10. The browser discards its original set recording and SAM track data.
 
-This approach is faster, cheaper, and more focused than analyzing every frame of every set. At SAM's published price of $0.20 per 1,000 video frames, a 6–12 second clip sampled at 12 FPS contains approximately 72–144 frames before Meta's documented minimum-frame billing behavior. Current pricing and promotional-credit terms must be verified before release.
+Full-set review costs more than selected-repetition review, so it runs only after the explicit button press. Current pricing and promotional-credit terms must be verified before release.
 
 ### Results
 
@@ -273,11 +267,14 @@ Show the immediate deterministic result first:
 
 When Meta finishes, add:
 
-- a short replay with the SAM mask or track overlay;
+- a full-set replay with sampled SAM track evidence;
+- MediaPipe's count and Muse's suggested count with confidence;
 - one positive observation;
 - either positive confirmation or one evidence-grounded correction, according to the application-selected assessment;
 - one goal for the next set;
 - model labels and an AI disclaimer.
+
+When the counts differ by any amount in either direction, show `Keep N` and `Use M`. The user must make the choice; Meta never changes the completed count silently. Persist the original local count, Muse observation, confidence, suggested set count, and decision, but never the recording or SAM boxes.
 
 Do not replace the local result. If Meta fails, keep the completed set and show a non-blocking retry option while the in-memory recording is still available.
 
@@ -336,7 +333,7 @@ type MovementSummary = {
   elapsedSeconds: number;
   reps: RepMeasurement[];
   selectedRep?: number;
-  metaAnalysis?: StoredMetaMovementAnalysis; // coaching and aggregate tracking metrics only; no boxes or masks
+  metaAnalysis?: StoredMetaMovementAnalysis; // coaching, count review, decision, and aggregate tracking metrics only; no boxes or masks
 };
 ```
 
@@ -363,6 +360,8 @@ Request fields:
 - `setNumber`;
 - `selectedRep`;
 - `repStartMs` and `repEndMs`;
+- `localRepCount` for the uploaded segment and `priorRepCount` already saved before that segment;
+- local repetition windows and the active segment duration;
 - deterministic ROM, cadence, symmetry, visibility, confidence, and cue metrics;
 - adult-confirmation metadata without weight, height, sex, or exact age.
 
@@ -380,13 +379,19 @@ type MetaMovementAnalysisResponse = {
     sourceHeight: number;
     boxes: SamTrackBox[];
   };
+  countReview: {
+    localRepCount: number;
+    observedRepCount: number;
+    suggestedSetRepCount: number;
+    confidence: 'low' | 'medium' | 'high';
+  };
   coaching: MetaCoaching;
   museModel: 'muse-spark-1.3';
   processedAt: string;
 };
 ```
 
-The response never contains a generated repetition count or numerical movement score. There is no automatic fallback to Gemini.
+The Muse count is advisory and can become the saved set count only after explicit user confirmation. The response never contains a generated movement score. There is no automatic fallback to Gemini.
 
 ## Privacy, availability, and safety
 
@@ -394,10 +399,10 @@ The response never contains a generated repetition count or numerical movement s
 - Meta analysis is available only to users aged 19 or older with a verified Meta key.
 - A saved Meta key can be used for movement analysis even when Gemini is selected for ingredient or recipe features.
 - Camera consent and Meta-upload consent are separate decisions.
-- Meta upload is off by default and requested for every selected repetition.
+- Meta upload is off by default and requested for every analyzed set.
 - Audio is never recorded or uploaded.
 - Video, raw landmarks, masks, and API keys are excluded from IndexedDB, backups, analytics, logs, and service-worker caches.
-- Only concise derived measurements and accepted coaching text are persisted.
+- Only concise derived measurements, count provenance, the user's count choice, and accepted coaching text are persisted.
 - Clips containing minors, multiple people, or unconsenting bystanders are not uploaded.
 - The product must not identify people, infer health conditions, diagnose injuries, or make biometric identity claims.
 - The interface explains that Meta feedback can be incorrect and is not medical advice.
@@ -429,7 +434,7 @@ Advantages:
 - visible SAM tracking evidence;
 - focused, natural-language Muse coaching;
 - cloud latency never interrupts live counting;
-- explicit consent and a short selected clip limit exposure and cost;
+- explicit per-set consent and compact controlled-bitrate recording limit exposure;
 - provides a clear hackathon story: local measurement, Meta perception, Meta coaching.
 
 Disadvantages:
@@ -473,16 +478,16 @@ This option is rejected for the first release. FFmpeg WASM would substantially i
 - Add the lazy MediaPipe worker and self-hosted model assets.
 - Implement the eight versioned movement profiles, beginning with the three bodyweight profiles for home testing.
 - Add confidence gating, state transitions, duplicate protection, form cues, and manual count correction.
-- Store repetition timestamps and rank repetitions for optional review.
+- Store repetition timestamps and rank a representative repetition for optional coaching evidence.
 - Validate performance on representative mobile hardware before enabling recording.
 
 ### Phase 4 — Meta evidence path
 
 - Record camera-supported sets locally in memory without audio.
-- Build the selected-rep explanation and preview.
+- Add the explicit `Analyze with Meta AI` full-set review action.
 - Add separate, per-set Meta consent.
-- Add multipart upload, tmpfs conversion, selected-window trimming, SAM streaming, and Muse schema validation.
-- Render compact mask evidence and attach one Muse goal to the next set.
+- Add multipart upload, 30 MiB client/server limits, full-set tmpfs normalization, SAM streaming, and Muse count/coaching schema validation.
+- Render compact sampled track evidence, reconcile count differences through user choice, and attach one Muse goal to the next set.
 - Guarantee server and Meta-file deletion on success, timeout, cancellation, and parse failure.
 
 ### Phase 5 — Privacy and documentation
@@ -532,7 +537,7 @@ This option is rejected for the first release. FFmpeg WASM would substantially i
 - Adult eligibility.
 - MIME type, size, duration, and timestamp validation.
 - WebM, MOV, and MP4 conversion.
-- Audio removal and selected-window trimming.
+- Audio removal and full-set normalization to 720p and 12 FPS.
 - SAM stream parsing, zero matches, multiple people, incomplete streams, and timeouts.
 - Muse schema validation, unsupported model errors, content blocking, rate limits, and timeouts.
 - Temporary server-file and Meta-file deletion on every exit path.
@@ -553,7 +558,8 @@ This option is rejected for the first release. FFmpeg WASM would substantially i
 - Camera denial and unsupported exercises complete successfully through timer mode.
 - A completed set is saved before any Meta request begins.
 - Meta processing never blocks rest or the next set.
-- A real SAM mask or track is visible for the selected repetition.
+- A real sampled SAM track is visible for the analyzed set.
+- Every Muse count difference requires an explicit `Keep` or `Use` choice.
 - Every Muse correction references a supplied deterministic measurement.
 - No raw video, landmark timeline, mask, or API key persists after the session.
 - Temporary local and Meta files are deleted after success and failure.

@@ -803,6 +803,10 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .assessment-card small, .meta-coaching > small { color: var(--primary); font-size: 9px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
 .assessment-card h3, .meta-coaching h3 { margin: 7px 0; }
 .assessment-card p, .meta-coaching p { color: var(--muted-text); line-height: 1.55; }
+.meta-count-review { margin: 14px 0 18px; padding: 14px; border: 1px solid rgba(183,255,79,.2); border-radius: 14px; background: rgba(183,255,79,.045); }
+.meta-count-review p { margin: 0 0 8px; }
+.meta-count-review > small { color: var(--muted-text); font-size: 10px; text-transform: capitalize; }
+.meta-count-review .session-actions { margin-top: 13px; }
 .analyze-rep { margin: 8px 0; }
 .improvement-verified { display: flex; align-items: center; gap: 8px; padding: 11px 13px; border: 1px solid rgba(183,255,79,.32); border-radius: 12px; color: var(--primary); background: rgba(183,255,79,.06); font-size: 11px; font-weight: 750; }
 .session-attributions { display: flex; flex-wrap: wrap; gap: 7px; margin: 16px 0; }

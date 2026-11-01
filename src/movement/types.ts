@@ -59,6 +59,12 @@ export type MetaMovementAnalysis = {
     sourceHeight: number;
     boxes: SamTrackBox[];
   };
+  countReview: {
+    localRepCount: number;
+    observedRepCount: number;
+    suggestedSetRepCount: number;
+    confidence: 'low' | 'medium' | 'high';
+  };
   coaching: MetaCoaching;
   museModel: string;
   processedAt: string;
@@ -68,6 +74,12 @@ export type StoredMetaMovementAnalysis = {
   samModel: string;
   trackingCoverage: number;
   trackingConfidence: number | null;
+  localRepCount: number;
+  observedRepCount: number;
+  suggestedSetRepCount: number;
+  countConfidence: 'low' | 'medium' | 'high';
+  countDecision: 'pending' | 'matched' | 'local' | 'muse';
+  acceptedRepCount?: number;
   coaching: MetaCoaching;
   museModel: string;
   processedAt: string;
