@@ -15,7 +15,7 @@ import { estimateSetDurationSeconds } from '../energy/estimates';
 import { classifyExercise } from '../energy/sources';
 import { useBackNavigation } from '../navigation/backNavigation';
 import { preferredExerciseSex, profileIssue, readUserProfile, setExerciseModelPreference, type ProfileSex } from '../profile/userProfile';
-import { exerciseMatches } from './search';
+import { exerciseMatches, exerciseSearchSuggestions } from './search';
 import type { Exercise, ExerciseCatalog } from './types';
 
 type Gender = ProfileSex;
@@ -224,6 +224,9 @@ function Fact({ label, value }: { label: string; value: string }) {
 export function ExerciseLibrary({ onWorkoutAdded, aiFeaturesEnabled = false }: { onWorkoutAdded: (date: string) => void; aiFeaturesEnabled?: boolean }) {
   const [catalog, setCatalog] = useState<ExerciseCatalog>();
   const [query, setQuery] = useState('');
+  const [catalogQuery, setCatalogQuery] = useState('');
+  const [catalogSuggestionsOpen, setCatalogSuggestionsOpen] = useState(false);
+  const [catalogSuggestionIndex, setCatalogSuggestionIndex] = useState(-1);
   const [selectedGroup, setSelectedGroup] = useState<MuscleGroup>();
   const [selected, setSelected] = useState<Exercise>();
   const [plannerOpen, setPlannerOpen] = useState(false);
@@ -244,6 +247,17 @@ export function ExerciseLibrary({ onWorkoutAdded, aiFeaturesEnabled = false }: {
     () => (selectedGroup ? groupedExercises.get(selectedGroup.name) ?? [] : []).filter((item) => exerciseMatches(item, query)),
     [groupedExercises, query, selectedGroup],
   );
+  const catalogSuggestions = useMemo(
+    () => exerciseSearchSuggestions(catalog?.exercises ?? [], catalogQuery),
+    [catalog, catalogQuery],
+  );
+
+  const chooseCatalogSuggestion = (exercise: Exercise) => {
+    setSelected(exercise);
+    setCatalogQuery(exercise.name);
+    setCatalogSuggestionsOpen(false);
+    setCatalogSuggestionIndex(-1);
+  };
 
   if (!catalog) return <section className="skeleton-grid">{Array.from({ length: 10 }, (_, index) => <i key={index} />)}</section>;
 
@@ -253,6 +267,66 @@ export function ExerciseLibrary({ onWorkoutAdded, aiFeaturesEnabled = false }: {
         <div className="exercise-hero">
           <div className="hero-copy">
             <h1>Choose what you train today.</h1>
+            <div className="exercise-catalog-search" onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setCatalogSuggestionsOpen(false); }}>
+              <label className="search-box"><Search size={18} /><input
+                aria-label="Search all exercises"
+                role="combobox"
+                aria-autocomplete="list"
+                aria-expanded={catalogSuggestionsOpen && catalogSuggestions.length > 0}
+                aria-controls="exercise-search-suggestions"
+                aria-activedescendant={catalogSuggestionIndex >= 0 ? `exercise-suggestion-${catalogSuggestionIndex}` : undefined}
+                placeholder="Search all exercises"
+                value={catalogQuery}
+                onFocus={() => catalogSuggestions.length > 0 && setCatalogSuggestionsOpen(true)}
+                onChange={(event) => {
+                  setCatalogQuery(event.target.value);
+                  setCatalogSuggestionsOpen(Boolean(event.target.value.trim()));
+                  setCatalogSuggestionIndex(-1);
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === 'Escape') {
+                    setCatalogSuggestionsOpen(false);
+                    setCatalogSuggestionIndex(-1);
+                    return;
+                  }
+                  if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+                    if (!catalogSuggestions.length) return;
+                    event.preventDefault();
+                    setCatalogSuggestionsOpen(true);
+                    setCatalogSuggestionIndex((current) => event.key === 'ArrowDown'
+                      ? current >= catalogSuggestions.length - 1 ? 0 : current + 1
+                      : current <= 0 ? catalogSuggestions.length - 1 : current - 1);
+                    return;
+                  }
+                  if (event.key === 'Enter' && catalogSuggestionsOpen && catalogSuggestionIndex >= 0) {
+                    event.preventDefault();
+                    chooseCatalogSuggestion(catalogSuggestions[catalogSuggestionIndex]);
+                  }
+                }}
+              /></label>
+              {catalogSuggestionsOpen && catalogSuggestions.length > 0 && (
+                <div className="exercise-suggestions" id="exercise-search-suggestions" role="listbox" aria-label="Exercise suggestions">
+                  {catalogSuggestions.map((exercise, index) => {
+                    const media = mediaFor(exercise, preferredGender());
+                    return (
+                      <button
+                        id={`exercise-suggestion-${index}`}
+                        role="option"
+                        aria-selected={catalogSuggestionIndex === index}
+                        className={catalogSuggestionIndex === index ? 'active' : ''}
+                        type="button"
+                        key={exercise.id}
+                        onMouseDown={(event) => event.preventDefault()}
+                        onClick={() => chooseCatalogSuggestion(exercise)}
+                      >
+                        {media.thumbnail ? <img src={media.thumbnail} alt="" loading="lazy" /> : <span className="exercise-suggestion-placeholder"><Search size={17} /></span>}
+                        <span><strong>{exercise.name}</strong><small>{titleCase(exercise.body_part)} · {titleCase(exercise.equipment)}</small></span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
             {canPlan && <button className="primary-button personalized-training-button" onClick={() => setPlannerOpen(true)}><Sparkles size={18} /> Personalized training program</button>}
           </div>
         </div>
@@ -270,6 +344,7 @@ export function ExerciseLibrary({ onWorkoutAdded, aiFeaturesEnabled = false }: {
           })}
         </div>
         {plannerOpen && SmartTrainingPlanner && <Suspense fallback={<div className="loading-state">Loading training planner…</div>}><SmartTrainingPlanner catalog={catalog} onClose={() => setPlannerOpen(false)} onSaved={onWorkoutAdded} /></Suspense>}
+        {selected && <ExerciseDetail exercise={selected} onClose={() => setSelected(undefined)} onAdded={onWorkoutAdded} />}
       </section>
     );
   }

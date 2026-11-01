@@ -162,7 +162,7 @@ The action panel is headed `Update your balance`; it does not repeat a separate 
 
 ### 6.2 Browsing and search
 
-The first Exercises view shows muscle cards. Opening a muscle shows its matching movements. Search is scoped to the opened group and matches exercise name, body part, target, equipment, and aliases, case-insensitively.
+The first Exercises view shows muscle cards and a catalog-wide exercise autocomplete. Typing a term such as `Press` displays up to five matching exercises; users can choose with a pointer or keyboard to open the existing exercise detail directly. Opening a muscle continues to show its matching movements with a search scoped to that group. Both searches match exercise name, body part, target, equipment, and aliases case-insensitively.
 
 ### 6.3 Exercise detail
 

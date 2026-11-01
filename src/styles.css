@@ -50,6 +50,16 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .eyebrow > span { display: inline-block; width: 28px; height: 1px; margin: 0 9px 3px 0; background: currentColor; }
 .hero-copy h1 { margin: 0; font-size: clamp(3.1rem, 6.4vw, 6rem); font-weight: 800; line-height: .96; letter-spacing: -.065em; text-wrap: balance; }
 .hero-copy > p:last-child { margin: 20px 0 0; max-width: 700px; color: var(--muted-text); font-size: clamp(16px, 2vw, 18px); line-height: 1.6; }
+.exercise-catalog-search { position: relative; width: min(620px,100%); margin-top: 24px; }
+.exercise-catalog-search > .search-box { width: 100%; }
+.exercise-suggestions { position: absolute; z-index: 35; top: calc(100% + 7px); right: 0; left: 0; overflow: hidden; border: 1px solid var(--border-strong); border-radius: 14px; background: #090d0a; box-shadow: 0 22px 55px rgba(0,0,0,.5); }
+.exercise-suggestions > button { display: flex; width: 100%; min-height: 62px; align-items: center; gap: 11px; padding: 8px 11px; border: 0; border-bottom: 1px solid var(--border); color: var(--text); background: #090d0a; text-align: left; cursor: pointer; }
+.exercise-suggestions > button:last-child { border-bottom: 0; }
+.exercise-suggestions > button:hover, .exercise-suggestions > button.active, .exercise-suggestions > button[aria-selected="true"] { color: var(--primary); background: rgba(183,255,79,.08); }
+.exercise-suggestions img, .exercise-suggestion-placeholder { display: grid; width: 46px; height: 46px; flex: 0 0 auto; place-items: center; border-radius: 9px; object-fit: cover; color: var(--primary); background: var(--muted); }
+.exercise-suggestions span { display: grid; min-width: 0; gap: 4px; }
+.exercise-suggestions strong { overflow: hidden; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.exercise-suggestions small { overflow: hidden; color: var(--muted-text); font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
 .muscle-grid { display: grid; grid-template-columns: repeat(5, minmax(0,1fr)); gap: 12px; }
 .muscle-card { position: relative; aspect-ratio: 4/5; overflow: hidden; padding: 0; border: 1px solid var(--border); border-radius: 21px; background: var(--surface); text-align: left; cursor: pointer; transition: transform .25s, border-color .25s, box-shadow .25s; }
 .muscle-card.featured { grid-column: span 2; aspect-ratio: 2/1; }
