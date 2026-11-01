@@ -5,6 +5,7 @@ import { useBackNavigation } from '../navigation/backNavigation';
 import { readUserProfile } from '../profile/userProfile';
 import { getRecognitionKeyStatus } from '../settings/secureKeys';
 import { MovementTracker, selectRepresentativeRep } from './engine';
+import { applyAcceptedMovementCount } from './countReconciliation';
 import { analyzeMovementWithMeta } from './metaAnalysis';
 import { CompatibilityPoseRuntime, type PoseDetection } from './poseCompatibility';
 import { drawPose } from './poseCanvas';
@@ -110,6 +111,7 @@ export function ExerciseSession({
   const [trackingStable, setTrackingStable] = useState(false);
   const [cameraStreamVersion, setCameraStreamVersion] = useState(0);
   const [cameraFacing, setCameraFacing] = useState<CameraFacing>('user');
+  const [canSwitchCamera, setCanSwitchCamera] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const frameCanvasRef = useRef<HTMLCanvasElement | undefined>(undefined);
@@ -159,6 +161,22 @@ export function ExerciseSession({
   useEffect(() => { workoutRef.current = workout; }, [workout]);
   useEffect(() => { onSaveRef.current = onSave; }, [onSave]);
   useEffect(() => { setIndexRef.current = setIndex; }, [setIndex]);
+
+  const refreshCameraAvailability = useCallback(async () => {
+    if (!navigator.mediaDevices?.enumerateDevices) return;
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      setCanSwitchCamera(devices.filter((device) => device.kind === 'videoinput').length > 1);
+    } catch {
+      setCanSwitchCamera(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void refreshCameraAvailability();
+    navigator.mediaDevices?.addEventListener?.('devicechange', refreshCameraAvailability);
+    return () => navigator.mediaDevices?.removeEventListener?.('devicechange', refreshCameraAvailability);
+  }, [refreshCameraAvailability]);
 
   const cancelFrameLoop = useCallback(() => {
     const scheduled = frameLoopRef.current;
@@ -539,13 +557,14 @@ export function ExerciseSession({
       setStage('setup');
       setCameraStreamVersion((version) => version + 1);
       startWorkerTracking();
+      void refreshCameraAvailability();
     } catch (error) {
       const denied = error instanceof DOMException && error.name === 'NotAllowedError';
       showCameraRecovery(denied
         ? 'Camera access is blocked. Allow camera access in your browser settings, then try again.'
         : 'Camera access was not available. Retry the camera or use the set timer.');
     }
-  }, [cameraFacing, profile, showCameraRecovery, startWorkerTracking, stopCamera]);
+  }, [cameraFacing, profile, refreshCameraAvailability, showCameraRecovery, startWorkerTracking, stopCamera]);
 
   const switchCamera = () => {
     const nextFacing: CameraFacing = cameraFacing === 'user' ? 'environment' : 'user';
@@ -762,20 +781,12 @@ export function ExerciseSession({
       : analysis.countReview.suggestedSetRepCount;
     const current = workoutRef.current;
     const currentSetId = current.sets[setIndex]?.id;
-    const next = {
-      ...current,
-      sets: current.sets.map((set) => set.id === currentSetId && set.movementSummary
-        ? {
-            ...set,
-            completedReps: acceptedRepCount,
-            movementSummary: {
-              ...set.movementSummary,
-              completedReps: acceptedRepCount,
-              metaAnalysis: storedMetaAnalysis(analysis, choice, acceptedRepCount),
-            },
-          }
-        : set),
-    };
+    const next = applyAcceptedMovementCount(
+      current,
+      currentSetId,
+      acceptedRepCount,
+      storedMetaAnalysis(analysis, choice, acceptedRepCount),
+    );
     setCountDecision(choice);
     setRepCount(acceptedRepCount);
     workoutRef.current = next;
@@ -798,8 +809,7 @@ export function ExerciseSession({
           <h3>{profile ? 'Enable camera?' : 'Start with a set timer'}</h3>
           {profile ? <><p>Eat &amp; Fit uses your camera to count repetitions and evaluate movement. Live analysis runs on this device.</p><p>Video is not uploaded unless you later choose to analyze the set with Meta AI.</p></> : <p>This exercise does not have a validated camera profile yet. You can complete it with a set timer.</p>}
           <div className="session-actions">
-            {profile && <button className="primary-button" onClick={() => void startCamera('user')}><Camera size={18} /> Enable selfie camera</button>}
-            {profile && <button className="text-button" onClick={() => void startCamera('environment')}><Camera size={18} /> Use rear camera</button>}
+            {profile && <button className="primary-button" onClick={() => void startCamera('user')}><Camera size={18} /> Enable camera</button>}
             <button className="text-button" onClick={continueWithTimer}><Timer size={18} /> Use timer instead</button>
           </div>
         </section>
@@ -813,7 +823,7 @@ export function ExerciseSession({
             {stage === 'countdown' && <strong className="session-countdown">{countdown || 'Go'}</strong>}
             {stage === 'active' && <div className="rep-progress" style={{ '--rep-progress': `${cameraSetProgress(setTarget, repCount, elapsedSeconds)}%` } as CSSProperties}><strong>{repCount}</strong><span>{targetReps > 0 ? `of ${targetReps} reps` : `${Math.min(elapsedSeconds, targetSeconds)} of ${targetSeconds}s`}</span></div>}
           </div>
-          {stage === 'setup' && <div className="camera-setup"><h3>{profile?.cameraView === 'side' ? 'Use a side view' : 'Use a front view'}</h3><p>{profile?.setupInstruction}</p><button className="text-button camera-switch" type="button" onClick={switchCamera}><Camera size={17} /> Use {cameraFacing === 'user' ? 'rear' : 'selfie'} camera</button><p className="tracking-status" role="status">{trackingStable ? 'Tracking ready. Starting automatically…' : poseStatus}</p>{cameraError && <p className="session-error" role="alert">{cameraError}</p>}</div>}
+          {stage === 'setup' && <div className="camera-setup"><h3>{profile?.cameraView === 'side' ? 'Use a side view' : 'Use a front view'}</h3><p>{profile?.setupInstruction}</p>{canSwitchCamera && <button className="text-button camera-switch" type="button" onClick={switchCamera}><Camera size={17} /> Use {cameraFacing === 'user' ? 'rear' : 'selfie'} camera</button>}<p className="tracking-status" role="status">{trackingStable ? 'Tracking ready. Starting automatically…' : poseStatus}</p>{cameraError && <p className="session-error" role="alert">{cameraError}</p>}</div>}
           {stage === 'active' && <div className="live-session-controls"><p>{poseStatus}</p><strong>{elapsedSeconds}s</strong><div><button className="text-button" disabled={repCount === 0} onClick={() => adjustRep(-1)}><Minus size={17} /> Undo last rep</button><button className="text-button" onClick={() => adjustRep(1)}><Plus size={17} /> Add rep</button></div></div>}
         </section>
       )}
@@ -896,7 +906,6 @@ function MetaResult({
     {coaching.positiveObservation && <p>{coaching.positiveObservation}</p>}
     {coaching.primaryCorrection && <p><strong>{coaching.primaryCorrection}</strong></p>}
     {coaching.nextSetGoal && <p>Next set: {coaching.nextSetGoal}</p>}
-    {coaching.evidenceMetric && <small>Evidence: {coaching.evidenceMetric}</small>}
   </article>;
 }
 

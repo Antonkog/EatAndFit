@@ -25,9 +25,12 @@ test('exercise tracking defaults to selfie camera and permits an explicit rear-c
   assert.match(session, /facingMode: \{ ideal: facing \}/);
   assert.match(session, /width: \{ ideal: 1280 \}/);
   assert.match(session, /height: \{ ideal: 720 \}/);
-  assert.match(session, /Enable selfie camera/);
-  assert.match(session, /Use rear camera/);
+  assert.match(session, /> Enable camera</);
+  assert.match(session, /enumerateDevices/);
+  assert.match(session, /setCanSwitchCamera\(devices\.filter/);
+  assert.match(session, /canSwitchCamera &&/);
   assert.match(session, /cameraFacing === 'user' \? 'environment' : 'user'/);
+  assert.doesNotMatch(session, /Enable selfie camera/);
   assert.doesNotMatch(session, /zoom/);
 });
 

@@ -128,8 +128,7 @@ For a camera-supported exercise, show:
 
 Actions:
 
-- `Enable selfie camera`
-- `Use rear camera`
+- `Enable camera`
 - `Use timer instead`
 
 Camera permission is requested only after a camera action is pressed. General application terms do not count as camera or Meta-upload consent.
@@ -146,7 +145,7 @@ Before counting begins:
 
 If framing is poor, show one instruction at a time, such as `Move farther from the camera` or `Turn your left side toward the camera`. Do not start while essential landmarks are missing.
 
-The setup defaults to the front-facing selfie camera at approximately 1280 × 720 and provides an explicit control to switch to the rear camera. For either selection, it tries an exact facing-mode constraint first and a preferred-facing fallback when necessary. It never requests wide-angle, zoom, or a particular rear lens. It uses one camera video and one matching canvas. Their intrinsic dimensions are synchronized on metadata load, video resize, and orientation change. The selfie camera mirrors both layers so the user's physical right side appears on the right side of the screen; the rear camera leaves both layers unmirrored. Both use `object-fit: contain`. Playback is attached once per camera stream; persisting a counted repetition must not reassign the stream or call `play()` again. The skeleton appears as soon as any single pose is returned. Readiness starts the countdown automatically rather than enabling a button. The default readiness rule requires both shoulders, wrists, hips, knees, and ankles to remain at least 60% visible for ten consecutive analyzed frames.
+The setup defaults to the front-facing selfie camera at approximately 1280 × 720. Consent uses one `Enable camera` action. After permission is granted, the app enumerates available video inputs and displays the selfie/rear switch only when more than one camera is available, so a single-camera computer is not asked to choose. For either selection, it tries an exact facing-mode constraint first and a preferred-facing fallback when necessary. It never requests wide-angle, zoom, or a particular rear lens. It uses one camera video and one matching canvas. Their intrinsic dimensions are synchronized on metadata load, video resize, and orientation change. The selfie camera mirrors both layers so the user's physical right side appears on the right side of the screen; the rear camera leaves both layers unmirrored. Both use `object-fit: contain`. Playback is attached once per camera stream; persisting a counted repetition must not reassign the stream or call `play()` again. The skeleton appears as soon as any single pose is returned. Readiness starts the countdown automatically rather than enabling a button. The default readiness rule requires both shoulders, wrists, hips, knees, and ankles to remain at least 60% visible for ten consecutive analyzed frames.
 
 Bodyweight Squat uses one exercise-specific setup rule for a realistic side view. One shoulder must have at least 45% visibility while the same side's hip–knee–ankle landmarks average at least 60% confidence for five consecutive analyzed frames. Readiness and repetition counting use the same side-confidence calculation. Either side is accepted; wrists and the naturally occluded far-side limbs are not required. This exception does not change Barbell Back Squat, any other movement profile, movement thresholds, or form assessment.
 
@@ -275,7 +274,7 @@ When Meta finishes, add:
 - one goal for the next set;
 - model labels and an AI disclaimer.
 
-When the counts differ by any amount in either direction, show `Keep N` and `Use M`. The user must make the choice; Meta never changes the completed count silently. Persist the original local count, Muse observation, confidence, suggested set count, and decision, but never the recording or SAM boxes.
+When the counts differ by any amount in either direction, show `Keep N` and `Use M`. The user must make the choice; Meta never changes the completed count silently. The accepted count replaces the set's visible Calendar repetition value as well as its completed repetition value. Persist the original local count, Muse observation, confidence, suggested set count, and decision, but never the recording or SAM boxes. Evidence identifiers remain internal validation data and are not rendered as raw labels in the coaching card.
 
 Do not replace the local result. If Meta fails, keep the completed set and show a non-blocking retry option while the in-memory recording is still available.
 
