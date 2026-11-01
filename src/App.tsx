@@ -5,6 +5,7 @@ import { BalanceView } from './balance/BalanceView';
 import { CalendarView } from './calendar/CalendarView';
 import { localDate } from './data/db';
 import { ExerciseLibrary } from './exercises/ExerciseLibrary';
+import { useBackNavigation } from './navigation/backNavigation';
 import { ProfileSetupDialog } from './profile/ProfileSetupDialog';
 import { PROFILE_CHANGED, profileIssue, readUserProfile, shouldShowProfileSetup } from './profile/userProfile';
 import { RecipeView } from './recipes/RecipeView';
@@ -35,7 +36,9 @@ const AiRecipeView = __SMART_SCANNER__
 
 export function App() {
   const pageRef = useRef<HTMLElement>(null);
+  const backViews = useRef<View[]>([]);
   const [view, setView] = useState<View>('balance');
+  const [backDepth, setBackDepth] = useState(0);
   const [calendarDate, setCalendarDate] = useState(localDate());
   const [calendarMode, setCalendarMode] = useState<'workout' | 'food'>('workout');
   const [recipeIngredients, setRecipeIngredients] = useState<string[]>([]);
@@ -91,6 +94,24 @@ export function App() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  const navigateTo = (next: View) => {
+    if (next !== view) {
+      backViews.current.push(view);
+      setBackDepth(backViews.current.length);
+    }
+    setView(next);
+  };
+
+  const navigateBack = (fallback?: View) => {
+    const previous = backViews.current.pop() ?? fallback;
+    setBackDepth(backViews.current.length);
+    if (!previous) return;
+    setView(previous);
+    scrollToTop();
+  };
+
+  useBackNavigation(backDepth > 0, navigateBack, 10);
+
   const showView = (next: PrimaryView) => {
     if (next === 'calendar') {
       setCalendarDate(localDate());
@@ -104,14 +125,14 @@ export function App() {
       setScanDate(localDate());
       setScanMode(aiFeaturesEnabled ? 'photo' : 'barcode');
     }
-    setView(next);
+    navigateTo(next);
     scrollToTop();
   };
 
   const showCalendar = (date: string, mode: 'workout' | 'food') => {
     setCalendarDate(date);
     setCalendarMode(mode);
-    setView('calendar');
+    navigateTo('calendar');
     scrollToTop();
   };
 
@@ -119,14 +140,14 @@ export function App() {
     setRecipeIngredients(ingredients);
     setRecipeDate(date);
     setFoodReturnView(returnView);
-    setView('recipes');
+    navigateTo('recipes');
     scrollToTop();
   };
 
   const showProductScanner = (date: string) => {
     setScanDate(date);
     setScanMode('barcode');
-    setView('scan');
+    navigateTo('scan');
     scrollToTop();
   };
 
@@ -138,17 +159,19 @@ export function App() {
     setAiIngredients(ingredients);
     setAiDate(date);
     setAiReturnView(returnView);
-    setView('ai');
+    navigateTo('ai');
     scrollToTop();
   };
 
   const showSettings = () => {
-    setView('settings');
+    navigateTo('settings');
     scrollToTop();
   };
 
   const handleFoodAdded = (date: string) => {
     if (foodReturnView === 'balance') {
+      if (backViews.current.at(-1) === 'balance') backViews.current.pop();
+      setBackDepth(backViews.current.length);
       setView('balance');
       scrollToTop();
       return;
@@ -222,7 +245,7 @@ export function App() {
               initialDate={aiDate}
               initialRequiredIngredients={aiIngredients}
               backDestination={aiReturnView}
-              onBack={() => setView(aiReturnView)}
+              onBack={() => navigateBack(aiReturnView)}
               onOpenSettings={showSettings}
               onAdded={(date) => aiReturnView === 'recipes' ? handleFoodAdded(date) : showCalendar(date, 'food')}
             />

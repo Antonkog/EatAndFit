@@ -14,6 +14,7 @@ import {
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { readJsonResponse } from '../api/readJsonResponse';
 import { localDate } from '../data/db';
+import { useBackNavigation } from '../navigation/backNavigation';
 import { getRecognitionCredential, getRecognitionKeyStatus, RECOGNITION_KEYS_CHANGED } from '../settings/secureKeys';
 import { prepareJpeg } from './image';
 import { recognizeIngredientsWithMeta } from './metaRecognition';
@@ -73,6 +74,7 @@ export function IngredientScannerTrigger({
   onOpenSettings: () => void;
 }) {
   const [open, setOpen] = useState(false);
+  useBackNavigation(open, () => setOpen(false), 100);
   return <><button className="primary-button large full" type="button" onClick={() => setOpen(true)}><ScanLine size={18} /> Recognize ingredients</button>{open && <div className="sheet-overlay" role="dialog" aria-modal="true" aria-label="Ingredient scanner"><article className="side-sheet ingredient-sheet"><button className="sheet-close" onClick={() => setOpen(false)} aria-label="Close"><X /></button><header><h2>Ingredient scanner</h2><p>Take one clear photo, review the labels, then add the valid ingredients to the recipe form.</p></header><IngredientScannerPanel currentIngredients={currentIngredients} onConfirm={(items) => { onConfirm(items); setOpen(false); }} onOpenSettings={onOpenSettings} /></article></div>}</>;
 }
 

@@ -1,6 +1,7 @@
 import { Barcode, ExternalLink, Utensils, X } from 'lucide-react';
 import { useEffect } from 'react';
 import type { FoodEntry } from '../data/db';
+import { useBackNavigation } from '../navigation/backNavigation';
 
 type StoredPayload = {
   barcode?: string;
@@ -60,6 +61,7 @@ function BadgeList({ values }: { values: string[] }) {
 }
 
 export function CalendarFoodDetail({ entry, onClose }: { entry: FoodEntry; onClose: () => void }) {
+  useBackNavigation(true, onClose, 100);
   const payload = payloadOf(entry);
   const isProduct = entry.provider === 'openfoodfacts' || entry.provider === 'manual';
   const ingredients = payload.ingredientLines ?? payload.ingredients ?? [];

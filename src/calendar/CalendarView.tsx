@@ -42,6 +42,7 @@ import { finalizeWorkoutNumberDraft, parseWorkoutNumberDraft, type WorkoutNumber
 import { CalendarFoodDetail } from './CalendarEntryDetail';
 import { ExerciseDetail } from '../exercises/ExerciseLibrary';
 import type { Exercise } from '../exercises/types';
+import { useBackNavigation } from '../navigation/backNavigation';
 
 const weekdays = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
 const meals: MealType[] = ['breakfast', 'lunch', 'dinner', 'snack'];
@@ -208,6 +209,7 @@ export function CalendarView({
 }
 
 function EditTrainingDialog({ date, workouts, onClose }: { date: string; workouts: Workout[]; onClose: () => void }) {
+  useBackNavigation(true, onClose, 100);
   const today = localDate();
   const selectedPlanned = workouts.filter((workout) => workout.date === date && !workout.completed);
   const futurePlanned = workouts.filter((workout) => workout.date >= date && !workout.completed);

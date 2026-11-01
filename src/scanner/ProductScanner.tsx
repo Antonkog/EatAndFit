@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { saveFood, saveProduct, type MealType } from '../data/db';
+import { useBackNavigation } from '../navigation/backNavigation';
 
 type Product = {
   barcode: string;
@@ -171,6 +172,8 @@ export function ProductScanner({ initialDate, onAdded, onUseInRecipe }: {
     setCameraError('');
     setCameraKey((value) => value + 1);
   };
+
+  useBackNavigation(Boolean(product), reset, 60);
 
   return (
     <section className="product-scanner">

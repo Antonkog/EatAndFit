@@ -58,6 +58,8 @@ Balance is the default screen. Selecting the Eat & Fit brand also opens Balance.
 
 Desktop uses a translucent top header with centered navigation. Mobile uses a fixed bottom navigation bar with the same five destinations. Navigation resets destination-specific state where appropriate, including the Calendar date/mode and Scan mode.
 
+On touch devices, a deliberate rightward swipe beginning within the left edge performs contextual back navigation when a destination exists. The topmost dialog, exercise session, product result, or exercise-group view closes first; otherwise the app returns to the previously visited primary screen. Short, slow, predominantly vertical, and non-edge gestures are ignored so normal scrolling and controls are unaffected.
+
 ### 3.2 Visual language
 
 - Solid near-black forest background without a grid or cell texture.

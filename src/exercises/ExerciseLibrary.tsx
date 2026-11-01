@@ -13,6 +13,7 @@ import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { localDate, scheduleWorkout } from '../data/db';
 import { estimateSetDurationSeconds } from '../energy/estimates';
 import { classifyExercise } from '../energy/sources';
+import { useBackNavigation } from '../navigation/backNavigation';
 import { preferredExerciseSex, profileIssue, readUserProfile, setExerciseModelPreference, type ProfileSex } from '../profile/userProfile';
 import { exerciseMatches } from './search';
 import type { Exercise, ExerciseCatalog } from './types';
@@ -89,6 +90,7 @@ export function ExerciseDetail({
   initialDate?: string;
   allowScheduling?: boolean;
 }) {
+  useBackNavigation(true, onClose, 100);
   const [gender, setGender] = useState<Gender>(preferredGender);
   const [date, setDate] = useState(initialDate);
   const [adding, setAdding] = useState(false);
@@ -227,6 +229,8 @@ export function ExerciseLibrary({ onWorkoutAdded, aiFeaturesEnabled = false }: {
   const [plannerOpen, setPlannerOpen] = useState(false);
   const profile = readUserProfile();
   const canPlan = aiFeaturesEnabled && Number(profile.age) >= 19 && !profileIssue(profile);
+
+  useBackNavigation(Boolean(selectedGroup), () => setSelectedGroup(undefined), 40);
 
   useEffect(() => {
     void fetch('/data/catalog.json').then((response) => response.json()).then(setCatalog);

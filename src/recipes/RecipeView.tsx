@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { localDate, saveFood, type MealType } from '../data/db';
+import { useBackNavigation } from '../navigation/backNavigation';
 import { recipeSearchParams } from './filters';
 import { getCuisineLocation, type CuisineLocation } from './location';
 import type { RecipeDetail, RecipePage, RecipeSummary } from './types';
@@ -297,6 +298,7 @@ function RecipeImage({ src, className, fallbackClass, loading }: { src?: string;
 }
 
 function RecipeDetail({ recipe, initialDate, onClose, onAdded }: { recipe: RecipeDetail; initialDate: string; onClose: () => void; onAdded: (date: string) => void }) {
+  useBackNavigation(true, onClose, 100);
   const [date, setDate] = useState(initialDate);
   const [meal, setMeal] = useState<MealType>(recipe.recommendationSlot === 'morning' ? 'breakfast' : recipe.recommendationSlot === 'afternoon' ? 'lunch' : 'dinner');
   const [servings, setServings] = useState(1);

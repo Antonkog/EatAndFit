@@ -15,6 +15,7 @@ import {
 import { useState } from 'react';
 import { readJsonResponse } from '../api/readJsonResponse';
 import { localDate, saveFood, type MealType } from '../data/db';
+import { useBackNavigation } from '../navigation/backNavigation';
 import { ingredientSearchQuery, nutritionPerServing, suggestIngredientGrams, type UsdaNutrient, type UsdaPortion } from '../nutrition/recipeNutrition';
 import { IngredientScannerTrigger } from '../scanner/ScanView';
 import { getRecognitionCredential } from '../settings/secureKeys';
@@ -189,6 +190,7 @@ function AiRecipeCard({ recipe, onClick }: { recipe: AiRecipe; onClick: () => vo
 }
 
 function AiRecipeDetail({ recipe, initialDate, onClose, onAdded }: { recipe: AiRecipe; initialDate: string; onClose: () => void; onAdded: (date: string) => void }) {
+  useBackNavigation(true, onClose, 100);
   const [mode, setMode] = useState<'ai' | 'usda'>('ai');
   const [matchOpen, setMatchOpen] = useState(false);
   const [date, setDate] = useState(initialDate);
@@ -228,6 +230,7 @@ function AiRecipeDetail({ recipe, initialDate, onClose, onAdded }: { recipe: AiR
 }
 
 function UsdaMatchDialog({ recipe, onClose, onUse }: { recipe: AiRecipe; onClose: () => void; onUse: (value: AiRecipe['nutrition']) => void }) {
+  useBackNavigation(true, onClose, 200);
   const [ingredientIndex, setIngredientIndex] = useState(0);
   const [matches, setMatches] = useState<IngredientMatch[]>([]);
   const [query, setQuery] = useState(ingredientSearchQuery(recipe.ingredients[0] ?? ''));

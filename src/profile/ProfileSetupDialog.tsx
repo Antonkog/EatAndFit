@@ -1,12 +1,15 @@
 import { Activity } from 'lucide-react';
 import { ProfileForm } from './ProfileForm';
 import { dismissProfileSetup } from './userProfile';
+import { useBackNavigation } from '../navigation/backNavigation';
 
 export function ProfileSetupDialog({ onFinished }: { onFinished: () => void }) {
   const skip = () => {
     dismissProfileSetup();
     onFinished();
   };
+
+  useBackNavigation(true, skip, 200);
 
   return (
     <div className="profile-setup-backdrop">

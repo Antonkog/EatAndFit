@@ -4,6 +4,7 @@ import { allWorkouts, localDate, saveTrainingPlan, type Workout } from '../data/
 import { estimateDurationSeconds, estimateExerciseEnergy, estimateSetDurationSeconds } from '../energy/estimates';
 import { classifyExercise } from '../energy/sources';
 import type { ExerciseCatalog } from '../exercises/types';
+import { useBackNavigation } from '../navigation/backNavigation';
 import { readUserProfile } from '../profile/userProfile';
 import { getRecognitionCredential } from '../settings/secureKeys';
 import { ensureEnergyCalibration } from './calibration';
@@ -14,6 +15,7 @@ import type { GeneratedTrainingPlan } from './types';
 const goalLabels = { lose_weight: 'Lose weight', build_muscle: 'Build muscle', stay_fit: 'Stay fit' } as const;
 
 export function TrainingPlanner({ catalog, onClose, onSaved }: { catalog: ExerciseCatalog; onClose: () => void; onSaved: (date: string) => void }) {
+  useBackNavigation(true, onClose, 100);
   const profile = readUserProfile();
   const goal = profile.trainingGoal ?? 'stay_fit';
   const [plan, setPlan] = useState<GeneratedTrainingPlan>();
