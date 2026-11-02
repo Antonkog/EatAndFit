@@ -3,8 +3,8 @@
 ## Document status
 
 - Product: Eat & Fit web application
-- Specification version: 1.6
-- Implementation baseline: `develop` as of October 31, 2026
+- Specification version: 1.7
+- Implementation baseline: `main` as of November 2, 2026
 - Language: English only
 - Platforms: responsive web application for desktop and mobile browsers
 
@@ -40,7 +40,7 @@ Eat & Fit is built in two free editions.
 | Adult AI energy calibration | No | Automatic when an eligible profile and key exist |
 | Personalized two-week training | Hidden | Available to eligible adults after a verified key is saved |
 | Local camera-guided exercise sessions | Yes | Yes |
-| Post-set SAM/Muse movement coaching | Hidden | Available to adults with a verified Meta key and separate per-rep consent |
+| Post-set SAM/Muse movement coaching | Hidden | Available to adults with a verified Meta key and separate per-set consent |
 | Provider-key settings | Hidden | Yes |
 
 The shared application configuration resolves `APP_EDITION=core` or `APP_EDITION=byok` and all feature availability used by the browser and API. `RECIPE_PHOTO_GENERATION_ENABLED` defaults to true for BYOK and is always false for Core. Firebase Analytics availability is derived from its public configuration rather than treated as a user-facing switch. The Core API does not expose AI routes. The application never stores a model API key in source control, `.env`, Docker configuration, or server environment variables.
@@ -275,7 +275,7 @@ The browser records the set in memory without audio at a controlled bitrate and 
 
 Muse returns an advisory observed repetition count plus low, medium, or high count confidence. When the resulting full-set count differs from MediaPipe in either direction, the user must choose `Keep N` or `Use M`; Meta never changes history silently. The accepted value updates both the completed repetition count and the set's visible Calendar repetition value. The stored analysis preserves the local count, Muse observation, suggested set count, confidence, and user decision. Muse cannot change the application-selected form status or create deterministic movement measurements. Good form requires a positive observation and a null correction. A correction state requires exactly one evidence-grounded correction. Insufficient evidence permits no technique judgment. Evidence is validated internally but its raw metric identifier is not shown in the result card. Contradictory output is rejected. Local and Meta files are deleted on both success and failure paths; raw video, landmarks, and SAM output are not stored in IndexedDB or backups. Meta failure never removes local workout progress.
 
-### 8.3 Nutrition history
+### 8.5 Nutrition history
 
 The Nutrition tab shows food entries for the selected date, daily calorie/protein/carbohydrate/fat totals, meal type, and saved image when present.
 
@@ -467,6 +467,8 @@ Users can inspect a generated recipe, run the USDA nutrition check, choose date/
 
 When recipe photo generation is enabled, the selected recipe provider also supplies the image: Meta uses Muse Image 1.0 directly from the browser and Gemini uses the same-origin forwarding endpoint. There is no automatic provider fallback.
 
+The configured image models are Meta `muse-image-1.0` and Gemini `gemini-nano-banana-2.1`. Image generation uses the same provider and saved key selected for recipe text.
+
 After both recipe objects are validated, their image requests run concurrently. The result grid remains hidden until both requests settle. A failed image uses the normal placeholder without hiding or regenerating its valid recipe. Successful images are labelled `AI-generated image`; they are representative and do not affect ingredients, nutrition, USDA checks, or serving calculations.
 
 Generated images remain in memory while recipes are reviewed. Adding a photographed recipe to Calendar compresses its image and saves it in local IndexedDB. Provider keys and temporary remote image URLs are never stored.
@@ -506,6 +508,8 @@ Exactly two providers are supported:
 
 - Meta, using Muse Spark 1.3 (`muse-spark-1.3-contributor`, with `muse-spark-1.3` tried when the contributor model is reported missing).
 - Google Gemini, using `gemini-3.1-flash-lite` by default.
+
+When recipe-photo generation is enabled, the corresponding image implementations use Meta `muse-image-1.0` or Gemini `gemini-nano-banana-2.1`. Image failure does not trigger the other provider.
 
 The selected provider is shared by ingredient recognition, AI recipes, adult calibration, and personalized training. Recipe-generation configuration is not independently selectable in the UI. Optional movement analysis always uses a separately saved Meta key and remains available when Gemini is selected for the other AI features.
 
@@ -677,6 +681,6 @@ Feature tests cover centralized configuration, provider selection and validation
 - No automatically saved meal plan or calorie target; localized recipes are optional catalog suggestions only.
 - No body-weight history or macro targets.
 - No manual generic activity entry.
-- No video technique analysis, repetition counting, live form-error alerts, or rest timer yet.
+- No continuous cloud video analysis or automatic Meta upload. Live repetition counting and supported form cues run locally; Meta review is an explicit, post-set BYOK action.
 - Backups do not include profile, AI keys, provider preference, calibration, or locally generated recipe photos.
 - Editing the quantity of an already saved food row does not currently recompute its stored nutrients.

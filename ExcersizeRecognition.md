@@ -4,6 +4,8 @@
 
 This document is the source of truth for camera-guided exercise sessions in Eat & Fit. It defines which models perform each task, the user experience, privacy boundaries, data contracts, supported exercises, rollout sequence, and acceptance criteria.
 
+Implementation status as of November 2, 2026: the local MediaPipe session, eight movement profiles, timer fallback, full-set recording, direct-browser SAM/Muse review, and explicit count reconciliation are implemented on `main`. Provider availability must still be validated with the user's current Meta key, and device-level accuracy remains an ongoing acceptance activity.
+
 The first release uses a hybrid architecture:
 
 - MediaPipe Pose Landmarker performs live, on-device body-landmark detection and deterministic repetition counting.
@@ -442,7 +444,9 @@ This option is rejected. Sending every camera frame to the cloud would increase 
 
 This option is rejected for the first release. FFmpeg WASM would substantially increase bundle size and memory use on mobile devices. Temporary server conversion is more predictable across iPhone and Android browser recording formats.
 
-## Execution plan
+## Implementation status and remaining work
+
+Phases 2–5 below describe the implemented architecture. Phase 1 remains a repeatable provider-compatibility check whenever Meta changes model access or API behavior. Phase 6 remains active validation and tuning work rather than a claim that the accuracy targets have already been met.
 
 ### Phase 1 — Technical spike
 
@@ -455,14 +459,14 @@ This option is rejected for the first release. FFmpeg WASM would substantially i
 - Confirm model availability for the actual hackathon key, including contributor and standard Muse variants.
 - Stop cloud integration and retain local-only mode if deletion or structured parsing cannot be proven.
 
-### Phase 2 — Session foundation
+### Phase 2 — Session foundation (implemented)
 
 - Add the Calendar `Start exercise` action.
 - Build the full-screen session, camera-consent dialog, camera setup, timer fallback, rest timer, and next-set flow.
 - Add Screen Wake Lock, local speech, haptics, visibility cleanup, and resumable partial progress.
 - Extend workout-set persistence with optional tracking fields and preserve backup compatibility.
 
-### Phase 3 — Local movement engine
+### Phase 3 — Local movement engine (implemented)
 
 - Add the lazy MediaPipe worker and self-hosted model assets.
 - Implement the eight versioned movement profiles, beginning with the three bodyweight profiles for home testing.
@@ -470,7 +474,7 @@ This option is rejected for the first release. FFmpeg WASM would substantially i
 - Store repetition timestamps and rank a representative repetition for optional coaching evidence.
 - Validate performance on representative mobile hardware before enabling recording.
 
-### Phase 4 — Meta evidence path
+### Phase 4 — Meta evidence path (implemented)
 
 - Record camera-supported sets locally in memory without audio.
 - Add the explicit `Analyze with Meta AI` full-set review action.
@@ -479,13 +483,13 @@ This option is rejected for the first release. FFmpeg WASM would substantially i
 - Render compact sampled track evidence, reconcile count differences through user choice, and attach one Muse goal to the next set.
 - Guarantee server temporary-file deletion and browser-side Meta-file deletion on success, timeout, cancellation, and parse failure.
 
-### Phase 5 — Privacy and documentation
+### Phase 5 — Privacy and documentation (implemented)
 
 - Add the Legal/Data Sources disclosures for MediaPipe, SAM, Muse, temporary processing, provider charges, promotional credits, and educational limitations.
 - Update `ProductSpecifications.md` with the released behavior.
 - Keep this document current whenever a movement profile, model, consent rule, endpoint, or persisted field changes.
 
-### Phase 6 — Validation and polish
+### Phase 6 — Validation and polish (ongoing)
 
 - Test different body sizes, clothing, lighting, camera distances, device orientations, pauses, partial reps, occlusion, and left/right positioning.
 - Reject multiple-person scenes and verify that no bystander clip reaches Meta.
