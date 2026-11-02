@@ -153,11 +153,11 @@ Before counting begins:
 
 If framing is poor, show one instruction at a time, such as `Move farther from the camera` or `Turn your left side toward the camera`. Do not start while essential landmarks are missing.
 
-The setup defaults to the front-facing selfie camera at approximately 1280 × 720. Consent uses one `Enable camera` action. After permission is granted, the app enumerates available video inputs and displays the selfie/rear switch only when more than one camera is available, so a single-camera computer is not asked to choose. For either selection, it tries an exact facing-mode constraint first and a preferred-facing fallback when necessary. It never requests wide-angle, zoom, or a particular rear lens. It uses one camera video and one matching canvas. Their intrinsic dimensions are synchronized on metadata load, video resize, and orientation change. The selfie camera mirrors both layers so the user's physical right side appears on the right side of the screen; the rear camera leaves both layers unmirrored. Both use `object-fit: contain`. Playback is attached once per camera stream; persisting a counted repetition must not reassign the stream or call `play()` again. The skeleton appears as soon as any single pose is returned. Readiness starts the countdown automatically rather than enabling a button. The default readiness rule requires both shoulders, wrists, hips, knees, and ankles to remain at least 60% visible for ten consecutive analyzed frames.
+The setup defaults to the front-facing selfie camera at approximately 1280 × 720. Consent uses one `Enable camera` action. After permission is granted, the app enumerates available video inputs and displays the selfie/rear switch only when more than one camera is available, so a single-camera computer is not asked to choose. For either selection, it tries an exact facing-mode constraint first and a preferred-facing fallback when necessary. It never requests wide-angle, zoom, or a particular rear lens. It uses one camera video and one matching canvas. The selfie camera mirrors both layers so the user's physical right side appears on the right side of the screen; the rear camera leaves both layers unmirrored. Both use `object-fit: contain`. The canvas is sized to the actual viewport and maps landmarks into the displayed video rectangle, including letterbox offsets, device-pixel ratio, rotation, resizing, and camera transforms. Playback is attached once per camera stream; persisting a counted repetition must not reassign the stream or call `play()` again. The skeleton appears as soon as any single pose is returned. Readiness starts the countdown automatically rather than enabling a button. The default readiness rule requires both shoulders, wrists, hips, knees, and ankles to remain at least 60% visible for ten consecutive analyzed frames.
 
 Bodyweight Squat uses one exercise-specific setup rule for a realistic side view. One shoulder must have at least 45% visibility while the same side's hip–knee–ankle landmarks average at least 60% confidence for five consecutive analyzed frames. Readiness and repetition counting use the same side-confidence calculation. Either side is accepted; wrists and the naturally occluded far-side limbs are not required. This exception does not change Barbell Back Squat, any other movement profile, movement thresholds, or form assessment.
 
-The camera stage occupies `100dvh` on desktop, mobile, portrait, and landscape. The header remains over the top of the preview. Mobile portrait uses a 50%-opaque bottom panel for the required view, placement instruction, and tracking status until automatic countdown begins; wider viewports place the panel at the right. Progress and active controls remain over the video.
+The camera stage occupies `100dvh` on desktop, mobile, portrait, and landscape. The header remains over the top of the preview. Mobile portrait uses a 50%-opaque bottom panel for the required view, placement instruction, and tracking status until automatic countdown begins; wider viewports place the panel at the right. Once the set begins, the setup panel disappears and only the progress indicator and compact translucent timer remain over the video.
 
 ### Active set
 
@@ -167,9 +167,7 @@ The full-screen session displays:
 - a high-contrast skeleton overlay;
 - current and target repetitions;
 - a large progress ring;
-- one stable form or framing cue;
-- `Undo last rep` and `Add rep` correction controls;
-- camera and tracking status.
+- a compact elapsed-time overlay.
 
 When a repetition completes, display `Rep 1 complete.`, `Rep 2 complete.`, and so on. A short vibration and optional local speech announcement improve hands-free use. Speech is generated locally and can be muted.
 
@@ -178,6 +176,8 @@ Counting pauses when confidence becomes insufficient. The current count remains 
 The application must never stop the user between individual repetitions. Stopping between repetitions would make normal strength-training cadence awkward and potentially distracting. Interaction occurs between sets instead.
 
 A rep-based set ends only after its configured repetition target. A time-based set can continue counting repetitions but ends only when its configured duration expires. Missing rep and duration targets fall back to a 30-second timed set rather than a one-repetition set. Set completion starts a 60-second rest timer only when another incomplete set remains in the current exercise.
+
+Count correction happens after the set rather than over the live camera. `Set complete` shows the saved count with add/remove controls. A correction updates the completed and visible Calendar repetition values, movement provenance, and frozen energy calculation, and becomes the baseline for a later Meta review.
 
 ### Set completion and rest
 
@@ -259,6 +259,8 @@ The analysis action must state:
 8. Muse returns an observed segment count, count confidence, and structured coaching.
 9. The browser deletes the Meta file in a `finally` path, then displays the sampled SAM track, Muse review, and any count difference.
 10. The browser discards its original set recording and SAM track data.
+
+The browser reports the preparation, upload, SAM, Muse, and cleanup stages. Their limits are 60, 90, 180, 180, and 30 seconds respectively. Each stage uses an independent abort controller and diagnostic entry. Raw browser abort strings are replaced by retryable stage-specific errors. The finalized recording and local workout remain available after failure so the user can retry manually; no paid inference stage is automatically repeated. Closing the exercise explicitly cancels active work, but temporary Meta-file cleanup receives a separate best-effort request.
 
 Full-set review costs more than selected-repetition review, so it runs only after the explicit button press. Current pricing and promotional-credit terms must be verified before release.
 
@@ -509,7 +511,7 @@ Phases 2–5 below describe the implemented architecture. Phase 1 remains a repe
 
 - Synthetic landmark sequences for each supported exercise.
 - Valid repetitions, incomplete ROM, jitter, duplicate frames, pauses, low visibility, asymmetry, invalid tempo, and incorrect camera orientation.
-- Manual `Add rep` and `Undo last rep` behavior.
+- Post-set add/remove repetition behavior and Calendar persistence.
 - State restoration after closing during an incomplete set.
 
 ### Browser and PWA behavior

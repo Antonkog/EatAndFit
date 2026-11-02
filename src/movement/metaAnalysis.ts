@@ -1,5 +1,6 @@
 import { frameIndexOf, parseVideoStream, recordsOfKind, type ResponsesEvent } from '@meta-sam/parser';
 import { GEMINI_API_ENABLED, GEMINI_MOVEMENT_MODEL, META_API_ENABLED } from '../config/appConfig';
+import { recordAiFailure, recordAiSuccess } from '../diagnostics/clientLog';
 import { getRecognitionCredentialForProvider, type RecognitionProvider } from '../settings/secureKeys';
 import type { FormAssessment, MetaCoaching, MetaMovementAnalysis } from './types';
 
@@ -24,6 +25,19 @@ const coachingSchema = {
 };
 
 export type MovementReviewMode = 'profiled' | 'generic';
+export type MovementAnalysisStage = 'preparing' | 'uploading' | 'tracking' | 'reviewing' | 'cleaning';
+export const MOVEMENT_ANALYSIS_STAGE_LABELS: Record<MovementAnalysisStage, string> = {
+  preparing: 'Preparing video',
+  uploading: 'Uploading video',
+  tracking: 'Tracking athlete with SAM 3.1',
+  reviewing: 'Reviewing movement with Muse Spark 1.3',
+  cleaning: 'Cleaning up',
+};
+
+type MovementReviewOptions = {
+  onStage?: (stage: MovementAnalysisStage) => void;
+  signal?: AbortSignal;
+};
 
 export type MovementReviewInput = {
   mode: MovementReviewMode;
@@ -44,7 +58,93 @@ export type MovementReviewInput = {
 export interface MovementReviewProvider {
   readonly provider: RecognitionProvider;
   readonly modelLabel: string;
-  analyze(input: MovementReviewInput): Promise<MetaMovementAnalysis>;
+  analyze(input: MovementReviewInput, options?: MovementReviewOptions): Promise<MetaMovementAnalysis>;
+}
+
+class MovementAnalysisStageError extends Error {
+  readonly stage: MovementAnalysisStage;
+  readonly httpStatus?: number;
+  readonly rawResponse?: string;
+
+  constructor(stage: MovementAnalysisStage, message: string, cause?: unknown) {
+    super(message, cause === undefined ? undefined : { cause });
+    this.name = 'MovementAnalysisStageError';
+    this.stage = stage;
+    const diagnostic = cause as { httpStatus?: unknown; rawResponse?: unknown } | undefined;
+    this.httpStatus = typeof diagnostic?.httpStatus === 'number' ? diagnostic.httpStatus : undefined;
+    this.rawResponse = typeof diagnostic?.rawResponse === 'string' ? diagnostic.rawResponse : undefined;
+  }
+}
+
+const STAGE_MODELS: Record<MovementAnalysisStage, string> = {
+  preparing: 'Eat & Fit video preparation',
+  uploading: 'Meta Files API',
+  tracking: 'sam-3.1',
+  reviewing: 'muse-spark-1.3',
+  cleaning: 'Meta Files API',
+};
+
+function errorName(value: unknown) {
+  return value && typeof value === 'object' && 'name' in value ? String(value.name) : '';
+}
+
+function errorMessage(value: unknown) {
+  return value instanceof Error ? value.message : String(value ?? 'Unknown error');
+}
+
+function stageError(stage: MovementAnalysisStage, value: unknown, timedOut: boolean) {
+  if (value instanceof MovementAnalysisStageError) return value;
+  const label = MOVEMENT_ANALYSIS_STAGE_LABELS[stage];
+  const name = errorName(value);
+  const message = errorMessage(value);
+  if (timedOut || name === 'TimeoutError') {
+    return new MovementAnalysisStageError(stage, `${label} timed out. Your completed workout is safe; try the analysis again.`, value);
+  }
+  if (name === 'AbortError' || /fetch\s+aborted|aborted|network request failed|load failed/i.test(message) || value instanceof TypeError) {
+    return new MovementAnalysisStageError(stage, `${label} was interrupted by the browser or network. Your completed workout is safe; try the analysis again.`, value);
+  }
+  return new MovementAnalysisStageError(stage, `${label} failed: ${message}`, value);
+}
+
+async function runMovementStage<T>(
+  stage: MovementAnalysisStage,
+  timeoutMs: number,
+  options: MovementReviewOptions,
+  operation: (signal: AbortSignal) => Promise<T>,
+) {
+  options.onStage?.(stage);
+  const controller = new AbortController();
+  let timedOut = false;
+  const forwardAbort = () => controller.abort(options.signal?.reason);
+  if (options.signal?.aborted) forwardAbort();
+  else options.signal?.addEventListener('abort', forwardAbort, { once: true });
+  const timer = window.setTimeout(() => {
+    timedOut = true;
+    controller.abort(new DOMException('The movement analysis stage timed out.', 'TimeoutError'));
+  }, timeoutMs);
+  const startedAt = performance.now();
+  try {
+    const result = await operation(controller.signal);
+    recordAiSuccess('AI movement analysis stage', {
+      provider: 'META',
+      model: STAGE_MODELS[stage],
+      durationMs: Math.round(performance.now() - startedAt),
+      detail: stage,
+    });
+    return result;
+  } catch (value) {
+    const error = stageError(stage, value, timedOut);
+    recordAiFailure('AI movement analysis stage', error, {
+      provider: 'META',
+      model: STAGE_MODELS[stage],
+      durationMs: Math.round(performance.now() - startedAt),
+      detail: stage,
+    }, `movement_${stage}_failed`);
+    throw error;
+  } finally {
+    window.clearTimeout(timer);
+    options.signal?.removeEventListener('abort', forwardAbort);
+  }
 }
 
 function parseJsonObject(text: string) {
@@ -66,23 +166,34 @@ function outputText(payload: any) {
 }
 
 async function metaError(response: Response, capability: string): Promise<never> {
-  const payload = await response.json().catch(() => ({}));
-  if (response.status === 401) throw new Error('Wrong Meta API key.');
-  if (response.status === 402) throw new Error('Meta billing is not available for this API key.');
-  if (response.status === 403) throw new Error(`This Meta API key cannot use ${capability}.`);
-  if (response.status === 404) throw new Error(`The Meta ${capability} model is not available for this API key or network location.`);
-  if (response.status === 429) throw new Error('Meta rate limit reached. Your local workout result is safe.');
-  throw new Error(payload?.error?.message || `Meta ${capability} failed. Your local workout result is safe.`);
+  const rawResponse = await response.text().catch(() => '');
+  let payload: any = {};
+  try { payload = rawResponse ? JSON.parse(rawResponse) : {}; } catch { /* preserve the raw response for diagnostics */ }
+  const message = response.status === 401 ? 'Wrong Meta API key.'
+    : response.status === 402 ? 'Meta billing is not available for this API key.'
+    : response.status === 403 ? `This Meta API key cannot use ${capability}.`
+    : response.status === 404 ? `The Meta ${capability} model is not available for this API key or network location.`
+    : response.status === 429 ? 'Meta rate limit reached. Your local workout result is safe.'
+    : payload?.error?.message || `Meta ${capability} failed. Your local workout result is safe.`;
+  const error = new Error(message) as Error & { httpStatus?: number; rawResponse?: string };
+  error.httpStatus = response.status;
+  error.rawResponse = rawResponse;
+  throw error;
 }
 
-async function prepareVideo(video: Blob) {
+async function prepareVideo(video: Blob, signal: AbortSignal) {
   const body = new FormData();
   const extension = video.type.includes('mp4') ? 'mp4' : video.type.includes('quicktime') ? 'mov' : 'webm';
   body.append('video', video, `exercise-set.${extension}`);
-  const response = await fetch('/api/ai/movement/prepare', { method: 'POST', body });
+  const response = await fetch('/api/ai/movement/prepare', { method: 'POST', body, signal });
   if (!response.ok) {
-    const payload = await response.json().catch(() => ({}));
-    throw new Error(payload?.error || 'The exercise recording could not be prepared for Meta analysis.');
+    const rawResponse = await response.text().catch(() => '');
+    let payload: any = {};
+    try { payload = rawResponse ? JSON.parse(rawResponse) : {}; } catch { /* preserve raw response */ }
+    const error = new Error(payload?.error || 'The exercise recording could not be prepared for Meta analysis.') as Error & { httpStatus?: number; rawResponse?: string };
+    error.httpStatus = response.status;
+    error.rawResponse = rawResponse;
+    throw error;
   }
   return response.blob();
 }
@@ -104,7 +215,7 @@ async function videoMetadata(videoBlob: Blob) {
   }
 }
 
-async function uploadMetaFile(apiKey: string, video: Blob) {
+async function uploadMetaFile(apiKey: string, video: Blob, signal: AbortSignal) {
   const body = new FormData();
   body.append('purpose', 'user_data');
   body.append('expires_after[anchor]', 'created_at');
@@ -114,7 +225,7 @@ async function uploadMetaFile(apiKey: string, video: Blob) {
     method: 'POST',
     headers: { Authorization: `Bearer ${apiKey}` },
     body,
-    signal: AbortSignal.timeout(60_000),
+    signal,
   });
   if (!response.ok) return metaError(response, 'file upload');
   const payload = await response.json();
@@ -153,7 +264,7 @@ async function* responseEvents(response: Response): AsyncIterable<ResponsesEvent
   }
 }
 
-async function requestSam(apiKey: string, fileId: string, media: Awaited<ReturnType<typeof videoMetadata>>) {
+async function requestSam(apiKey: string, fileId: string, media: Awaited<ReturnType<typeof videoMetadata>>, signal: AbortSignal) {
   const response = await fetch(`${META_API_BASE_URL}/responses`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json', Accept: 'text/event-stream' },
@@ -163,7 +274,7 @@ async function requestSam(apiKey: string, fileId: string, media: Awaited<ReturnT
       metadata: { mask_encoding: 'one_bit' },
       stream: true,
     }),
-    signal: AbortSignal.timeout(150_000),
+    signal,
   });
   if (!response.ok) return metaError(response, 'SAM 3.1 movement');
   const result = await parseVideoStream(responseEvents(response)).finalResult;
@@ -262,7 +373,7 @@ function validateMuseReview(value: any, fields: MovementReviewInput) {
   return { coaching, observedRepCount, countConfidence: value.countConfidence as 'low' | 'medium' | 'high' };
 }
 
-async function requestMuse(apiKey: string, fileId: string, fields: MovementReviewInput) {
+async function requestMuse(apiKey: string, fileId: string, fields: MovementReviewInput, signal: AbortSignal) {
   const response = await fetch(`${META_API_BASE_URL}/responses`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
@@ -273,7 +384,7 @@ async function requestMuse(apiKey: string, fileId: string, fields: MovementRevie
       reasoning: { effort: 'low' },
       max_output_tokens: 4000,
     }),
-    signal: AbortSignal.timeout(150_000),
+    signal,
   });
   if (!response.ok) return metaError(response, 'Muse movement');
   const payload = await response.json();
@@ -286,17 +397,19 @@ async function requestMuse(apiKey: string, fileId: string, fields: MovementRevie
   return validateMuseReview(parseJsonObject(text), fields);
 }
 
-async function analyzeMovementWithMetaTransport(fields: MovementReviewInput): Promise<MetaMovementAnalysis> {
+async function analyzeMovementWithMetaTransport(fields: MovementReviewInput, options: MovementReviewOptions = {}): Promise<MetaMovementAnalysis> {
   const credential = await getRecognitionCredentialForProvider('META');
   if (!credential) throw new Error('Add and verify a Meta API key in Settings to analyze this set.');
   if (fields.video.size > MAX_MOVEMENT_VIDEO_BYTES) throw new Error('This exercise recording is larger than 30 MiB. Record the set again before using Meta analysis.');
   let uploadedFileId = '';
   try {
-    const preparedVideo = await prepareVideo(fields.video);
-    const media = await videoMetadata(preparedVideo);
-    uploadedFileId = await uploadMetaFile(credential.apiKey, preparedVideo);
-    const sam = await requestSam(credential.apiKey, uploadedFileId, media);
-    const muse = await requestMuse(credential.apiKey, uploadedFileId, fields);
+    const { preparedVideo, media } = await runMovementStage('preparing', 60_000, options, async (signal) => {
+      const video = await prepareVideo(fields.video, signal);
+      return { preparedVideo: video, media: await videoMetadata(video) };
+    });
+    uploadedFileId = await runMovementStage('uploading', 90_000, options, (signal) => uploadMetaFile(credential.apiKey, preparedVideo, signal));
+    const sam = await runMovementStage('tracking', 180_000, options, (signal) => requestSam(credential.apiKey, uploadedFileId, media, signal));
+    const muse = await runMovementStage('reviewing', 180_000, options, (signal) => requestMuse(credential.apiKey, uploadedFileId, fields, signal));
     if (fields.priorRepCount + muse.observedRepCount > MAX_REP_COUNT) throw new Error('Muse returned an invalid repetition count.');
     return {
       provider: 'META',
@@ -313,15 +426,15 @@ async function analyzeMovementWithMetaTransport(fields: MovementReviewInput): Pr
       museModel: 'muse-spark-1.3',
       processedAt: new Date().toISOString(),
     };
-  } catch (error) {
-    if (error instanceof DOMException && error.name === 'TimeoutError') throw new Error('Meta movement analysis timed out. Your local workout result is safe.');
-    if (error instanceof TypeError) throw new Error('Meta movement analysis could not connect. Check your network or VPN and try again.');
-    throw error;
   } finally {
     if (uploadedFileId) {
-      await fetch(`${META_API_BASE_URL}/files/${encodeURIComponent(uploadedFileId)}`, {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${credential.apiKey}` },
+      await runMovementStage('cleaning', 30_000, { onStage: options.onStage }, async (signal) => {
+        const response = await fetch(`${META_API_BASE_URL}/files/${encodeURIComponent(uploadedFileId)}`, {
+          method: 'DELETE',
+          headers: { Authorization: `Bearer ${credential.apiKey}` },
+          signal,
+        });
+        if (!response.ok) return metaError(response, 'temporary-file cleanup');
       }).catch(() => undefined);
     }
   }
@@ -330,13 +443,13 @@ async function analyzeMovementWithMetaTransport(fields: MovementReviewInput): Pr
 class MetaMovementReviewProvider implements MovementReviewProvider {
   readonly provider = 'META' as const;
   readonly modelLabel = 'SAM 3.1 + Muse Spark 1.3';
-  analyze(input: MovementReviewInput) { return analyzeMovementWithMetaTransport(input); }
+  analyze(input: MovementReviewInput, options?: MovementReviewOptions) { return analyzeMovementWithMetaTransport(input, options); }
 }
 
 class GeminiMovementReviewProvider implements MovementReviewProvider {
   readonly provider = 'GEMINI' as const;
   readonly modelLabel = GEMINI_MOVEMENT_MODEL || 'Gemini movement model';
-  async analyze(_input: MovementReviewInput): Promise<MetaMovementAnalysis> {
+  async analyze(_input: MovementReviewInput, _options?: MovementReviewOptions): Promise<MetaMovementAnalysis> {
     throw new Error(GEMINI_MOVEMENT_MODEL
       ? 'Gemini movement review is prepared but not implemented in this build.'
       : 'GEMINI_MOVEMENT_MODEL is not configured in this build.');
@@ -350,6 +463,6 @@ export function createMovementReviewProvider(provider: RecognitionProvider): Mov
 }
 
 /** Backward-compatible Meta entry point used by the existing profiled-session tests. */
-export async function analyzeMovementWithMeta(input: MovementReviewInput): Promise<MetaMovementAnalysis> {
-  return new MetaMovementReviewProvider().analyze(input);
+export async function analyzeMovementWithMeta(input: MovementReviewInput, options?: MovementReviewOptions): Promise<MetaMovementAnalysis> {
+  return new MetaMovementReviewProvider().analyze(input, options);
 }

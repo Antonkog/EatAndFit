@@ -13,7 +13,7 @@ export function evaluatePoseReadiness(profileId: MovementProfileId | undefined, 
     return {
       landmarksVisible: Boolean(side && side.confidence >= MIN_COUNTING_VISIBILITY),
       requiredConsecutiveFrames: 5,
-      readyMessage: 'Side view tracked on this device',
+      readyMessage: 'Tracking ready',
       waitingMessage: 'Keep one complete side of your body in frame…',
     } as const;
   }
@@ -21,7 +21,7 @@ export function evaluatePoseReadiness(profileId: MovementProfileId | undefined, 
   return {
     landmarksVisible: sideIsVisible(landmarks, DEFAULT_REQUIRED_LANDMARKS, 0.6),
     requiredConsecutiveFrames: 10,
-    readyMessage: 'Full body tracked on this device',
+    readyMessage: 'Tracking ready',
     waitingMessage: 'Hold still with your full body in frame…',
   } as const;
 }

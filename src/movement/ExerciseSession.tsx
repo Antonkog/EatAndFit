@@ -9,7 +9,7 @@ import { readUserProfile } from '../profile/userProfile';
 import { getRecognitionKeyStatus, type RecognitionProvider } from '../settings/secureKeys';
 import { MovementTracker, selectRepresentativeRep } from './engine';
 import { applyAcceptedMovementCount } from './countReconciliation';
-import { createMovementReviewProvider } from './metaAnalysis';
+import { createMovementReviewProvider, MOVEMENT_ANALYSIS_STAGE_LABELS, type MovementAnalysisStage } from './metaAnalysis';
 import { CompatibilityPoseRuntime, type PoseDetection } from './poseCompatibility';
 import { drawPose } from './poseCanvas';
 import { evaluatePoseReadiness, nextReadinessFrameCount } from './readiness';
@@ -106,13 +106,13 @@ export function ExerciseSession({
   const [analysis, setAnalysis] = useState<MetaMovementAnalysis>();
   const [analysisError, setAnalysisError] = useState('');
   const [analyzing, setAnalyzing] = useState(false);
+  const [analysisStage, setAnalysisStage] = useState<MovementAnalysisStage>();
   const [countDecision, setCountDecision] = useState<StoredMetaMovementAnalysis['countDecision']>('pending');
   const [aiProvider, setAiProvider] = useState<RecognitionProvider>();
   const [providerCheckDone, setProviderCheckDone] = useState(false);
   const [genericRecording, setGenericRecording] = useState(false);
   const [previewReady, setPreviewReady] = useState(false);
   const [voiceCuesEnabled, setVoiceCuesEnabled] = useState(true);
-  const [voiceCueError, setVoiceCueError] = useState('');
   const [poseStatus, setPoseStatus] = useState('Waiting for a stable full-body view…');
   const [cameraError, setCameraError] = useState('');
   const [trackingStable, setTrackingStable] = useState(false);
@@ -145,6 +145,7 @@ export function ExerciseSession({
   const baseDurationSecondsRef = useRef(initialWorkout.sets[initialSetIndex]?.actualDurationSeconds ?? 0);
   const startedAtRef = useRef(0);
   const recorderRef = useRef<MediaRecorder | undefined>(undefined);
+  const analysisAbortRef = useRef<AbortController | undefined>(undefined);
   const recordingOffsetMsRef = useRef(0);
   const recordingBaseRepCountRef = useRef(initialWorkout.sets[initialSetIndex]?.completedReps ?? 0);
   const chunksRef = useRef<Blob[]>([]);
@@ -177,14 +178,13 @@ export function ExerciseSession({
   const speak = useCallback((message: string) => {
     if (!voiceCuesRef.current || !('speechSynthesis' in window)) return;
     const utterance = new SpeechSynthesisUtterance(message);
-    utterance.onerror = () => setVoiceCueError('Voice cues are unavailable. Check your device volume or silent mode.');
+    utterance.onerror = () => undefined;
     window.speechSynthesis.cancel();
     window.speechSynthesis.speak(utterance);
   }, []);
 
   const primeVoiceCues = useCallback((announcement = 'Sound cues enabled.') => {
     if (!voiceCuesRef.current || !('speechSynthesis' in window)) return;
-    setVoiceCueError('');
     window.speechSynthesis.resume();
     speak(announcement);
   }, [speak]);
@@ -244,6 +244,8 @@ export function ExerciseSession({
   }, []);
 
   const releaseSession = useCallback(() => {
+    analysisAbortRef.current?.abort(new DOMException('The exercise session was closed.', 'AbortError'));
+    analysisAbortRef.current = undefined;
     stopRecording();
     stopCamera();
     void wakeLockRef.current?.release().catch(() => undefined);
@@ -417,8 +419,11 @@ export function ExerciseSession({
     const video = videoRef.current;
     const canvas = canvasRef.current;
     if (!video || !canvas || !video.videoWidth || !video.videoHeight) return;
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
+    const density = Math.max(1, window.devicePixelRatio || 1);
+    const displayWidth = Math.max(1, Math.round(canvas.clientWidth * density));
+    const displayHeight = Math.max(1, Math.round(canvas.clientHeight * density));
+    if (canvas.width !== displayWidth) canvas.width = displayWidth;
+    if (canvas.height !== displayHeight) canvas.height = displayHeight;
     if (frameCanvasRef.current) {
       frameCanvasRef.current.width = video.videoWidth;
       frameCanvasRef.current.height = video.videoHeight;
@@ -459,7 +464,9 @@ export function ExerciseSession({
       return;
     }
     const landmarks = poses[0];
-    if (canvasRef.current) drawPose(canvasRef.current, landmarks);
+    if (canvasRef.current && videoRef.current) {
+      drawPose(canvasRef.current, landmarks, { width: videoRef.current.videoWidth, height: videoRef.current.videoHeight });
+    }
     const readiness = evaluatePoseReadiness(profile?.id, landmarks);
     stablePoseFramesRef.current = nextReadinessFrameCount(stablePoseFramesRef.current, readiness.landmarksVisible);
     const stable = stablePoseFramesRef.current >= readiness.requiredConsecutiveFrames;
@@ -654,6 +661,7 @@ export function ExerciseSession({
     setRecording(undefined);
     setAnalysis(undefined);
     setAnalysisError('');
+    setAnalysisStage(undefined);
     setCountDecision('pending');
     if (profile) scheduleNextFrame();
     setStage('countdown');
@@ -670,9 +678,11 @@ export function ExerciseSession({
     const video = videoRef.current;
     let disposed = false;
     const sync = () => syncMediaGeometry();
+    const resizeObserver = typeof ResizeObserver === 'undefined' ? undefined : new ResizeObserver(sync);
     video.addEventListener('loadedmetadata', sync);
     video.addEventListener('resize', sync);
     window.addEventListener('orientationchange', sync);
+    if (video.parentElement) resizeObserver?.observe(video.parentElement);
     const attachPreview = async () => {
       if (video.srcObject !== stream) video.srcObject = stream;
       try {
@@ -693,6 +703,7 @@ export function ExerciseSession({
       video.removeEventListener('loadedmetadata', sync);
       video.removeEventListener('resize', sync);
       window.removeEventListener('orientationchange', sync);
+      resizeObserver?.disconnect();
     };
   }, [cameraPreviewVisible, cameraStreamVersion, profile, scheduleNextFrame, showCameraRecovery, syncMediaGeometry]);
 
@@ -767,13 +778,41 @@ export function ExerciseSession({
     setStage('timer-ready');
   };
 
-  const adjustRep = (delta: number) => {
-    if (delta > 0) trackerRef.current?.addManualRep(performance.now() - startedAtRef.current);
-    else if (trackerRef.current?.reps.length) trackerRef.current.undoLastRep();
-    else baseRepCountRef.current = Math.max(0, baseRepCountRef.current - 1);
-    const count = Math.max(0, baseRepCountRef.current + (trackerRef.current?.reps.length ?? 0));
+  const adjustCompletedRep = (delta: number) => {
+    const current = workoutRef.current;
+    const selectedSet = current.sets[setIndex];
+    if (!selectedSet?.complete) return;
+    const count = Math.max(0, (selectedSet.completedReps ?? selectedSet.reps) + delta);
+    const {
+      caloriesBurned: _caloriesBurned,
+      calorieSource: _calorieSource,
+      calorieSourceUrl: _calorieSourceUrl,
+      energyDurationMinutes: _energyDurationMinutes,
+      energyEquivalentKg: _energyEquivalentKg,
+      ...withoutFrozenEnergy
+    } = current;
+    const next: Workout = {
+      ...withoutFrozenEnergy,
+      completed: false,
+      sets: current.sets.map((set, index) => index === setIndex ? {
+        ...set,
+        reps: count,
+        completedReps: count,
+        movementSummary: set.movementSummary ? {
+          ...set.movementSummary,
+          completedReps: count,
+          metaAnalysis: undefined,
+        } : undefined,
+      } : set),
+    };
     setRepCount(count);
-    persistCameraProgress(count, Math.max(1, baseDurationSecondsRef.current + elapsedSeconds));
+    setAnalysis(undefined);
+    setAnalysisError('');
+    setAnalysisStage(undefined);
+    setCountDecision('pending');
+    workoutRef.current = next;
+    setWorkout(next);
+    onSaveRef.current(next);
   };
 
   const nextSetIndex = workout.sets.findIndex((set, index) => index > setIndex && !set.complete);
@@ -810,8 +849,11 @@ export function ExerciseSession({
     if (!window.confirm(`Send this muted set recording temporarily to Eat & Fit for video preparation, then directly from this browser to ${providerName}? The provider will track the athlete, review the repetition count, and return one coaching observation. All temporary files are deleted after processing.`)) return;
     setAnalyzing(true);
     setAnalysisError('');
+    setAnalysisStage('preparing');
     const analyzedSetIndex = setIndex;
     const analyzedSetId = workout.sets[setIndex]?.id;
+    const analysisController = new AbortController();
+    analysisAbortRef.current = analysisController;
     try {
       const localReps = profile ? trackerRef.current?.reps ?? [] : [];
       const localSegmentRepCount = Math.max(0, repCount - recordingBaseRepCountRef.current);
@@ -840,6 +882,11 @@ export function ExerciseSession({
         activeDurationMs: Math.max(0, Math.round(elapsedSeconds * 1000)),
         assessment: profile ? selectedRep?.assessment ?? fallbackAssessment : undefined,
         plannedRepCount: workout.sets[setIndex]?.reps ?? targetReps,
+      }, {
+        signal: analysisController.signal,
+        onStage: (nextStage) => {
+          if (mountedRef.current && setIndexRef.current === analyzedSetIndex) setAnalysisStage(nextStage);
+        },
       }), { provider: aiProvider, model: provider.modelLabel, outputCount: 1 });
       if (metaResult.state === 'failure') throw new Error(metaResult.error.message);
       if (metaResult.state !== 'success') return;
@@ -864,7 +911,11 @@ export function ExerciseSession({
     } catch (error) {
       if (mountedRef.current && setIndexRef.current === analyzedSetIndex) setAnalysisError(error instanceof Error ? error.message : 'Meta analysis failed. Your local workout result is safe.');
     } finally {
-      if (mountedRef.current && setIndexRef.current === analyzedSetIndex) setAnalyzing(false);
+      if (analysisAbortRef.current === analysisController) analysisAbortRef.current = undefined;
+      if (mountedRef.current && setIndexRef.current === analyzedSetIndex) {
+        setAnalyzing(false);
+        setAnalysisStage(undefined);
+      }
     }
   };
 
@@ -895,7 +946,6 @@ export function ExerciseSession({
       <header className="exercise-session-header">
         <div><small>Set {setIndex + 1} of {workout.sets.length}</small><h2 id="exercise-session-title">{workout.exerciseName}</h2></div>
         <div className="session-header-actions">
-          {voiceCuesEnabled && <button className="text-button session-sound-test" onClick={() => primeVoiceCues('This is a sound test.')}>Test sound</button>}
           <button className="icon-button" aria-label={voiceCuesEnabled ? 'Turn off voice cues' : 'Turn on voice cues'} aria-pressed={voiceCuesEnabled} onClick={() => {
             const enabled = !voiceCuesEnabled;
             setVoiceCuesEnabled(enabled);
@@ -905,8 +955,6 @@ export function ExerciseSession({
           <button className="icon-button" aria-label="Close exercise session" onClick={() => { releaseSession(); onClose(); }}><X /></button>
         </div>
       </header>
-
-      {voiceCueError && <p className="voice-cue-error" role="status">{voiceCueError}</p>}
 
       {stage === 'initializing' && <section className="timer-session"><span className="session-icon"><Timer /></span><h3>Preparing exercise</h3><p>Checking the available exercise mode…</p></section>}
 
@@ -936,8 +984,8 @@ export function ExerciseSession({
           </div>
           {stage === 'setup' && <div className="camera-setup"><h3>{profile ? profile.cameraView === 'side' ? 'Use a side view' : 'Use a front view' : 'Get ready to record'}</h3><p>{profile ? profile.setupInstruction : 'The muted recording starts automatically after the countdown. Keep only the athlete in frame.'}</p>{canSwitchCamera && <button className="text-button camera-switch" type="button" onClick={switchCamera}><Camera size={17} /> Use {cameraFacing === 'user' ? 'rear' : 'selfie'} camera</button>}<p className="tracking-status" role="status">{profile ? trackingStable ? 'Tracking ready. Starting automatically…' : poseStatus : previewReady ? 'Camera ready. Starting automatically…' : 'Preparing camera preview…'}</p>{cameraError && <p className="session-error" role="alert">{cameraError}</p>}</div>}
           {stage === 'active' && (genericRecording
-            ? <div className="live-session-controls"><p>Recording set for AI</p><strong>{elapsedSeconds}s / 1:30</strong><button className="text-button" onClick={() => void finishGenericRecording()}>Stop recording</button></div>
-            : <div className="live-session-controls"><p>{poseStatus}</p><strong>{elapsedSeconds}s</strong><div><button className="text-button" disabled={repCount === 0} onClick={() => adjustRep(-1)}><Minus size={17} /> Undo last rep</button><button className="text-button" onClick={() => adjustRep(1)}><Plus size={17} /> Add rep</button></div></div>)}
+            ? <div className="live-session-hud recording"><strong>{elapsedSeconds}s</strong><span>Recording set for AI</span><button className="text-button" onClick={() => void finishGenericRecording()}>Stop recording</button></div>
+            : <div className="live-session-hud"><strong>{elapsedSeconds}s</strong></div>)}
         </section>
       )}
 
@@ -967,13 +1015,16 @@ export function ExerciseSession({
       {stage === 'rest' && (
         <section className="set-result">
           <div className="set-complete-heading"><span><Check /></span><div><small>Set {setIndex + 1} complete</small><h3>{restSeconds ? `Rest ${restSeconds}s` : nextSetIndex >= 0 ? 'Ready for your next set' : 'Set complete'}</h3></div></div>
+          {profile && <div className="set-rep-adjustment" aria-label="Completed repetitions"><span>Completed reps</span><div><button className="icon-button" aria-label="Remove one repetition" disabled={repCount === 0} onClick={() => adjustCompletedRep(-1)}><Minus size={18} /></button><strong>{repCount}</strong><button className="icon-button" aria-label="Add one repetition" onClick={() => adjustCompletedRep(1)}><Plus size={18} /></button></div></div>}
           {selectedRep && <LocalAssessment rep={selectedRep} />}
           {improvement && <p className="improvement-verified"><Check size={16} /> {improvement}</p>}
-          {recording && aiProvider && !analysis && <button className="text-button analyze-rep" disabled={analyzing} onClick={() => void runMetaAnalysis()}>{analyzing ? 'Analyzing set with AI…' : 'Analyze with AI'}</button>}
           {analysisError && <p className="session-error" role="alert">{analysisError}</p>}
           {analysis && <MetaResult analysis={analysis} recording={recording} countDecision={countDecision} onCountChoice={chooseMetaCount} />}
           {analysis && aiProvider === 'META' && <div className="session-attributions"><span>Tracked with SAM 3.1</span><span>Reviewed by Muse Spark 1.3</span></div>}
-          <button className="primary-button next-set-button" onClick={beginNextSet}>{nextSetIndex >= 0 ? 'Start next set' : 'Finish exercise'} <ChevronRight size={18} /></button>
+          <div className="set-result-actions">
+            {recording && aiProvider && !analysis && <button className="text-button" disabled={analyzing} onClick={() => void runMetaAnalysis()}>{analyzing && analysisStage ? `${MOVEMENT_ANALYSIS_STAGE_LABELS[analysisStage]}…` : analysisError ? 'Retry analysis' : 'Analyze with AI'}</button>}
+            <button className="primary-button" onClick={beginNextSet}>{nextSetIndex >= 0 ? 'Start next set' : 'Finish exercise'} <ChevronRight size={18} /></button>
+          </div>
         </section>
       )}
     </div>
