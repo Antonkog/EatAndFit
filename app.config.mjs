@@ -26,7 +26,7 @@ export function resolveAppConfiguration(environment = {}, requestedEdition = env
     }),
     features: Object.freeze({
       byokAi,
-      recipePhotoGeneration: (metaApi || geminiApi) && booleanSetting(environment.RECIPE_PHOTO_GENERATION_ENABLED, true),
+      recipePhotoGeneration: (metaApi || geminiApi) && booleanSetting(environment.RECIPE_PHOTO_GENERATION_ENABLED, false),
       firebaseAnalytics,
     }),
   });

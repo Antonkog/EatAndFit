@@ -36,14 +36,14 @@ Eat & Fit is built in two free editions.
 | Barcode and packaged-product lookup | Yes | Yes |
 | Photo ingredient recognition | Hidden | Available after a verified key is saved |
 | AI recipe generation | Hidden | Available after a verified key is saved |
-| AI recipe photos | Hidden | Generated automatically when the build flag is enabled |
+| AI recipe photos | Hidden | Disabled; generated recipes use the standard placeholder |
 | Adult AI energy calibration | No | Automatic when an eligible profile and key exist |
 | Personalized two-week training | Hidden | Available to eligible adults after a verified key is saved |
 | Local camera-guided exercise sessions | Yes | Yes |
 | Post-set SAM/Muse movement coaching | Hidden | Available to adults with a verified Meta key and separate per-set consent |
 | Provider-key settings | Hidden | Yes |
 
-The shared application configuration resolves `APP_EDITION=core` or `APP_EDITION=byok` and all feature availability used by the browser and API. `META_API_ENABLED` defaults to true, `GEMINI_API_ENABLED` defaults to false, and disabled providers are hidden and rejected by the browser and API. `RECIPE_PHOTO_GENERATION_ENABLED` defaults to true when BYOK has at least one enabled provider and is always false for Core. Firebase Analytics availability is derived from its public configuration rather than treated as a user-facing switch. The Core API does not expose AI routes. The application never stores a model API key in source control, `.env`, Docker configuration, or server environment variables.
+The shared application configuration resolves `APP_EDITION=core` or `APP_EDITION=byok` and all feature availability used by the browser and API. `META_API_ENABLED` defaults to true, `GEMINI_API_ENABLED` defaults to false, and disabled providers are hidden and rejected by the browser and API. `RECIPE_PHOTO_GENERATION_ENABLED` defaults to false in every edition and is always false for Core. Generated recipes therefore use the standard placeholder unless a future deployment explicitly enables the dormant provider path. Firebase Analytics availability is derived from its public configuration rather than treated as a user-facing switch. The Core API does not expose AI routes. The application never stores a model API key in source control, `.env`, Docker configuration, or server environment variables.
 
 ## 3. Navigation and global behavior
 
@@ -467,13 +467,9 @@ Users can inspect a generated recipe, run the USDA nutrition check, choose date/
 
 ### 13.3 Generated photos
 
-When recipe photo generation is enabled, the selected recipe provider also supplies the image: Meta uses Muse Image 1.0 directly from the browser and Gemini uses the same-origin forwarding endpoint. There is no automatic provider fallback.
+Runtime recipe-photo generation is disabled in current Core and BYOK deployments. Generated recipes use the same standard placeholder as other recipes without artwork. The provider and local-image storage implementations remain dormant for possible future use, but current application flows make no recipe-image requests.
 
-The configured image models are Meta `muse-image-1.0` and Gemini `gemini-nano-banana-2.1`. Image generation uses the same provider and saved key selected for recipe text.
-
-After both recipe objects are validated, their image requests run concurrently. The result grid remains hidden until both requests settle. A failed image uses the normal placeholder without hiding or regenerating its valid recipe. Successful images are labelled `AI-generated image`; they are representative and do not affect ingredients, nutrition, USDA checks, or serving calculations.
-
-Generated images remain in memory while recipes are reviewed. Adding a photographed recipe to Calendar compresses its image and saves it in local IndexedDB. Provider keys and temporary remote image URLs are never stored.
+The dormant compatibility implementation retains the existing provider and local-image storage contracts, but these are not part of the current user experience and are not advertised in Settings or Legal/Data Sources.
 
 ## 14. Scan tools
 
@@ -513,7 +509,7 @@ The implementation contains exactly two provider adapters:
 
 Build configuration decides which adapters are available. The default BYOK build enables Meta and disables Gemini, so Settings shows only Meta and the server advertises only Meta. Enabling `GEMINI_API_ENABLED=true` restores the Gemini key field and provider selection without changing the adapters. A disabled provider's previously encrypted key is left on the device but is ignored until that provider is enabled again.
 
-When recipe-photo generation is enabled, the corresponding image implementations use Meta `muse-image-1.0` or Gemini `gemini-nano-banana-2.1`. Image failure does not trigger the other provider.
+Recipe-photo provider code is dormant and disabled in current builds. It does not affect the provider selected for the active text, scanner, training, or movement features.
 
 The selected provider is shared by ingredient recognition, AI recipes, adult calibration, and personalized training. Recipe-generation configuration is not independently selectable in the UI. Movement review uses the enabled selected-provider adapter. Meta implements it with SAM 3.1 and Muse Spark 1.3; the future Gemini adapter is controlled by `GEMINI_API_ENABLED` and `GEMINI_MOVEMENT_MODEL`, but is disabled in the default build.
 

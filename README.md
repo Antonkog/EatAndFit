@@ -50,7 +50,7 @@ Docker defaults to Core. Select BYOK at build time with the non-secret edition f
 APP_EDITION=byok docker compose up -d --build api web
 ```
 
-BYOK builds enable Meta and generate photos for AI recipes by default. Use `META_API_ENABLED=false` or `GEMINI_API_ENABLED=true` to change the available providers, and set `RECIPE_PHOTO_GENERATION_ENABLED=false` to retain text-only AI recipes. Core always disables all AI providers and photo generation regardless of these values.
+BYOK builds enable Meta by default. Use `META_API_ENABLED=false` or `GEMINI_API_ENABLED=true` to change the available providers. AI recipe-photo generation is disabled by default in every edition; the dormant provider path can be enabled explicitly with `RECIPE_PHOTO_GENERATION_ENABLED=true`. Core always disables all AI providers and photo generation regardless of these values.
 
 Settings can download a privacy-safe AI diagnostic file named `log.txt`. It records timestamped successes and sanitized failures for AI recipe text/photos, ingredient recognition, training generation/calibration, and exercise review. Failure entries include the provider/model, HTTP status when available, and a length-bounded raw error response, while never storing keys, prompts, photos, videos, or successful image payloads.
 

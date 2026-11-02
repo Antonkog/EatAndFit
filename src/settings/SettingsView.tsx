@@ -1,6 +1,6 @@
 import { ChevronDown, Download, ExternalLink, FileText, KeyRound, Share2, ShieldCheck, Smartphone, Trash2, Upload, UserRound } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
-import { BYOK_AI_ENABLED, ENABLED_AI_PROVIDER_LABEL, GEMINI_API_ENABLED, META_API_ENABLED, RECIPE_PHOTO_GENERATION_ENABLED } from '../config/appConfig';
+import { BYOK_AI_ENABLED, ENABLED_AI_PROVIDER_LABEL, GEMINI_API_ENABLED, META_API_ENABLED } from '../config/appConfig';
 import { APP_EDITION_LABEL } from '../config/edition';
 import { clearData, exportBackup, importBackup, isBackup } from '../data/db';
 import { clearDiagnosticLog, downloadDiagnosticLog, recordAiFailure, recordAiSuccess } from '../diagnostics/clientLog';
@@ -127,7 +127,7 @@ export function SettingsView() {
       {BYOK_AI_ENABLED && (
         <article className="settings-card api-key-settings">
           <h3><KeyRound size={20} /> AI provider keys</h3>
-          <p>Smart Scan, AI recipe generation{RECIPE_PHOTO_GENERATION_ENABLED ? ' with AI-generated food photos' : ''}, adult energy calibration, and personalized training are enabled when a verified {ENABLED_AI_PROVIDER_LABEL} key is saved.{META_API_ENABLED ? ' Adults with a verified Meta key can also choose post-set movement coaching.' : ''} Your provider may charge your account for API requests.</p>
+          <p>Smart Scan, AI recipe generation, adult energy calibration, and personalized training are enabled when a verified {ENABLED_AI_PROVIDER_LABEL} key is saved.{META_API_ENABLED ? ' Adults with a verified Meta key can also choose post-set movement coaching.' : ''} Your provider may charge your account for API requests.</p>
           <div className="key-security-note">
             <ShieldCheck size={20} />
             <p>Keys are encrypted.</p>
@@ -148,7 +148,7 @@ export function SettingsView() {
       )}
       <article className="settings-card">
         <h3>Local data</h3>
-        <p>Your workout and food history stays in this browser unless you export it.{BYOK_AI_ENABLED ? ' API keys and locally generated recipe photos are intentionally excluded from backups.' : ''}</p>
+        <p>Your workout and food history stays in this browser unless you export it.{BYOK_AI_ENABLED ? ' API keys are intentionally excluded from backups.' : ''}</p>
         <div className="settings-actions">
           <button className="text-button" onClick={() => void download()}><Download size={17} /> Export backup</button>
           <button className="text-button" onClick={() => input.current?.click()}><Upload size={17} /> Import backup</button>

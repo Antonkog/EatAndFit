@@ -183,7 +183,7 @@ export function AiRecipeView({
           </div>
         </details>
         {error && <div className="error-state compact"><AlertTriangle /><div><strong>{error}</strong><button type="button" className="text-button" onClick={() => void submit()}><RefreshCw size={15} /> Retry</button><button type="button" className="text-button" onClick={onOpenSettings}>Open settings</button></div></div>}
-        <button className="primary-button large full" type="submit" disabled={loading} aria-busy={recipeNetworkResult.state === 'loading'}>{loading ? <LoaderCircle className="spin" /> : <Sparkles size={18} />}{loading ? loadingStage === 'photos' ? 'Creating recipe photos…' : 'Generating two recipes…' : 'Generate recipes'}</button>
+        <button className="primary-button large full" type="submit" disabled={loading} aria-busy={recipeNetworkResult.state === 'loading'}>{loading ? <LoaderCircle className="spin" /> : <Sparkles size={18} />}{loading ? loadingStage === 'photos' ? 'Creating recipe photos…' : 'Generating recipes…' : 'Generate recipes'}</button>
       </form>
 
       <p className="estimate-warning">AI and database values are estimates and are not medical advice.</p>
