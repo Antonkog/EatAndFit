@@ -26,12 +26,14 @@ import { getRecognitionCredential } from '../settings/secureKeys';
 import { generateRecipesWithMeta } from './metaRecipeGeneration';
 import { compressRecipeImage } from './recipeImageStorage';
 import { attachGeneratedRecipeImages, createRecipeImageGenerationProvider, type GeneratedAiRecipe, type GeneratedRecipeImage } from './recipeImageProvider';
+import { classifyRecipeIllustration, getRecipeIllustration, type RecipeIllustrationCategory } from './recipeIllustration';
 import { validateAiFilters, type AiRecipe } from './validation';
 
 type Range = { min: string; max: string };
 type Food = { fdcId: number; description: string; dataType: string };
 type FoodDetails = Food & { portions?: UsdaPortion[] };
 type IngredientMatch = { fdcId: number; grams: number };
+type IllustratedAiRecipe = GeneratedAiRecipe & { illustrationCategory?: RecipeIllustrationCategory };
 
 const diets = ['balanced', 'high-fiber', 'high-protein', 'low-carb', 'low-fat', 'low-sodium', 'vegan', 'vegetarian'];
 const allergens = ['celery', 'crustacean', 'dairy', 'egg', 'fish', 'gluten', 'mustard', 'peanut', 'sesame', 'shellfish', 'soy', 'tree-nut', 'wheat'];
@@ -70,8 +72,8 @@ export function AiRecipeView({
   const [maxTime, setMaxTime] = useState('');
   const [servings, setServings] = useState('2');
   const [filtersOpen, setFiltersOpen] = useState(false);
-  const [recipes, setRecipes] = useState<GeneratedAiRecipe[]>([]);
-  const [selected, setSelected] = useState<GeneratedAiRecipe>();
+  const [recipes, setRecipes] = useState<IllustratedAiRecipe[]>([]);
+  const [selected, setSelected] = useState<IllustratedAiRecipe>();
   const [loading, setLoading] = useState(false);
   const [loadingStage, setLoadingStage] = useState<'recipes' | 'photos'>('recipes');
   const [recipeNetworkResult, setRecipeNetworkResult] = useState<NetworkResult<AiRecipe[]>>(NetworkResults.success([]));
@@ -129,17 +131,22 @@ export function AiRecipeView({
       if (generationResult.state === 'failure') throw new Error(generationResult.error.message);
       if (generationResult.state !== 'success') return;
       generated = generationResult.data;
+      const illustrated = generated.map<IllustratedAiRecipe>((recipe) => ({
+        ...recipe,
+        illustrationCategory: classifyRecipeIllustration(recipe, { dishType, mealType }),
+      }));
       if (!RECIPE_PHOTO_GENERATION_ENABLED) {
-        setRecipes(generated);
+        setRecipes(illustrated);
         return;
       }
       setLoadingStage('photos');
       const imageProvider = createRecipeImageGenerationProvider(credential);
-      setRecipes(await attachGeneratedRecipeImages(generated, imageProvider, (index, result) => {
+      const recipesWithPhotos = await attachGeneratedRecipeImages(illustrated, imageProvider, (index, result) => {
         const context = { provider: credential.provider, model: credential.provider === 'META' ? 'muse-image-1.0' : 'gemini-nano-banana-2.1', outputCount: result.state === 'success' ? 1 : 0, detail: `Recipe ${index + 1} of ${generated.length}` };
         if (result.state === 'success') recordAiSuccess('AI recipe photo generation', { ...context, model: result.data.model });
         if (result.state === 'failure') recordAiFailure('AI recipe photo generation', new Error(result.error.message), context, result.error.code);
-      }));
+      });
+      setRecipes(recipesWithPhotos.map((recipe, index) => ({ ...recipe, illustrationCategory: illustrated[index]?.illustrationCategory })));
     } catch (value) {
       setError(value instanceof Error ? value.message : 'Recipe generation failed.');
     } finally {
@@ -218,12 +225,14 @@ function useGeneratedImage(image?: GeneratedRecipeImage) {
   return source;
 }
 
-function AiRecipeCard({ recipe, onClick }: { recipe: GeneratedAiRecipe; onClick: () => void }) {
-  const imageSource = useGeneratedImage(recipe.generatedImage);
-  return <button className="ai-recipe-card" onClick={onClick}><span>{imageSource ? <img src={imageSource} alt="" /> : <Utensils />}</span><div><div className="badge-row"><i className="badge solid">AI recipe</i>{imageSource && <i className="badge outline">AI-generated image</i>}<i className="badge outline">{recipe.minutes} min</i></div><h2>{recipe.title}</h2><p>{recipe.description}</p><small>{recipe.nutrition.calories} kcal · Protein {recipe.nutrition.protein.toFixed(1)}g · Fat {recipe.nutrition.fat.toFixed(1)}g</small></div></button>;
+function AiRecipeCard({ recipe, onClick }: { recipe: IllustratedAiRecipe; onClick: () => void }) {
+  const generatedImageSource = useGeneratedImage(recipe.generatedImage);
+  const illustration = getRecipeIllustration(recipe.illustrationCategory);
+  const imageSource = generatedImageSource || illustration?.src;
+  return <button className="ai-recipe-card" onClick={onClick}><span>{imageSource ? <img className={generatedImageSource ? undefined : 'recipe-category-illustration'} src={imageSource} alt={generatedImageSource ? '' : illustration?.alt} /> : <Utensils />}</span><div><div className="badge-row"><i className="badge solid">AI recipe</i>{generatedImageSource && <i className="badge outline">AI-generated image</i>}<i className="badge outline">{recipe.minutes} min</i></div><h2>{recipe.title}</h2><p>{recipe.description}</p><small>{recipe.nutrition.calories} kcal · Protein {recipe.nutrition.protein.toFixed(1)}g · Fat {recipe.nutrition.fat.toFixed(1)}g</small></div></button>;
 }
 
-function AiRecipeDetail({ recipe, initialDate, onClose, onAdded }: { recipe: GeneratedAiRecipe; initialDate: string; onClose: () => void; onAdded: (date: string) => void }) {
+function AiRecipeDetail({ recipe, initialDate, onClose, onAdded }: { recipe: IllustratedAiRecipe; initialDate: string; onClose: () => void; onAdded: (date: string) => void }) {
   useBackNavigation(true, onClose, 100);
   const [mode, setMode] = useState<'ai' | 'usda'>('ai');
   const [matchOpen, setMatchOpen] = useState(false);
@@ -233,7 +242,9 @@ function AiRecipeDetail({ recipe, initialDate, onClose, onAdded }: { recipe: Gen
   const [added, setAdded] = useState(false);
   const [usdaNutrition, setUsdaNutrition] = useState<typeof recipe.nutrition>();
   const nutrition = mode === 'usda' && usdaNutrition ? usdaNutrition : recipe.nutrition;
-  const imageSource = useGeneratedImage(recipe.generatedImage);
+  const generatedImageSource = useGeneratedImage(recipe.generatedImage);
+  const illustration = getRecipeIllustration(recipe.illustrationCategory);
+  const imageSource = generatedImageSource || illustration?.src;
 
   const save = async () => {
     let localImageId: string | undefined;
@@ -251,7 +262,7 @@ function AiRecipeDetail({ recipe, initialDate, onClose, onAdded }: { recipe: Gen
       }
     }
     try {
-      await saveFood({ id: crypto.randomUUID(), date, title: recipe.title, provider: 'ai', mealType: meal, quantity, quantityUnit: 'serving', localImageId, calories: nutrition.calories * quantity, protein: nutrition.protein * quantity, carbs: nutrition.carbs * quantity, fat: nutrition.fat * quantity, payload: storedRecipe });
+      await saveFood({ id: crypto.randomUUID(), date, title: recipe.title, provider: 'ai', mealType: meal, quantity, quantityUnit: 'serving', imageUrl: localImageId ? undefined : illustration?.src, localImageId, calories: nutrition.calories * quantity, protein: nutrition.protein * quantity, carbs: nutrition.carbs * quantity, fat: nutrition.fat * quantity, payload: storedRecipe });
     } catch (error) {
       if (localImageId) await removeRecipeImage(localImageId).catch(() => undefined);
       throw error;
@@ -267,9 +278,9 @@ function AiRecipeDetail({ recipe, initialDate, onClose, onAdded }: { recipe: Gen
         <button className="sheet-close" aria-label="Close" onClick={onClose}><X /></button>
         <header><h2>{recipe.title}</h2><p>Generated by the configured AI model with an optional nutrition check.</p></header>
         <div className="sheet-content">
-          {imageSource ? <img className="recipe-detail-image" src={imageSource} alt="" /> : <div className="recipe-detail-placeholder"><Utensils /></div>}
+          {imageSource ? <img className={`recipe-detail-image${generatedImageSource ? '' : ' recipe-category-illustration'}`} src={imageSource} alt={generatedImageSource ? '' : illustration?.alt} /> : <div className="recipe-detail-placeholder"><Utensils /></div>}
           <p>{recipe.description}</p>
-          <div className="badge-row"><span className="badge solid">AI recipe</span>{imageSource && <span className="badge outline">AI-generated image</span>}<span className="badge outline"><Clock3 size={13} /> {recipe.minutes} min</span></div>
+          <div className="badge-row"><span className="badge solid">AI recipe</span>{generatedImageSource && <span className="badge outline">AI-generated image</span>}<span className="badge outline"><Clock3 size={13} /> {recipe.minutes} min</span></div>
           <div className="nutrition-mode"><button className={mode === 'ai' ? 'active' : ''} onClick={() => setMode('ai')}>AI estimate</button><button className={mode === 'usda' ? 'active' : ''} onClick={() => usdaNutrition ? setMode('usda') : setMatchOpen(true)}>Nutrition check</button></div>
           <MacroGrid values={nutrition} />
           <section><h3>Ingredients</h3><div className="ai-ingredient-list">{recipe.ingredients.map((item) => <div key={item}><strong>{item}</strong><small>{mode === 'usda' ? 'USDA database' : 'AI estimate'}</small></div>)}</div></section>

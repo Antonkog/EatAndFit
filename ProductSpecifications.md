@@ -36,14 +36,14 @@ Eat & Fit is built in two free editions.
 | Barcode and packaged-product lookup | Yes | Yes |
 | Photo ingredient recognition | Hidden | Available after a verified key is saved |
 | AI recipe generation | Hidden | Available after a verified key is saved |
-| AI recipe photos | Hidden | Disabled; generated recipes use the standard placeholder |
+| AI recipe illustrations | Hidden | Bundled category illustrations with a standard fallback |
 | Adult AI energy calibration | No | Automatic when an eligible profile and key exist |
 | Personalized two-week training | Hidden | Available to eligible adults after a verified key is saved |
 | Local camera-guided exercise sessions | Yes | Yes |
 | Post-set SAM/Muse movement coaching | Hidden | Available to adults with a verified Meta key and separate per-set consent |
 | Provider-key settings | Hidden | Yes |
 
-The shared application configuration resolves `APP_EDITION=core` or `APP_EDITION=byok` and all feature availability used by the browser and API. `META_API_ENABLED` defaults to true, `GEMINI_API_ENABLED` defaults to false, and disabled providers are hidden and rejected by the browser and API. `RECIPE_PHOTO_GENERATION_ENABLED` defaults to false in every edition and is always false for Core. Generated recipes therefore use the standard placeholder unless a future deployment explicitly enables the dormant provider path. Firebase Analytics availability is derived from its public configuration rather than treated as a user-facing switch. The Core API does not expose AI routes. The application never stores a model API key in source control, `.env`, Docker configuration, or server environment variables.
+The shared application configuration resolves `APP_EDITION=core` or `APP_EDITION=byok` and all feature availability used by the browser and API. `META_API_ENABLED` defaults to true, `GEMINI_API_ENABLED` defaults to false, and disabled providers are hidden and rejected by the browser and API. `RECIPE_PHOTO_GENERATION_ENABLED` defaults to false in every edition and is always false for Core. Generated recipes use bundled category illustrations selected from the requested dish or meal type and then from the generated title, description, and ingredients. Available categories are breakfast, soup, salad, sandwich/wrap, meat, fish/seafood, vegetarian/vegan, pasta/noodles, rice/grain/bowl, side dish, dessert, snack, and drinks. If the app cannot select a category confidently, it keeps the standard utensils placeholder. Firebase Analytics availability is derived from its public configuration rather than treated as a user-facing switch. The Core API does not expose AI routes. The application never stores a model API key in source control, `.env`, Docker configuration, or server environment variables.
 
 ## 3. Navigation and global behavior
 
