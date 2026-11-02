@@ -37,3 +37,16 @@ test('diagnostic log redacts credentials from errors', () => {
   assert.doesNotMatch(output, /sk-secret-token-value/);
   assert.match(output, /\[REDACTED\]/);
 });
+
+test('diagnostic log retains a bounded raw server response and HTTP status', () => {
+  const entries: DiagnosticEntry[] = [{
+    timestamp: '2026-11-02T10:00:00.000Z',
+    feature: 'AI recipe photo generation',
+    result: 'failure',
+    context: { provider: 'META', model: 'muse-image-1.0' },
+    error: { code: 'provider_error', message: 'Photo generation failed', retryable: true, httpStatus: 429, rawResponse: '{"error":{"message":"rate limited"}}' },
+  }];
+  const output = formatDiagnosticLog(entries);
+  assert.match(output, /HTTP status: 429/);
+  assert.match(output, /Raw response: \{"error"/);
+});

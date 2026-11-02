@@ -72,7 +72,7 @@ export async function runLoggedAiOperation<T>(
       feature,
       result: 'failure',
       context: { ...context, durationMs: Math.round(performance.now() - startedAt) },
-      error: { ...error, message: clean(error.message) },
+      error: { ...error, message: clean(error.message), rawResponse: error.rawResponse ? clean(error.rawResponse) : undefined },
     });
     const result = NetworkResults.failure<T>(error);
     onState?.(result);
@@ -91,7 +91,7 @@ export function recordAiFailure(feature: string, value: unknown, context: Diagno
     feature,
     result: 'failure',
     context,
-    error: { ...error, message: clean(error.message) },
+    error: { ...error, message: clean(error.message), rawResponse: error.rawResponse ? clean(error.rawResponse) : undefined },
   });
   return error;
 }
@@ -116,7 +116,9 @@ export function formatDiagnosticLog(entries = readEntries(), generatedAt = new D
     if (entry.context.detail) lines.push(`Detail: ${clean(entry.context.detail)}`);
     if (entry.error) {
       lines.push(`Error code: ${clean(entry.error.code)}`);
+      if (entry.error.httpStatus !== undefined) lines.push(`HTTP status: ${entry.error.httpStatus}`);
       lines.push(`Error: ${clean(entry.error.message)}`);
+      if (entry.error.rawResponse) lines.push(`Raw response: ${clean(entry.error.rawResponse)}`);
     }
     return lines.join('\n');
   }).join('\n\n');

@@ -59,7 +59,7 @@ The main navigation order is:
 
 Balance is the default screen. Selecting the Eat & Fit brand also opens Balance. Settings is a separate icon in the desktop header and is not part of the five-item primary navigation.
 
-Desktop uses a translucent top header with centered navigation. Mobile uses a fixed bottom navigation bar with the same five destinations. Navigation resets destination-specific state where appropriate, including the Calendar date/mode and Scan mode.
+Desktop uses a translucent top header with centered navigation. Mobile uses a fixed bottom navigation bar with the same five destinations and a dark gradient beneath it to blend it into the page. Navigation resets destination-specific state where appropriate, including the Calendar date/mode and Scan mode.
 
 On touch devices, a deliberate rightward swipe beginning within the left edge performs contextual back navigation when a destination exists. The topmost dialog, exercise session, product result, or exercise-group view closes first; otherwise the app returns to the previously visited primary screen. Short, slow, predominantly vertical, and non-edge gestures are ignored so normal scrolling and controls are unaffected.
 
@@ -461,7 +461,7 @@ Minimum nutrition values cannot exceed their corresponding maximum values. Servi
 
 The selected provider must return exactly two recipes. Each recipe requires a title, description, 1–20 servings, 1–720 minutes, 1–40 ingredients, 1–30 steps, and non-negative calories/protein/carbohydrates/fat per serving. Invalid or non-JSON output is rejected.
 
-Users can inspect a generated recipe, run the USDA nutrition check, choose date/meal/servings, and save it to Calendar. Date, meal, and servings use one reusable full-width three-column grid on mobile and desktop; values are vertically centered and left-aligned. Calendar food editing uses the same component. AI values are always presented as estimates requiring review.
+Users can inspect a generated recipe, run the USDA nutrition check, choose date/meal/servings, and save it to Calendar. Date, meal, and servings use one reusable full-width three-column grid on mobile and desktop; values are vertically centered and left-aligned. Calendar food editing uses the same component, with spacing before Update and Delete actions. AI values are always presented as estimates requiring review.
 
 ### 13.3 Generated photos
 
@@ -606,7 +606,7 @@ Import validates the top-level schema version and array presence, clears the exi
 
 AI requests authenticate with the user-supplied key in a Bearer header and select the provider with `x-recognition-provider`. The API accepts only providers enabled by the centralized configuration. Movement review is the exception: Eat & Fit receives only the video-preparation request, while the browser sends the key and prepared clip directly to Meta. Provider timeouts, authentication, billing, authorization, missing-model, rate-limit, content-policy, and invalid-response conditions are converted into user-readable errors.
 
-Browser AI operations use a shared `NetworkResult<T>` state contract with loading, success, and structured `AppError` failure variants. The bounded diagnostics log records successful and failed recipe generation, photo generation/storage, ingredient recognition, training generation/calibration, key verification, and Meta exercise review. Each event begins with an ISO timestamp followed by safe metadata on subsequent lines. API keys, prompts, recipe text, ingredients, photos, and videos are never logged.
+Browser AI operations use a shared `NetworkResult<T>` state contract with loading, success, and structured `AppError` failure variants. The bounded diagnostics log records successful and failed recipe generation, photo generation/storage, ingredient recognition, training generation/calibration, key verification, and Meta exercise review. Each event begins with an ISO timestamp followed by safe metadata on subsequent lines. Failures include the provider/model, HTTP status when available, and a sanitized, length-bounded raw error response to support troubleshooting. API keys, prompts, recipe text, ingredients, photos, videos, and successful image payloads are never logged.
 
 ## 19. Data sources and licenses
 

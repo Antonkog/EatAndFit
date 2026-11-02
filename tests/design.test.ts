@@ -76,6 +76,16 @@ test('recipe review and Calendar food editing share the full-width schedule grid
   assert.match(styles, /input::-webkit-date-and-time-value \{[^}]*text-align: left/);
 });
 
+test('mobile food and barcode date controls cannot overlap neighboring fields', () => {
+  const styles = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
+  assert.match(styles, /\.food-schedule-grid \{[^}]*repeat\(3,minmax\(0,1fr\)\)/);
+  assert.match(styles, /\.food-schedule-grid input, \.food-schedule-grid select \{[^}]*min-inline-size: 0;[^}]*max-width: 100%/);
+  assert.match(styles, /\.four-fields input, \.four-fields select \{[^}]*min-inline-size: 0;[^}]*max-width: 100%/);
+  assert.match(styles, /\.four-fields label \{ display: block; min-width: 0;/);
+  assert.match(styles, /\.food-log-actions \{ margin-top: 10px; \}/);
+  assert.match(styles, /\.bottom-nav-scrim \{[^}]*linear-gradient/);
+});
+
 test('calendar workout, food, and scanned-product entries open stored details', () => {
   const calendar = readFileSync(new URL('../src/calendar/CalendarView.tsx', import.meta.url), 'utf8');
   const details = readFileSync(new URL('../src/calendar/CalendarEntryDetail.tsx', import.meta.url), 'utf8');

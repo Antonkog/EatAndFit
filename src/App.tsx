@@ -256,6 +256,7 @@ export function App() {
         {view === 'settings' && <SettingsView />}
       </main>
 
+      <div className="bottom-nav-scrim" aria-hidden="true" />
       <nav className="bottom-nav" aria-label="Mobile navigation">
         {navigation.map(({ id, label, icon: Icon }) => (
           <button key={id} className={activePrimary === id ? 'active' : ''} onClick={() => showView(id)}>

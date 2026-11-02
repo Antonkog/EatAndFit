@@ -6,6 +6,16 @@ const META_IMAGE_ENDPOINT = 'https://api.meta.ai/v1/images/generations';
 const META_IMAGE_MODEL = 'muse-image-1.0';
 const GEMINI_IMAGE_MODEL = 'gemini-nano-banana-2.1';
 
+class MetaImageRequestError extends Error {
+  constructor(message: string, readonly options: { httpStatus?: number; rawResponse?: string } = {}) {
+    super(message);
+    this.name = 'MetaImageRequestError';
+  }
+
+  get httpStatus() { return this.options.httpStatus; }
+  get rawResponse() { return this.options.rawResponse; }
+}
+
 export type GeneratedRecipeImage = {
   blob: Blob;
   provider: RecognitionProvider;
@@ -68,14 +78,15 @@ async function imageFromResponse(value: any, fetchImpl: typeof fetch) {
   throw new Error('The image provider returned an invalid image response.');
 }
 
-function metaError(response: Response, body: any) {
-  if (response.status === 401) return new Error('Wrong Meta API key.');
-  if (response.status === 402) return new Error('Meta billing is not available for this API key.');
-  if (response.status === 403) return new Error('This Meta API key cannot generate recipe photos.');
-  if (response.status === 404 && body?.error?.code === 'model_not_found') return new Error('The Meta image model is not available for this API key.');
-  if (response.status === 429) return new Error('Meta image-generation rate limit reached.');
-  if (body?.error?.code === 'content_policy_violation') return new Error('Meta blocked this recipe photo request.');
-  return new Error('Meta recipe photo generation failed.');
+function metaError(response: Response, body: any, rawResponse: string) {
+  const options = { httpStatus: response.status, rawResponse };
+  if (response.status === 401) return new MetaImageRequestError('Wrong Meta API key.', options);
+  if (response.status === 402) return new MetaImageRequestError('Meta billing is not available for this API key.', options);
+  if (response.status === 403) return new MetaImageRequestError('This Meta API key cannot generate recipe photos.', options);
+  if (response.status === 404 && body?.error?.code === 'model_not_found') return new MetaImageRequestError('The Meta image model is not available for this API key.', options);
+  if (response.status === 429) return new MetaImageRequestError('Meta image-generation rate limit reached.', options);
+  if (body?.error?.code === 'content_policy_violation') return new MetaImageRequestError('Meta blocked this recipe photo request.', options);
+  return new MetaImageRequestError('Meta recipe photo generation failed.', options);
 }
 
 export class MetaRecipeImageGenerationProvider implements RecipeImageGenerationProvider {
@@ -88,6 +99,8 @@ export class MetaRecipeImageGenerationProvider implements RecipeImageGenerationP
 
   async generate(recipe: AiRecipe): Promise<GeneratedRecipeImage> {
     let response: Response;
+    const controller = new AbortController();
+    const timeout = globalThis.setTimeout(() => controller.abort(), 90_000);
     try {
       response = await this.fetchImpl(this.endpoint, {
         method: 'POST',
@@ -100,14 +113,23 @@ export class MetaRecipeImageGenerationProvider implements RecipeImageGenerationP
           response_format: 'b64_json',
           output_format: 'webp',
         }),
-        signal: AbortSignal.timeout(90_000),
+        signal: controller.signal,
       });
     } catch (error) {
       if ((error as Error)?.name === 'TimeoutError' || (error as Error)?.name === 'AbortError') throw new Error('Meta recipe photo generation timed out.');
-      throw new Error('Meta recipe photo generation is temporarily unavailable.');
+      const transportDetail = error instanceof Error ? `Transport error: ${error.message}` : 'Transport error with no browser details.';
+      throw new MetaImageRequestError('Meta recipe photo generation is temporarily unavailable.', { rawResponse: transportDetail });
+    } finally {
+      globalThis.clearTimeout(timeout);
     }
-    const body = await response.json().catch(() => ({}));
-    if (!response.ok) throw metaError(response, body);
+    const rawResponse = await response.text();
+    let body: any;
+    try {
+      body = JSON.parse(rawResponse || '{}');
+    } catch {
+      throw new MetaImageRequestError('Meta returned an invalid recipe photo response.', { httpStatus: response.status, rawResponse });
+    }
+    if (!response.ok) throw metaError(response, body, rawResponse);
     return { blob: await imageFromResponse(body, this.fetchImpl), provider: 'META', model: body?.model ?? this.model };
   }
 }

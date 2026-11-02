@@ -136,7 +136,7 @@ export function AiRecipeView({
       setLoadingStage('photos');
       const imageProvider = createRecipeImageGenerationProvider(credential);
       setRecipes(await attachGeneratedRecipeImages(generated, imageProvider, (index, result) => {
-        const context = { provider: credential.provider, outputCount: result.state === 'success' ? 1 : 0, detail: `Recipe ${index + 1} of ${generated.length}` };
+        const context = { provider: credential.provider, model: credential.provider === 'META' ? 'muse-image-1.0' : 'gemini-nano-banana-2.1', outputCount: result.state === 'success' ? 1 : 0, detail: `Recipe ${index + 1} of ${generated.length}` };
         if (result.state === 'success') recordAiSuccess('AI recipe photo generation', { ...context, model: result.data.model });
         if (result.state === 'failure') recordAiFailure('AI recipe photo generation', new Error(result.error.message), context, result.error.code);
       }));
