@@ -465,7 +465,7 @@ export function ExerciseSession({
     }
     const landmarks = poses[0];
     if (canvasRef.current && videoRef.current) {
-      drawPose(canvasRef.current, landmarks, { width: videoRef.current.videoWidth, height: videoRef.current.videoHeight });
+      drawPose(canvasRef.current, landmarks, { width: videoRef.current.videoWidth, height: videoRef.current.videoHeight, fit: 'cover' });
     }
     const readiness = evaluatePoseReadiness(profile?.id, landmarks);
     stablePoseFramesRef.current = nextReadinessFrameCount(stablePoseFramesRef.current, readiness.landmarksVisible);
@@ -981,11 +981,11 @@ export function ExerciseSession({
             {stage === 'active' && (genericRecording
               ? <div className="rep-progress recording-progress"><strong>{elapsedSeconds}s</strong><span>of 1:30 maximum</span></div>
               : <div className="rep-progress" style={{ '--rep-progress': `${cameraSetProgress(setTarget, repCount, elapsedSeconds)}%` } as CSSProperties}><strong>{repCount}</strong><span>{targetReps > 0 ? `of ${targetReps} reps` : `${Math.min(elapsedSeconds, targetSeconds)} of ${targetSeconds}s`}</span></div>)}
+            {stage === 'active' && (genericRecording
+              ? <div className="live-session-hud recording"><strong>{elapsedSeconds}s</strong><span>Recording set for AI</span><button className="text-button" onClick={() => void finishGenericRecording()}>Stop recording</button></div>
+              : <div className="live-session-hud"><strong>{elapsedSeconds}s</strong></div>)}
           </div>
           {stage === 'setup' && <div className="camera-setup"><h3>{profile ? profile.cameraView === 'side' ? 'Use a side view' : 'Use a front view' : 'Get ready to record'}</h3><p>{profile ? profile.setupInstruction : 'The muted recording starts automatically after the countdown. Keep only the athlete in frame.'}</p>{canSwitchCamera && <button className="text-button camera-switch" type="button" onClick={switchCamera}><Camera size={17} /> Use {cameraFacing === 'user' ? 'rear' : 'selfie'} camera</button>}<p className="tracking-status" role="status">{profile ? trackingStable ? 'Tracking ready. Starting automatically…' : poseStatus : previewReady ? 'Camera ready. Starting automatically…' : 'Preparing camera preview…'}</p>{cameraError && <p className="session-error" role="alert">{cameraError}</p>}</div>}
-          {stage === 'active' && (genericRecording
-            ? <div className="live-session-hud recording"><strong>{elapsedSeconds}s</strong><span>Recording set for AI</span><button className="text-button" onClick={() => void finishGenericRecording()}>Stop recording</button></div>
-            : <div className="live-session-hud"><strong>{elapsedSeconds}s</strong></div>)}
         </section>
       )}
 

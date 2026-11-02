@@ -8,7 +8,7 @@ const connections: [number, number][] = [
 
 const DRAW_VISIBILITY = 0.2;
 
-export type PoseCanvasSource = { width: number; height: number };
+export type PoseCanvasSource = { width: number; height: number; fit?: 'contain' | 'cover' };
 
 export function drawPose(canvas: HTMLCanvasElement, landmarks: PoseLandmark[], source: PoseCanvasSource) {
   const context = canvas.getContext('2d');
@@ -18,7 +18,9 @@ export function drawPose(canvas: HTMLCanvasElement, landmarks: PoseLandmark[], s
   const displayHeight = canvas.height / density;
   const sourceWidth = Math.max(1, source.width);
   const sourceHeight = Math.max(1, source.height);
-  const scale = Math.min(displayWidth / sourceWidth, displayHeight / sourceHeight);
+  const scale = source.fit === 'cover'
+    ? Math.max(displayWidth / sourceWidth, displayHeight / sourceHeight)
+    : Math.min(displayWidth / sourceWidth, displayHeight / sourceHeight);
   const renderedWidth = sourceWidth * scale;
   const renderedHeight = sourceHeight * scale;
   const offsetX = (displayWidth - renderedWidth) / 2;
