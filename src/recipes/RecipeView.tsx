@@ -15,6 +15,7 @@ import {
   X,
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
+import { FoodScheduleGrid } from '../components/FoodScheduleGrid';
 import { BYOK_AI_ENABLED } from '../config/appConfig';
 import { localDate, saveFood, type MealType } from '../data/db';
 import { useBackNavigation } from '../navigation/backNavigation';
@@ -23,8 +24,6 @@ import { getCuisineLocation, type CuisineLocation } from './location';
 import type { RecipeDetail, RecipePage, RecipeSummary } from './types';
 
 const DATASET_URL = 'https://huggingface.co/datasets/datahiveai/recipes-with-nutrition';
-const meals: MealType[] = ['breakfast', 'lunch', 'dinner', 'snack'];
-
 type Filters = { cuisine: string; dish: string; meal: string; diet: string; health: string; minCalories: string; maxCalories: string };
 const emptyFilters: Filters = { cuisine: '', dish: '', meal: '', diet: '', health: '', minCalories: '', maxCalories: '' };
 
@@ -342,9 +341,7 @@ function RecipeDetail({ recipe, initialDate, onClose, onAdded }: { recipe: Recip
           <a className="primary-button" href={recipe.url} target="_blank" rel="noreferrer"><ExternalLink size={16} /> Cooking instructions</a>
           <section><h3>Nutrients per serving</h3><MacroGrid values={nutrition} /><FullNutrients recipe={recipe} /></section>
           <div className="save-food-panel">
-            <label>Date<input type="date" value={date} onChange={(event) => setDate(event.target.value)} /></label>
-            <label>Meal<select value={meal} onChange={(event) => setMeal(event.target.value as MealType)}>{meals.map((item) => <option key={item} value={item}>{titleCase(item)}</option>)}</select></label>
-            <label>Servings<input type="number" min="0.25" step="0.25" value={servings} onChange={(event) => setServings(Number(event.target.value))} /></label>
+            <FoodScheduleGrid date={date} meal={meal} quantity={servings} onDateChange={setDate} onMealChange={setMeal} onQuantityChange={setServings} />
             <button className="primary-button" disabled={servings <= 0} onClick={() => void save()}><Plus size={17} /> {added ? 'Food added' : 'Add food'}</button>
           </div>
           <p className="data-attribution"><a href={DATASET_URL} target="_blank" rel="noreferrer">DataHive recipe dataset · CC BY-NC 4.0 · non-commercial use only.</a></p>

@@ -159,7 +159,7 @@ test('ingredient HTTP contract reports health, accepts Base64 capacity, and maps
       ok: true,
       keySource: 'user-device',
       configured: false,
-      supportedProviders: ['meta', 'gemini'],
+      supportedProviders: ['meta'],
     });
 
     const imageBytes = Buffer.alloc(300_000, 1);
@@ -236,16 +236,17 @@ test('ingredient HTTP contract reports health, accepts Base64 capacity, and maps
       headers: { Authorization: 'Bearer user-key', 'Content-Type': 'application/json', 'X-Recognition-Provider': 'FIREWORKS' },
       body: JSON.stringify({ image: JPEG_DATA_URL }),
     });
-    assert.equal(invalidProvider.status, 400);
+    assert.equal(invalidProvider.status, 403);
   } finally {
     await new Promise<void>((resolve, reject) => byokServer.close((error) => error ? reject(error) : resolve()));
   }
 });
 
-test('BYOK settings show concise key security text and both recognition providers', () => {
+test('BYOK settings show concise key security text and only configured recognition providers', () => {
   const source = readFileSync(new URL('../src/settings/SettingsView.tsx', import.meta.url), 'utf8');
   assert.match(source, /Meta API key/);
   assert.match(source, /Google Gemini API key/);
+  assert.match(source, /GEMINI_API_ENABLED && <ProviderKeyField/);
   assert.match(source, /Keys are encrypted\./);
   assert.doesNotMatch(source, /AES-GCM|non-exportable encryption key|User-configured AI services/);
   assert.match(source, /Legal, data sources &amp; safety/);

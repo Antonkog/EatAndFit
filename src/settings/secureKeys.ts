@@ -1,3 +1,5 @@
+import { GEMINI_API_ENABLED, META_API_ENABLED } from '../config/appConfig';
+
 export type RecognitionProvider = 'META' | 'GEMINI';
 export type RecognitionCredential = { provider: RecognitionProvider; apiKey: string };
 export type RecognitionKeyStatus = {
@@ -13,6 +15,10 @@ type StoredPreference = { id: 'active-provider'; value: RecognitionProvider };
 const DATABASE = 'eat-and-fit-secure-settings';
 const VERSION = 1;
 export const RECOGNITION_KEYS_CHANGED = 'eatfit-recognition-keys-change';
+
+export function recognitionProviderEnabled(provider: RecognitionProvider) {
+  return provider === 'META' ? META_API_ENABLED : GEMINI_API_ENABLED;
+}
 
 function openDatabase(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
@@ -68,8 +74,8 @@ async function records() {
 
 export async function getRecognitionKeyStatus(): Promise<RecognitionKeyStatus> {
   const { secrets, preference } = await records();
-  const providers = new Set(secrets.map((secret) => secret.provider));
-  const fallback = providers.has('META') ? 'META' : providers.has('GEMINI') ? 'GEMINI' : 'META';
+  const providers = new Set(secrets.map((secret) => secret.provider).filter(recognitionProviderEnabled));
+  const fallback = providers.has('META') ? 'META' : providers.has('GEMINI') ? 'GEMINI' : META_API_ENABLED ? 'META' : 'GEMINI';
   const activeProvider = preference?.value && providers.has(preference.value) ? preference.value : fallback;
   return {
     activeProvider,
@@ -79,6 +85,7 @@ export async function getRecognitionKeyStatus(): Promise<RecognitionKeyStatus> {
 }
 
 export async function saveRecognitionKey(provider: RecognitionProvider, value: string) {
+  if (!recognitionProviderEnabled(provider)) throw new Error('This AI provider is disabled in the application configuration.');
   const apiKey = value.trim();
   if (!apiKey) throw new Error('Enter an API key before saving.');
   const verification = await fetch('/api/ai/keys/verify', {
@@ -111,6 +118,7 @@ export async function removeRecognitionKey(provider: RecognitionProvider) {
 }
 
 export async function setActiveRecognitionProvider(provider: RecognitionProvider) {
+  if (!recognitionProviderEnabled(provider)) throw new Error('This AI provider is disabled in the application configuration.');
   const status = await getRecognitionKeyStatus();
   const configured = provider === 'META' ? status.metaConfigured : status.geminiConfigured;
   if (!configured) throw new Error(`Save a ${provider === 'META' ? 'Meta' : 'Gemini'} API key first.`);
@@ -135,6 +143,7 @@ export async function getRecognitionCredential(): Promise<RecognitionCredential 
 }
 
 export async function getRecognitionCredentialForProvider(provider: RecognitionProvider): Promise<RecognitionCredential | undefined> {
+  if (!recognitionProviderEnabled(provider)) return undefined;
   const database = await openDatabase();
   try {
     const secret = await requestResult(database.transaction('secrets').objectStore('secrets').get(provider)) as StoredSecret | undefined;

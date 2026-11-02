@@ -6,6 +6,8 @@ function booleanSetting(value, fallback) {
 export function resolveAppConfiguration(environment = {}, requestedEdition = environment.APP_EDITION) {
   const edition = String(requestedEdition).trim().toLowerCase() === 'byok' ? 'byok' : 'core';
   const byokAi = edition === 'byok';
+  const metaApi = byokAi && booleanSetting(environment.META_API_ENABLED, true);
+  const geminiApi = byokAi && booleanSetting(environment.GEMINI_API_ENABLED, false);
   const firebaseAnalytics = Boolean(
     environment.VITE_FIREBASE_API_KEY &&
     environment.VITE_FIREBASE_PROJECT_ID &&
@@ -15,9 +17,13 @@ export function resolveAppConfiguration(environment = {}, requestedEdition = env
 
   return Object.freeze({
     edition,
+    providers: Object.freeze({
+      meta: metaApi,
+      gemini: geminiApi,
+    }),
     features: Object.freeze({
       byokAi,
-      recipePhotoGeneration: byokAi && booleanSetting(environment.RECIPE_PHOTO_GENERATION_ENABLED, true),
+      recipePhotoGeneration: (metaApi || geminiApi) && booleanSetting(environment.RECIPE_PHOTO_GENERATION_ENABLED, true),
       firebaseAnalytics,
     }),
   });

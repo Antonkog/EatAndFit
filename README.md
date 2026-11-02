@@ -7,7 +7,7 @@ Workout and meal history is stored in the browser. There are no user accounts or
 ## Free editions
 
 - **Core** contains every feature that does not require a private model API key. Barcode lookup remains available, while the ingredient-recognition and AI-recipe controls are hidden.
-- **BYOK AI** adds photo ingredient recognition, AI recipe generation with optional generated food photos, conservative adult energy calibration, and personalized two-week training plans. The user stores either a Meta or Google Gemini key in Settings and chooses the active provider. A key is checked once before it is encrypted and saved. Saving or removing a key updates the available UI immediately. There is no automatic provider fallback.
+- **BYOK AI** adds photo ingredient recognition, AI recipe generation with optional generated food photos, conservative adult energy calibration, and personalized two-week training plans. Meta is enabled by default; Gemini is implemented but disabled by the current application configuration. A key is checked once before it is encrypted and saved. Saving or removing a key updates the available UI immediately. There is no automatic provider fallback.
 
 BYOK keys are encrypted with AES-GCM using a non-exportable device-local key and stored in browser IndexedDB. They are excluded from backups and analytics. Meta requests go from the browser to Meta; Gemini requests are forwarded over HTTPS for that request. Eat & Fit does not persist the key or submitted content. Local encryption protects keys at rest, but it cannot protect an unlocked browser, compromised device, or compromised application origin.
 
@@ -50,7 +50,9 @@ Docker defaults to Core. Select BYOK at build time with the non-secret edition f
 APP_EDITION=byok docker compose up -d --build api web
 ```
 
-BYOK builds generate photos for AI recipes by default. Set `RECIPE_PHOTO_GENERATION_ENABLED=false` to retain text-only AI recipes. Core always disables this feature regardless of the value.
+BYOK builds enable Meta and generate photos for AI recipes by default. Use `META_API_ENABLED=false` or `GEMINI_API_ENABLED=true` to change the available providers, and set `RECIPE_PHOTO_GENERATION_ENABLED=false` to retain text-only AI recipes. Core always disables all AI providers and photo generation regardless of these values.
+
+Settings can download a privacy-safe AI diagnostic file named `log.txt`. It records timestamped successes and sanitized failures for AI recipe text/photos, ingredient recognition, training generation/calibration, and exercise review without storing keys, prompts, photos, or videos.
 
 Firebase Analytics is optional and remains disabled when its public configuration is absent.
 
@@ -75,7 +77,7 @@ For containers, first import the external datasets with `docker compose --profil
 - Packaged-product data comes from [Open Food Facts](https://world.openfoodfacts.org/terms-of-use) and can be incomplete or outdated.
 - Adult estimates cite the [2024 Adult Compendium of Physical Activities](https://pacompendium.com/conditioning-exercise/); estimates for ages 60+ prefer the [Older Adult Compendium](https://pacompendium.com/older-adult-compendium/).
 - Estimates for ages 6–18 cite the [Youth Compendium of Physical Activities](https://www.nccor.org/tools-youthcompendium/met-view-by-individual-category/) and its published Schofield equations. [Harvard Health’s 30-minute table](https://www.health.harvard.edu/diet-and-weight-loss/calories-burned-in-30-minutes-for-people-of-three-different-weights) provides a fallback/reference check with weight interpolation and duration scaling.
-- In the BYOK edition, ingredient recognition, AI recipe generation, adult energy calibration, and personalized training are billed under the user-supplied Meta or Google Gemini key. Submitted content and the selected key are transmitted for processing; Eat & Fit does not persist them. Generated results require review.
+- In the BYOK edition, ingredient recognition, AI recipe generation, adult energy calibration, and personalized training are billed under the user-supplied key for an enabled provider. Submitted content and the selected key are transmitted for processing; Eat & Fit does not persist them. Generated results require review.
 - Exercise and nutrition information is educational and not medical advice. Stop exercising if you experience pain and consult a qualified professional when appropriate.
 
 Source datasets, downloaded media, credentials, environment files, and generated SQLite databases are intentionally excluded from Git.

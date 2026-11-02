@@ -14,8 +14,11 @@ import {
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { readJsonResponse } from '../api/readJsonResponse';
-import { RECIPE_PHOTO_GENERATION_ENABLED } from '../config/appConfig';
+import { NetworkResults, type NetworkResult } from '../api/NetworkResult';
+import { FoodScheduleGrid } from '../components/FoodScheduleGrid';
+import { ENABLED_AI_PROVIDER_LABEL, RECIPE_PHOTO_GENERATION_ENABLED } from '../config/appConfig';
 import { localDate, removeRecipeImage, saveFood, saveRecipeImage, type MealType } from '../data/db';
+import { recordAiFailure, recordAiSuccess, runLoggedAiOperation } from '../diagnostics/clientLog';
 import { useBackNavigation } from '../navigation/backNavigation';
 import { ingredientSearchQuery, nutritionPerServing, suggestIngredientGrams, type UsdaNutrient, type UsdaPortion } from '../nutrition/recipeNutrition';
 import { IngredientScannerTrigger } from '../scanner/ScanView';
@@ -34,12 +37,9 @@ const diets = ['balanced', 'high-fiber', 'high-protein', 'low-carb', 'low-fat', 
 const allergens = ['celery', 'crustacean', 'dairy', 'egg', 'fish', 'gluten', 'mustard', 'peanut', 'sesame', 'shellfish', 'soy', 'tree-nut', 'wheat'];
 const dishTypes = ['Main course', 'Side dish', 'Soup', 'Salad', 'Sandwich', 'Dessert'];
 const mealTypes = ['Breakfast', 'Lunch', 'Dinner', 'Snack'];
-const meals: MealType[] = ['breakfast', 'lunch', 'dinner', 'snack'];
 const cuisines = ['American', 'Chinese', 'French', 'Georgian', 'Greek', 'Indian', 'Italian', 'Japanese', 'Korean', 'Mediterranean', 'Mexican', 'Middle Eastern', 'Persian', 'Spanish', 'Thai', 'Turkish'];
 
 function parseList(value: string) { return [...new Set(value.split(/[,;.\n]+/).map((item) => item.trim()).filter(Boolean))]; }
-function titleCase(value: string) { return value.charAt(0).toUpperCase() + value.slice(1); }
-
 export function AiRecipeView({
   initialDate = localDate(),
   initialRequiredIngredients = [],
@@ -74,6 +74,7 @@ export function AiRecipeView({
   const [selected, setSelected] = useState<GeneratedAiRecipe>();
   const [loading, setLoading] = useState(false);
   const [loadingStage, setLoadingStage] = useState<'recipes' | 'photos'>('recipes');
+  const [recipeNetworkResult, setRecipeNetworkResult] = useState<NetworkResult<AiRecipe[]>>(NetworkResults.success([]));
   const [error, setError] = useState('');
 
   const activeFilterCount = [cuisine, dishType, mealType, excluded, maxTime, calories.min, calories.max, protein.min, protein.max, carbs.min, carbs.max, fat.min, fat.max, ...selectedDiets, ...selectedAllergens].filter(Boolean).length;
@@ -96,7 +97,7 @@ export function AiRecipeView({
     setSelected(undefined);
     try {
       const credential = await getRecognitionCredential();
-      if (!credential) throw new Error('Add a Meta or Google Gemini API key in Settings first.');
+      if (!credential) throw new Error(`Add a ${ENABLED_AI_PROVIDER_LABEL} API key in Settings first.`);
       const filters = {
         idea,
         cuisine,
@@ -110,8 +111,8 @@ export function AiRecipeView({
         maxTime,
       };
       let generated: AiRecipe[];
-      if (credential.provider === 'META') generated = await generateRecipesWithMeta(filters, credential.apiKey);
-      else {
+      const generationResult = await runLoggedAiOperation('AI recipe generation', async () => {
+        if (credential.provider === 'META') return generateRecipesWithMeta(filters, credential.apiKey);
         const response = await fetch('/api/ai/recipes/generate', {
           method: 'POST',
           headers: {
@@ -123,15 +124,22 @@ export function AiRecipeView({
         });
         const data = await readJsonResponse<{ error?: string; recipes: AiRecipe[] }>(response, 'Recipe generation');
         if (!response.ok) throw new Error(data.error || 'Recipe generation failed.');
-        generated = data.recipes;
-      }
+        return data.recipes;
+      }, { provider: credential.provider, model: credential.provider === 'META' ? 'Muse Spark 1.3' : 'Gemini recipe model', outputCount: 2 }, 'recipe_generation_failed', setRecipeNetworkResult);
+      if (generationResult.state === 'failure') throw new Error(generationResult.error.message);
+      if (generationResult.state !== 'success') return;
+      generated = generationResult.data;
       if (!RECIPE_PHOTO_GENERATION_ENABLED) {
         setRecipes(generated);
         return;
       }
       setLoadingStage('photos');
       const imageProvider = createRecipeImageGenerationProvider(credential);
-      setRecipes(await attachGeneratedRecipeImages(generated, imageProvider));
+      setRecipes(await attachGeneratedRecipeImages(generated, imageProvider, (index, result) => {
+        const context = { provider: credential.provider, outputCount: result.state === 'success' ? 1 : 0, detail: `Recipe ${index + 1} of ${generated.length}` };
+        if (result.state === 'success') recordAiSuccess('AI recipe photo generation', { ...context, model: result.data.model });
+        if (result.state === 'failure') recordAiFailure('AI recipe photo generation', new Error(result.error.message), context, result.error.code);
+      }));
     } catch (value) {
       setError(value instanceof Error ? value.message : 'Recipe generation failed.');
     } finally {
@@ -175,7 +183,7 @@ export function AiRecipeView({
           </div>
         </details>
         {error && <div className="error-state compact"><AlertTriangle /><div><strong>{error}</strong><button type="button" className="text-button" onClick={() => void submit()}><RefreshCw size={15} /> Retry</button><button type="button" className="text-button" onClick={onOpenSettings}>Open settings</button></div></div>}
-        <button className="primary-button large full" type="submit" disabled={loading}>{loading ? <LoaderCircle className="spin" /> : <Sparkles size={18} />}{loading ? loadingStage === 'photos' ? 'Creating recipe photos…' : 'Generating two recipes…' : 'Generate recipes'}</button>
+        <button className="primary-button large full" type="submit" disabled={loading} aria-busy={recipeNetworkResult.state === 'loading'}>{loading ? <LoaderCircle className="spin" /> : <Sparkles size={18} />}{loading ? loadingStage === 'photos' ? 'Creating recipe photos…' : 'Generating two recipes…' : 'Generate recipes'}</button>
       </form>
 
       <p className="estimate-warning">AI and database values are estimates and are not medical advice.</p>
@@ -237,7 +245,8 @@ function AiRecipeDetail({ recipe, initialDate, onClose, onAdded }: { recipe: Gen
           provider: generatedImage.provider,
           model: generatedImage.model,
         });
-      } catch {
+      } catch (error) {
+        recordAiFailure('AI recipe photo storage', error, { provider: generatedImage.provider, model: generatedImage.model });
         localImageId = undefined;
       }
     }
@@ -265,7 +274,7 @@ function AiRecipeDetail({ recipe, initialDate, onClose, onAdded }: { recipe: Gen
           <MacroGrid values={nutrition} />
           <section><h3>Ingredients</h3><div className="ai-ingredient-list">{recipe.ingredients.map((item) => <div key={item}><strong>{item}</strong><small>{mode === 'usda' ? 'USDA database' : 'AI estimate'}</small></div>)}</div></section>
           <section><h3>Instructions</h3><ol className="ingredient-lines numbered">{recipe.steps.map((item) => <li key={item}>{item}</li>)}</ol></section>
-          <div className="save-food-panel"><label>Date<input type="date" value={date} onChange={(event) => setDate(event.target.value)} /></label><label>Meal<select value={meal} onChange={(event) => setMeal(event.target.value as MealType)}>{meals.map((item) => <option value={item} key={item}>{titleCase(item)}</option>)}</select></label><label>Servings to add<input type="number" min="0.25" step="0.25" value={quantity} onChange={(event) => setQuantity(Number(event.target.value))} /></label><button className="primary-button" onClick={() => void save()}><Plus size={17} /> {added ? 'Added to calendar' : 'Add to calendar'}</button></div>
+          <div className="save-food-panel"><FoodScheduleGrid date={date} meal={meal} quantity={quantity} quantityLabel="Servings" onDateChange={setDate} onMealChange={setMeal} onQuantityChange={setQuantity} /><button className="primary-button" onClick={() => void save()}><Plus size={17} /> {added ? 'Added to calendar' : 'Add to calendar'}</button></div>
           <p className="estimate-warning">AI and database values are estimates and are not medical advice.</p>
         </div>
       </article>

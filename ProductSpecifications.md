@@ -3,7 +3,7 @@
 ## Document status
 
 - Product: Eat & Fit web application
-- Specification version: 1.7
+- Specification version: 1.8
 - Implementation baseline: `main` as of November 2, 2026
 - Language: English only
 - Platforms: responsive web application for desktop and mobile browsers
@@ -43,7 +43,7 @@ Eat & Fit is built in two free editions.
 | Post-set SAM/Muse movement coaching | Hidden | Available to adults with a verified Meta key and separate per-set consent |
 | Provider-key settings | Hidden | Yes |
 
-The shared application configuration resolves `APP_EDITION=core` or `APP_EDITION=byok` and all feature availability used by the browser and API. `RECIPE_PHOTO_GENERATION_ENABLED` defaults to true for BYOK and is always false for Core. Firebase Analytics availability is derived from its public configuration rather than treated as a user-facing switch. The Core API does not expose AI routes. The application never stores a model API key in source control, `.env`, Docker configuration, or server environment variables.
+The shared application configuration resolves `APP_EDITION=core` or `APP_EDITION=byok` and all feature availability used by the browser and API. `META_API_ENABLED` defaults to true, `GEMINI_API_ENABLED` defaults to false, and disabled providers are hidden and rejected by the browser and API. `RECIPE_PHOTO_GENERATION_ENABLED` defaults to true when BYOK has at least one enabled provider and is always false for Core. Firebase Analytics availability is derived from its public configuration rather than treated as a user-facing switch. The Core API does not expose AI routes. The application never stores a model API key in source control, `.env`, Docker configuration, or server environment variables.
 
 ## 3. Navigation and global behavior
 
@@ -461,7 +461,7 @@ Minimum nutrition values cannot exceed their corresponding maximum values. Servi
 
 The selected provider must return exactly two recipes. Each recipe requires a title, description, 1–20 servings, 1–720 minutes, 1–40 ingredients, 1–30 steps, and non-negative calories/protein/carbohydrates/fat per serving. Invalid or non-JSON output is rejected.
 
-Users can inspect a generated recipe, run the USDA nutrition check, choose date/meal/servings, and save it to Calendar. AI values are always presented as estimates requiring review.
+Users can inspect a generated recipe, run the USDA nutrition check, choose date/meal/servings, and save it to Calendar. Date, meal, and servings use one reusable full-width three-column grid on mobile and desktop; values are vertically centered and left-aligned. Calendar food editing uses the same component. AI values are always presented as estimates requiring review.
 
 ### 13.3 Generated photos
 
@@ -504,10 +504,12 @@ The chosen gram amount scales all nutrient values linearly. The product can be s
 
 ### 15.1 Providers and models
 
-Exactly two providers are supported:
+The implementation contains exactly two provider adapters:
 
 - Meta, using Muse Spark 1.3 (`muse-spark-1.3-contributor`, with `muse-spark-1.3` tried when the contributor model is reported missing).
 - Google Gemini, using `gemini-3.1-flash-lite` by default.
+
+Build configuration decides which adapters are available. The default BYOK build enables Meta and disables Gemini, so Settings shows only Meta and the server advertises only Meta. Enabling `GEMINI_API_ENABLED=true` restores the Gemini key field and provider selection without changing the adapters. A disabled provider's previously encrypted key is left on the device but is ignored until that provider is enabled again.
 
 When recipe-photo generation is enabled, the corresponding image implementations use Meta `muse-image-1.0` or Gemini `gemini-nano-banana-2.1`. Image failure does not trigger the other provider.
 
@@ -517,7 +519,7 @@ There is no automatic cross-provider fallback.
 
 ### 15.2 Key verification and storage
 
-Before a key is saved, the app performs one small provider request. Success displays `API key set`; authentication failure displays `Wrong API key`. A newly saved key becomes the active provider. A user can save both keys, select either configured provider, replace a key, or remove it.
+Before a key is saved, the app performs one small provider request. Success displays `API key set`; authentication failure displays `Wrong API key`. A newly saved key becomes the active provider. When multiple providers are enabled, a user can save their keys, select either configured provider, replace a key, or remove it.
 
 Keys are encrypted with AES-GCM using a non-exportable, device-local 256-bit key. The encryption key and encrypted secrets are stored in the separate `eat-and-fit-secure-settings` IndexedDB database. Initialization vectors are random 12-byte values. Keys are not included in backups or analytics.
 
@@ -530,7 +532,8 @@ Removing or switching a key updates AI-dependent UI immediately. If no active ke
 Settings contains:
 
 - Personal profile editing.
-- BYOK-only Meta and Gemini key fields, saved status, removal, and active-provider selection.
+- BYOK-only key fields for providers enabled by application configuration, saved status, removal, and active-provider selection when more than one provider is enabled.
+- BYOK-only AI diagnostics with `Download log.txt` and log clearing.
 - JSON history export.
 - JSON history import.
 - Deletion of locally stored workouts, food, and products.
@@ -555,6 +558,7 @@ Object stores:
 
 - Profile, exercise-demonstration preference, AI calibration, welcome-dialog dismissal timestamp, and cached country/cuisine result: `localStorage`.
 - Encrypted AI keys and active provider: separate secure-settings IndexedDB database.
+- Privacy-safe AI diagnostics: bounded `localStorage` log containing success/failure timestamps, feature, provider/model, duration, output count, and sanitized errors.
 
 ### 17.3 Backup scope
 
@@ -600,7 +604,9 @@ Import validates the top-level schema version and array presence, clears the exi
 | POST | `/api/ai/movement/prepare` | Temporarily normalize a consented movement recording to muted MP4; no Meta key is sent to Eat & Fit |
 | POST | `/api/ai/keys/verify` | One-request credential verification; Meta validates authentication through its model-list endpoint without requiring a region-specific inference model |
 
-AI requests authenticate with the user-supplied key in a Bearer header and select the provider with `x-recognition-provider`. The API accepts only Meta or Gemini. Movement review is the exception: Eat & Fit receives only the video-preparation request, while the browser sends the key and prepared clip directly to Meta. Provider timeouts, authentication, billing, authorization, missing-model, rate-limit, content-policy, and invalid-response conditions are converted into user-readable errors.
+AI requests authenticate with the user-supplied key in a Bearer header and select the provider with `x-recognition-provider`. The API accepts only providers enabled by the centralized configuration. Movement review is the exception: Eat & Fit receives only the video-preparation request, while the browser sends the key and prepared clip directly to Meta. Provider timeouts, authentication, billing, authorization, missing-model, rate-limit, content-policy, and invalid-response conditions are converted into user-readable errors.
+
+Browser AI operations use a shared `NetworkResult<T>` state contract with loading, success, and structured `AppError` failure variants. The bounded diagnostics log records successful and failed recipe generation, photo generation/storage, ingredient recognition, training generation/calibration, key verification, and Meta exercise review. Each event begins with an ISO timestamp followed by safe metadata on subsequent lines. API keys, prompts, recipe text, ingredients, photos, and videos are never logged.
 
 ## 19. Data sources and licenses
 

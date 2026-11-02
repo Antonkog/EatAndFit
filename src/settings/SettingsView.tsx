@@ -1,8 +1,9 @@
-import { ChevronDown, Download, ExternalLink, KeyRound, Share2, ShieldCheck, Smartphone, Trash2, Upload, UserRound } from 'lucide-react';
+import { ChevronDown, Download, ExternalLink, FileText, KeyRound, Share2, ShieldCheck, Smartphone, Trash2, Upload, UserRound } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
-import { BYOK_AI_ENABLED, RECIPE_PHOTO_GENERATION_ENABLED } from '../config/appConfig';
+import { BYOK_AI_ENABLED, ENABLED_AI_PROVIDER_LABEL, GEMINI_API_ENABLED, META_API_ENABLED, RECIPE_PHOTO_GENERATION_ENABLED } from '../config/appConfig';
 import { APP_EDITION_LABEL } from '../config/edition';
 import { clearData, exportBackup, importBackup, isBackup } from '../data/db';
+import { clearDiagnosticLog, downloadDiagnosticLog, recordAiFailure, recordAiSuccess } from '../diagnostics/clientLog';
 import { ProfileForm } from '../profile/ProfileForm';
 import { pwaInstallState, requestPwaInstall, subscribePwaInstall } from '../pwa/install';
 import { legalSources } from './legal';
@@ -66,9 +67,11 @@ export function SettingsView() {
     try {
       setKeyMessage('Checking API key…');
       await saveRecognitionKey(provider, value);
+      recordAiSuccess('AI API key verification', { provider });
       if (provider === 'META') setMetaKey(''); else setGeminiKey('');
       setKeyMessage('API key set');
     } catch (error) {
+      recordAiFailure('AI API key verification', error, { provider }, 'api_key_verification_failed');
       setKeyMessage(error instanceof Error ? error.message : 'The key could not be saved.');
     }
   };
@@ -89,7 +92,7 @@ export function SettingsView() {
     }
   };
 
-  const hasAnyKey = Boolean(keyStatus?.metaConfigured || keyStatus?.geminiConfigured);
+  const hasAnyKey = Boolean((META_API_ENABLED && keyStatus?.metaConfigured) || (GEMINI_API_ENABLED && keyStatus?.geminiConfigured));
 
   const installApp = async () => {
     const outcome = await requestPwaInstall();
@@ -124,22 +127,22 @@ export function SettingsView() {
       {BYOK_AI_ENABLED && (
         <article className="settings-card api-key-settings">
           <h3><KeyRound size={20} /> AI provider keys</h3>
-          <p>Smart Scan, AI recipe generation{RECIPE_PHOTO_GENERATION_ENABLED ? ' with AI-generated food photos' : ''}, adult energy calibration, and personalized training are enabled when the selected provider has a verified key. Adults with a verified Meta key can also choose post-set movement coaching, even when Gemini is selected for other AI features. Your provider may charge your account for API requests.</p>
+          <p>Smart Scan, AI recipe generation{RECIPE_PHOTO_GENERATION_ENABLED ? ' with AI-generated food photos' : ''}, adult energy calibration, and personalized training are enabled when a verified {ENABLED_AI_PROVIDER_LABEL} key is saved.{META_API_ENABLED ? ' Adults with a verified Meta key can also choose post-set movement coaching.' : ''} Your provider may charge your account for API requests.</p>
           <div className="key-security-note">
             <ShieldCheck size={20} />
             <p>Keys are encrypted.</p>
           </div>
-          <div className="provider-key-grid">
-            <ProviderKeyField label="Meta API key" configured={Boolean(keyStatus?.metaConfigured)} value={metaKey} onChange={setMetaKey} onSave={() => void saveKey('META')} onRemove={() => void removeKey('META')} />
-            <ProviderKeyField label="Google Gemini API key" configured={Boolean(keyStatus?.geminiConfigured)} value={geminiKey} onChange={setGeminiKey} onSave={() => void saveKey('GEMINI')} onRemove={() => void removeKey('GEMINI')} />
+          <div className={`provider-key-grid${Number(META_API_ENABLED) + Number(GEMINI_API_ENABLED) === 1 ? ' single' : ''}`}>
+            {META_API_ENABLED && <ProviderKeyField label="Meta API key" configured={Boolean(keyStatus?.metaConfigured)} value={metaKey} onChange={setMetaKey} onSave={() => void saveKey('META')} onRemove={() => void removeKey('META')} />}
+            {GEMINI_API_ENABLED && <ProviderKeyField label="Google Gemini API key" configured={Boolean(keyStatus?.geminiConfigured)} value={geminiKey} onChange={setGeminiKey} onSave={() => void saveKey('GEMINI')} onRemove={() => void removeKey('GEMINI')} />}
           </div>
-          <label className="active-provider">AI provider
+          {META_API_ENABLED && GEMINI_API_ENABLED && <label className="active-provider">AI provider
             <select value={hasAnyKey ? keyStatus?.activeProvider : ''} disabled={!hasAnyKey} onChange={(event) => void selectProvider(event.target.value as RecognitionProvider)}>
               {!hasAnyKey && <option value="">No key configured</option>}
               <option value="META" disabled={!keyStatus?.metaConfigured}>Meta{keyStatus?.metaConfigured ? '' : ' · add key first'}</option>
               <option value="GEMINI" disabled={!keyStatus?.geminiConfigured}>Google Gemini{keyStatus?.geminiConfigured ? '' : ' · add key first'}</option>
             </select>
-          </label>
+          </label>}
           {keyMessage && <p className="key-message" role="status">{keyMessage}</p>}
         </article>
       )}
@@ -153,6 +156,14 @@ export function SettingsView() {
           <button className="danger-button" onClick={() => void remove()}><Trash2 size={17} /> Delete local history</button>
         </div>
       </article>
+      {BYOK_AI_ENABLED && <article className="settings-card diagnostic-settings">
+        <h3><FileText size={20} /> AI diagnostics</h3>
+        <p>Download a privacy-safe log of AI successes and errors. Entries include timestamps, feature names, providers, models, and request duration. API keys, prompts, photos, and videos are never included.</p>
+        <div className="settings-actions">
+          <button className="text-button" onClick={downloadDiagnosticLog}><Download size={17} /> Download log.txt</button>
+          <button className="text-button" onClick={() => { clearDiagnosticLog(); window.alert('Diagnostic log cleared.'); }}><Trash2 size={17} /> Clear log</button>
+        </div>
+      </article>}
       <details className="settings-card legal-disclosure">
         <summary><span><ShieldCheck size={20} /><strong>Legal, data sources &amp; safety</strong><small>Attributions, licenses, AI processing, and safety information</small></span><ChevronDown size={18} /></summary>
         <div className="legal-content">

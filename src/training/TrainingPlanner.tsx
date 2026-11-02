@@ -1,6 +1,7 @@
 import { CalendarDays, Download, LoaderCircle, Sparkles, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { allWorkouts, localDate, saveTrainingPlan, type Workout } from '../data/db';
+import { runLoggedAiOperation } from '../diagnostics/clientLog';
 import { estimateDurationSeconds, estimateExerciseEnergy, estimateSetDurationSeconds } from '../energy/estimates';
 import { classifyExercise } from '../energy/sources';
 import type { ExerciseCatalog } from '../exercises/types';
@@ -65,9 +66,13 @@ export function TrainingPlanner({ catalog, onClose, onSaved }: { catalog: Exerci
     try {
       const credential = await getRecognitionCredential();
       if (!credential) throw new Error('Add and verify an AI provider key in Settings first.');
-      const calibration = await ensureEnergyCalibration(catalog, profile, credential).catch(() => undefined);
-      setFactor(calibration);
-      setPlan(await generateTrainingPlan(profile, goal, catalog, credential));
+      const model = credential.provider === 'META' ? 'Muse Spark 1.3' : 'Gemini training model';
+      const calibration = await runLoggedAiOperation('AI exercise-energy calibration', () => ensureEnergyCalibration(catalog, profile, credential), { provider: credential.provider, model });
+      setFactor(calibration.state === 'success' ? calibration.data : undefined);
+      const generation = await runLoggedAiOperation('AI personalized training generation', () => generateTrainingPlan(profile, goal, catalog, credential), { provider: credential.provider, model, outputCount: 6 });
+      if (generation.state === 'failure') throw new Error(generation.error.message);
+      if (generation.state !== 'success') return;
+      setPlan(generation.data);
       setDates(defaultTrainingDates());
     } catch (value) {
       setError(value instanceof Error ? value.message : 'The training plan could not be generated.');

@@ -13,6 +13,8 @@ import {
 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { readJsonResponse } from '../api/readJsonResponse';
+import { ENABLED_AI_PROVIDER_LABEL } from '../config/appConfig';
+import { recordAiFailure, runLoggedAiOperation } from '../diagnostics/clientLog';
 import { localDate } from '../data/db';
 import { useBackNavigation } from '../navigation/backNavigation';
 import { getRecognitionCredential, getRecognitionKeyStatus, RECOGNITION_KEYS_CHANGED } from '../settings/secureKeys';
@@ -111,7 +113,7 @@ function IngredientScannerPanel({
     const refresh = () => void getRecognitionKeyStatus().then((value) => setCredential({
       configured: value.activeProvider === 'META' ? value.metaConfigured : value.geminiConfigured,
       provider: value.activeProvider === 'META' ? 'Meta' : 'Google Gemini',
-    })).catch(() => setCredential({ configured: false, provider: 'Meta or Google Gemini' }));
+    })).catch(() => setCredential({ configured: false, provider: ENABLED_AI_PROVIDER_LABEL }));
     refresh();
     window.addEventListener(RECOGNITION_KEYS_CHANGED, refresh);
     return () => window.removeEventListener(RECOGNITION_KEYS_CHANGED, refresh);
@@ -130,28 +132,30 @@ function IngredientScannerPanel({
     setStatus('Recognizing ingredients…');
     try {
       const recognition = await getRecognitionCredential();
-      if (!recognition) throw new Error('Add a Meta or Google Gemini API key in Settings first.');
+      if (!recognition) throw new Error(`Add a ${ENABLED_AI_PROVIDER_LABEL} API key in Settings first.`);
       const image = await prepareJpeg(file);
-      if (recognition.provider === 'META') {
-        const recognized = await recognizeIngredientsWithMeta(image, recognition.apiKey);
-        setIngredients(recognized);
-        setStatus(recognized.length ? 'Review every ingredient before continuing.' : 'No ingredients were recognized. Try another photo.');
-        return;
-      }
-      const response = await fetch('/api/ai/ingredients/detect', {
-        method: 'POST',
-        headers: {
-          authorization: `Bearer ${recognition.apiKey}`,
-          'content-type': 'application/json',
-          'x-recognition-provider': recognition.provider,
-        },
-        body: JSON.stringify({ image }),
-      });
-      const data = await readJsonResponse<{ error?: string; ingredients?: string[] }>(response, 'Ingredient recognition');
-      if (!response.ok) throw new Error(data.error || 'Recognition failed.');
-      setIngredients(data.ingredients ?? []);
-      setStatus((data.ingredients ?? []).length ? 'Review every ingredient before continuing.' : 'No ingredients were recognized. Try another photo.');
+      const result = await runLoggedAiOperation('AI ingredient recognition', async () => {
+        if (recognition.provider === 'META') return recognizeIngredientsWithMeta(image, recognition.apiKey);
+        const response = await fetch('/api/ai/ingredients/detect', {
+          method: 'POST',
+          headers: {
+            authorization: `Bearer ${recognition.apiKey}`,
+            'content-type': 'application/json',
+            'x-recognition-provider': recognition.provider,
+          },
+          body: JSON.stringify({ image }),
+        });
+        const data = await readJsonResponse<{ error?: string; ingredients?: string[] }>(response, 'Ingredient recognition');
+        if (!response.ok) throw new Error(data.error || 'Recognition failed.');
+        return data.ingredients ?? [];
+      }, { provider: recognition.provider, model: recognition.provider === 'META' ? 'Muse Spark 1.3' : 'Gemini vision model' });
+      if (result.state === 'failure') throw new Error(result.error.message);
+      if (result.state !== 'success') return;
+      setIngredients(result.data);
+      setStatus(result.data.length ? 'Review every ingredient before continuing.' : 'No ingredients were recognized. Try another photo.');
     } catch (value) {
+      // Provider-request failures were already logged by runLoggedAiOperation.
+      if ((value as Error)?.message?.includes('API key in Settings')) recordAiFailure('AI ingredient recognition setup', value);
       setStatus(value instanceof Error ? value.message : 'Recognition failed.');
     } finally {
       setScanning(false);
@@ -170,7 +174,7 @@ function IngredientScannerPanel({
     <section className="ingredient-scanner-card scanner-setup">
       <span><KeyRound /></span>
       <h2>Add your API key to use Smart Scan</h2>
-      <p>The key is encrypted and stored only in this browser. Configure Meta or Google Gemini in Settings.</p>
+      <p>The key is encrypted and stored only in this browser. Configure {ENABLED_AI_PROVIDER_LABEL} in Settings.</p>
       <button className="primary-button" onClick={onOpenSettings}><KeyRound size={17} /> Open settings</button>
     </section>
   );

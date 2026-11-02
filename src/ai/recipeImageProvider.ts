@@ -1,3 +1,4 @@
+import { NetworkResults, toAppError, type NetworkResult } from '../api/NetworkResult';
 import type { RecognitionCredential, RecognitionProvider } from '../settings/secureKeys';
 import type { AiRecipe } from './validation';
 
@@ -16,11 +17,24 @@ export interface RecipeImageGenerationProvider {
   generate(recipe: AiRecipe): Promise<GeneratedRecipeImage>;
 }
 
-export async function attachGeneratedRecipeImages(recipes: AiRecipe[], provider: RecipeImageGenerationProvider) {
-  const images = await Promise.allSettled(recipes.map((recipe) => provider.generate(recipe)));
+export async function attachGeneratedRecipeImages(
+  recipes: AiRecipe[],
+  provider: RecipeImageGenerationProvider,
+  onResult?: (index: number, result: NetworkResult<GeneratedRecipeImage>) => void,
+) {
+  const images = await Promise.all(recipes.map(async (recipe, index) => {
+    let result: NetworkResult<GeneratedRecipeImage>;
+    try {
+      result = NetworkResults.success(await provider.generate(recipe));
+    } catch (error) {
+      result = NetworkResults.failure(toAppError(error, 'Recipe photo generation failed.', 'recipe_photo_failed'));
+    }
+    onResult?.(index, result);
+    return result;
+  }));
   return recipes.map<GeneratedAiRecipe>((recipe, index) => {
     const image = images[index];
-    return image?.status === 'fulfilled' ? { ...recipe, generatedImage: image.value } : recipe;
+    return image?.state === 'success' ? { ...recipe, generatedImage: image.data } : recipe;
   });
 }
 

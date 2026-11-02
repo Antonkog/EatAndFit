@@ -14,6 +14,7 @@ import {
   X,
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { FoodScheduleGrid } from '../components/FoodScheduleGrid';
 import { BYOK_AI_ENABLED } from '../config/appConfig';
 import {
   allFood,
@@ -49,8 +50,6 @@ import { movementProfileForExercise } from '../movement/profiles';
 import { useBackNavigation } from '../navigation/backNavigation';
 
 const weekdays = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
-const meals: MealType[] = ['breakfast', 'lunch', 'dinner', 'snack'];
-
 function parseLocal(value: string) { return new Date(`${value}T12:00:00`); }
 function titleCase(value: string) { return value.charAt(0).toUpperCase() + value.slice(1); }
 function fullDate(value: string) { return new Intl.DateTimeFormat('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }).format(parseLocal(value)); }
@@ -556,11 +555,8 @@ function FoodRow({ entry, onOpenDetails }: { entry: FoodEntry; onOpenDetails: ()
         <div><small>{titleCase(entry.mealType ?? 'dinner')}</small><h3>{entry.title}</h3><p>{Math.round(entry.calories ?? 0)} kcal · Protein {(entry.protein ?? 0).toFixed(1)}g · Fat {(entry.fat ?? 0).toFixed(1)}g</p></div>
       </button>
       <div className="food-log-controls">
-        <label>Date<input type="date" value={date} onChange={(event) => setDate(event.target.value)} /></label>
-        <label>Meal<select value={meal} onChange={(event) => setMeal(event.target.value as MealType)}>{meals.map((item) => <option value={item} key={item}>{titleCase(item)}</option>)}</select></label>
-        <label>Servings<input type="number" min="0.25" step="0.25" value={quantity} onChange={(event) => setQuantity(Number(event.target.value))} /></label>
-        <button className="text-button" onClick={() => void saveFood({ ...entry, date, mealType: meal, quantity })}>Update</button>
-        <button className="danger-icon" aria-label="Remove food" onClick={() => void removeFood(entry.id)}><Trash2 size={17} /></button>
+        <FoodScheduleGrid date={date} meal={meal} quantity={quantity} onDateChange={setDate} onMealChange={setMeal} onQuantityChange={setQuantity} />
+        <div className="food-log-actions"><button className="text-button" onClick={() => void saveFood({ ...entry, date, mealType: meal, quantity })}>Update</button><button className="danger-icon" aria-label="Remove food" onClick={() => void removeFood(entry.id)}><Trash2 size={17} /></button></div>
       </div>
     </article>
   );

@@ -15,6 +15,7 @@ import type { ScanMode } from './scanner/types';
 import { SettingsView } from './settings/SettingsView';
 import { getRecognitionCredential, getRecognitionKeyStatus } from './settings/secureKeys';
 import { ensureEnergyCalibration } from './training/calibration';
+import { runLoggedAiOperation } from './diagnostics/clientLog';
 import { selectZeroNumberInput } from './ui/numberInput';
 
 export type View = 'exercises' | 'calendar' | 'balance' | 'recipes' | 'scan' | 'ai' | 'settings';
@@ -76,7 +77,7 @@ export function App() {
       const credential = await getRecognitionCredential();
       if (!credential || disposed) return;
       const catalog = await fetch('/data/catalog.json').then((response) => response.json());
-      if (!disposed) await ensureEnergyCalibration(catalog, profile, credential).catch(() => undefined);
+      if (!disposed) await runLoggedAiOperation('AI automatic exercise-energy calibration', () => ensureEnergyCalibration(catalog, profile, credential), { provider: credential.provider, model: credential.provider === 'META' ? 'Muse Spark 1.3' : 'Gemini training model' });
     };
     void calibrate();
     window.addEventListener(PROFILE_CHANGED, calibrate);

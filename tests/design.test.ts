@@ -64,6 +64,18 @@ test('profile measurements and adult goals stay in compact three-column rows on 
   assert.match(styles, /@media \(max-width: 600px\)[\s\S]*\.profile-goal > div \{ grid-template-columns: repeat\(3,minmax\(0,1fr\)\)/);
 });
 
+test('recipe review and Calendar food editing share the full-width schedule grid', () => {
+  const component = readFileSync(new URL('../src/components/FoodScheduleGrid.tsx', import.meta.url), 'utf8');
+  const aiRecipes = readFileSync(new URL('../src/ai/AiRecipeBuilder.tsx', import.meta.url), 'utf8');
+  const calendar = readFileSync(new URL('../src/calendar/CalendarView.tsx', import.meta.url), 'utf8');
+  const styles = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
+  assert.match(component, /className="food-schedule-grid"/);
+  assert.match(aiRecipes, /<FoodScheduleGrid date=\{date\}/);
+  assert.match(calendar, /<FoodScheduleGrid date=\{date\}/);
+  assert.match(styles, /\.food-schedule-grid \{[^}]*width: 100%;[^}]*grid-template-columns:/);
+  assert.match(styles, /input::-webkit-date-and-time-value \{[^}]*text-align: left/);
+});
+
 test('calendar workout, food, and scanned-product entries open stored details', () => {
   const calendar = readFileSync(new URL('../src/calendar/CalendarView.tsx', import.meta.url), 'utf8');
   const details = readFileSync(new URL('../src/calendar/CalendarEntryDetail.tsx', import.meta.url), 'utf8');

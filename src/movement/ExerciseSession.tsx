@@ -2,6 +2,7 @@ import { Camera, Check, ChevronRight, Minus, Plus, RotateCcw, Timer, X } from 'l
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { BYOK_AI_ENABLED } from '../config/appConfig';
 import type { Workout } from '../data/db';
+import { runLoggedAiOperation } from '../diagnostics/clientLog';
 import { useBackNavigation } from '../navigation/backNavigation';
 import { readUserProfile } from '../profile/userProfile';
 import { getRecognitionKeyStatus } from '../settings/secureKeys';
@@ -732,7 +733,7 @@ export function ExerciseSession({
       const localReps = trackerRef.current?.reps ?? [];
       const localSegmentRepCount = Math.max(0, repCount - recordingBaseRepCountRef.current);
       const fallbackAssessment: FormAssessment = { status: 'insufficient_evidence', reason: 'tracking_lost', evidence: [] };
-      const result = await analyzeMovementWithMeta({
+      const metaResult = await runLoggedAiOperation('Meta exercise movement review', () => analyzeMovementWithMeta({
         video: recording,
         exerciseId: workout.exerciseId,
         exerciseName: profile?.displayName ?? workout.exerciseName,
@@ -751,7 +752,10 @@ export function ExerciseSession({
           })),
         activeDurationMs: Math.max(0, Math.round(elapsedSeconds * 1000)),
         assessment: selectedRep?.assessment ?? fallbackAssessment,
-      });
+      }), { provider: 'META', model: 'SAM 3.1 + Muse Spark 1.3', outputCount: 1 });
+      if (metaResult.state === 'failure') throw new Error(metaResult.error.message);
+      if (metaResult.state !== 'success') return;
+      const result = metaResult.data;
       if (!mountedRef.current) return;
       if (mountedRef.current && setIndexRef.current === analyzedSetIndex) setAnalysis(result);
       const countsMatch = result.countReview.localRepCount === result.countReview.suggestedSetRepCount;
