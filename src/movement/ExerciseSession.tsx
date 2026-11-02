@@ -418,12 +418,25 @@ export function ExerciseSession({
   const syncMediaGeometry = useCallback(() => {
     const video = videoRef.current;
     const canvas = canvasRef.current;
-    if (!video || !canvas || !video.videoWidth || !video.videoHeight) return;
+    const stage = video?.parentElement;
+    if (!video || !stage || !video.videoWidth || !video.videoHeight) return;
+    const stageWidth = Math.max(1, stage.clientWidth);
+    const stageHeight = Math.max(1, stage.clientHeight);
+    const coverScale = Math.max(stageWidth / video.videoWidth, stageHeight / video.videoHeight);
+    video.style.width = `${Math.ceil(video.videoWidth * coverScale)}px`;
+    video.style.height = `${Math.ceil(video.videoHeight * coverScale)}px`;
+    video.style.top = '50%';
+    video.style.right = 'auto';
+    video.style.bottom = 'auto';
+    video.style.left = '50%';
+    video.style.objectFit = 'fill';
     const density = Math.max(1, window.devicePixelRatio || 1);
-    const displayWidth = Math.max(1, Math.round(canvas.clientWidth * density));
-    const displayHeight = Math.max(1, Math.round(canvas.clientHeight * density));
-    if (canvas.width !== displayWidth) canvas.width = displayWidth;
-    if (canvas.height !== displayHeight) canvas.height = displayHeight;
+    if (canvas) {
+      const displayWidth = Math.max(1, Math.round(stageWidth * density));
+      const displayHeight = Math.max(1, Math.round(stageHeight * density));
+      if (canvas.width !== displayWidth) canvas.width = displayWidth;
+      if (canvas.height !== displayHeight) canvas.height = displayHeight;
+    }
     if (frameCanvasRef.current) {
       frameCanvasRef.current.width = video.videoWidth;
       frameCanvasRef.current.height = video.videoHeight;
@@ -680,8 +693,10 @@ export function ExerciseSession({
     const sync = () => syncMediaGeometry();
     const resizeObserver = typeof ResizeObserver === 'undefined' ? undefined : new ResizeObserver(sync);
     video.addEventListener('loadedmetadata', sync);
+    video.addEventListener('playing', sync);
     video.addEventListener('resize', sync);
     window.addEventListener('orientationchange', sync);
+    window.visualViewport?.addEventListener('resize', sync);
     if (video.parentElement) resizeObserver?.observe(video.parentElement);
     const attachPreview = async () => {
       if (video.srcObject !== stream) video.srcObject = stream;
@@ -701,8 +716,10 @@ export function ExerciseSession({
     return () => {
       disposed = true;
       video.removeEventListener('loadedmetadata', sync);
+      video.removeEventListener('playing', sync);
       video.removeEventListener('resize', sync);
       window.removeEventListener('orientationchange', sync);
+      window.visualViewport?.removeEventListener('resize', sync);
       resizeObserver?.disconnect();
     };
   }, [cameraPreviewVisible, cameraStreamVersion, profile, scheduleNextFrame, showCameraRecovery, syncMediaGeometry]);

@@ -20,3 +20,9 @@ test('product scanner decodes supported formats once, auto-lookups, retries, and
   assert.match(source, /Retry camera/);
   assert.match(source, /enter the barcode manually/i);
 });
+
+test('mobile barcode camera stays close to the scan target height', () => {
+  const styles = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
+  assert.match(styles, /@media \(max-width: 800px\)[\s\S]*?\.camera-frame \{ height: 170px; min-height: 170px; \}/);
+  assert.match(styles, /\.camera-frame > span[^}]+height: 130px/);
+});

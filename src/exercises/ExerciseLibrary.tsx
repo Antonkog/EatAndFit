@@ -18,6 +18,7 @@ import { movementProfileForExercise } from '../movement/profiles';
 import { useBackNavigation } from '../navigation/backNavigation';
 import { preferredExerciseSex, profileIssue, readUserProfile, setExerciseModelPreference, type ProfileSex } from '../profile/userProfile';
 import { dismissKeyboard } from '../ui/dismissKeyboard';
+import { exerciseMediaFor } from './media';
 import { exerciseMatches, exerciseSearchSuggestions } from './search';
 import type { Exercise, ExerciseCatalog } from './types';
 
@@ -61,13 +62,6 @@ function titleCase(value: string) {
   return value.replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
-function mediaFor(exercise: Exercise, gender: Gender) {
-  return {
-    video: exercise.media.video?.[gender] ?? exercise.media.video?.female ?? exercise.media.video?.male,
-    thumbnail: exercise.media.thumbnail?.[gender] ?? exercise.media.thumbnail?.female ?? exercise.media.thumbnail?.male,
-  };
-}
-
 function secondaryMuscles(exercise: Exercise) {
   const bodyPart = exercise.body_part.toLowerCase();
   if (bodyPart.includes('chest')) return 'Triceps, shoulders';
@@ -100,7 +94,7 @@ export function ExerciseDetail({
   const [added, setAdded] = useState(false);
   const [error, setError] = useState('');
   const [duration, setDuration] = useState(7);
-  const media = mediaFor(exercise, gender);
+  const media = exerciseMediaFor(exercise, gender);
   const available = new Set(Object.keys(exercise.media.video ?? {}));
 
   useEffect(() => {
@@ -311,7 +305,7 @@ export function ExerciseLibrary({ onWorkoutAdded, aiFeaturesEnabled = false }: {
               {catalogSuggestionsOpen && catalogSuggestions.length > 0 && (
                 <div className="exercise-suggestions" id="exercise-search-suggestions" role="listbox" aria-label="Exercise suggestions">
                   {catalogSuggestions.map((exercise, index) => {
-                    const media = mediaFor(exercise, preferredGender());
+                    const media = exerciseMediaFor(exercise, preferredGender());
                     return (
                       <button
                         id={`exercise-suggestion-${index}`}
@@ -337,7 +331,7 @@ export function ExerciseLibrary({ onWorkoutAdded, aiFeaturesEnabled = false }: {
         <div className="muscle-grid">
           {muscleGroups.map((group, index) => {
             const exercises = groupedExercises.get(group.name) ?? [];
-            const cover = exercises[0] ? mediaFor(exercises[0], preferredGender()).thumbnail : undefined;
+            const cover = exercises[0] ? exerciseMediaFor(exercises[0], preferredGender()).thumbnail : undefined;
             return (
               <button className={`muscle-card ${index === 0 ? 'featured' : ''}`} key={group.name} onClick={() => { setSelectedGroup(group); setQuery(''); }}>
                 {cover && <img src={cover} alt="" loading={index < 5 ? 'eager' : 'lazy'} />}
@@ -364,7 +358,7 @@ export function ExerciseLibrary({ onWorkoutAdded, aiFeaturesEnabled = false }: {
       </section>
       <section className="exercise-grid">
         {visible.map((exercise) => {
-          const media = mediaFor(exercise, preferredGender());
+          const media = exerciseMediaFor(exercise, preferredGender());
           const aiAvailable = Boolean(movementProfileForExercise(exercise.id));
           return (
             <button className="exercise-card" key={exercise.id} onClick={() => setSelected(exercise)} aria-label={exercise.name}>

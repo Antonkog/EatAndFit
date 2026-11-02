@@ -40,12 +40,16 @@ test('standalone mobile navigation uses the earlier fixed safe-area position', (
   assert.match(styles, /@media \(max-width: 800px\)[\s\S]*?\.bottom-nav \{ position: fixed; inset: auto 12px var\(--mobile-nav-bottom\);/);
 });
 
-test('service worker caches only the app shell and static same-origin requests', () => {
+test('service worker caches the app shell and viewed exercise posters but not exercise videos', () => {
   const main = readFileSync(new URL('../src/main.tsx', import.meta.url), 'utf8');
   const worker = readFileSync(new URL('../public/sw.js', import.meta.url), 'utf8');
   assert.match(main, /import\.meta\.env\.PROD/);
   assert.match(main, /serviceWorker\.register\('\/sw\.js'\)/);
-  assert.match(worker, /eat-and-fit-shell-v3/);
+  assert.match(worker, /eat-and-fit-shell-v4/);
+  assert.match(worker, /eat-and-fit-exercise-previews-v1/);
+  assert.match(worker, /MAX_EXERCISE_PREVIEWS = 160/);
+  assert.match(worker, /url\.pathname\.startsWith\('\/exercise-posters\/'\)/);
+  assert.doesNotMatch(worker, /url\.pathname\.startsWith\('\/exercise-videos\/'\)/);
   assert.match(worker, /request\.mode === 'navigate'/);
   assert.match(worker, /url\.pathname\.startsWith\('\/api\/'\)/);
   assert.match(worker, /url\.origin !== self\.location\.origin/);

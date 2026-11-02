@@ -13,9 +13,10 @@ test('camera session renders one live preview and exposes the skeleton before re
   assert.ok(session.indexOf('drawPose(canvasRef.current, landmarks)') < session.indexOf('evaluatePoseReadiness(profile?.id, landmarks)'));
   assert.match(session, /loadedmetadata/);
   assert.match(session, /orientationchange/);
-  assert.match(session, /\.addEventListener\('resize'/);
-  assert.match(styles, /\.camera-stage\.camera-facing-user video, \.camera-stage\.camera-facing-user canvas[^}]+transform: scaleX\(-1\)/);
-  assert.match(styles, /\.camera-stage\.camera-facing-environment video, \.camera-stage\.camera-facing-environment canvas[^}]+transform: none/);
+  assert.match(session, /visualViewport\?\.addEventListener\('resize'/);
+  assert.match(styles, /\.camera-stage\.camera-facing-user video[^}]+translate\(-50%,-50%\) scaleX\(-1\)/);
+  assert.match(styles, /\.camera-stage\.camera-facing-user canvas[^}]+transform: scaleX\(-1\)/);
+  assert.match(styles, /\.camera-stage\.camera-facing-environment canvas[^}]+transform: none/);
   assert.match(session, /camera-facing-\$\{cameraFacing\}/);
 });
 
@@ -77,15 +78,17 @@ test('camera interruption preserves progress and offers both recovery paths', ()
 test('portrait camera session fills the viewport and overlays a translucent instruction panel', () => {
   assert.match(styles, /@media \(max-width: 600px\) and \(orientation: portrait\)/);
   assert.match(styles, /\.exercise-session\.camera-session-open[^}]+height: 100dvh/);
-  assert.match(styles, /\.camera-session-open \.camera-stage[^}]+height: 100%/);
-  assert.match(styles, /object-fit: contain/);
+  assert.match(styles, /\.camera-session-open \.camera-stage[^}]+height: 100dvh/);
+  assert.match(styles, /object-fit: cover/);
+  assert.match(session, /const coverScale = Math\.max/);
+  assert.match(session, /video\.style\.objectFit = 'fill'/);
   assert.match(styles, /background: rgba\(4,6,4,\.5\)/);
 });
 
 test('camera video fills the viewport on desktop and landscape as well', () => {
   assert.match(styles, /\.exercise-session\.camera-session-open[^}]+height: 100dvh/);
   assert.match(styles, /\.exercise-session\.camera-session-open \.camera-session[^}]+height: 100dvh/);
-  assert.match(styles, /\.exercise-session\.camera-session-open \.camera-stage[^}]+height: 100%/);
+  assert.match(styles, /\.exercise-session\.camera-session-open \.camera-stage[^}]+height: 100dvh/);
 });
 
 test('camera session delegates readiness without delaying skeleton rendering', () => {

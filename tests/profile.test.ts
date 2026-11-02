@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
+import { exerciseMediaFor } from '../src/exercises/media';
 import { normalizeUserProfile, PROFILE_SETUP_REMINDER_MS, profileIssue, shouldPromptForProfile } from '../src/profile/userProfile';
+import type { Exercise } from '../src/exercises/types';
 
 test('profile validation accepts supported sex, age, goal, and realistic metric values', () => {
   assert.equal(profileIssue({ sex: 'female', age: 18, weightKg: 62.5, heightCm: 168 }), '');
@@ -53,4 +55,17 @@ test('profile copy explains that personal data remains in the browser', () => {
   assert.match(setup, /We don’t save your personal data, it stays in your own browser/);
   assert.match(setup, /return after two hours/);
   assert.match(setup, />Not now</);
+});
+
+test('exercise media preference is shared with Calendar and falls back only when needed', () => {
+  const exercise = { media: {
+    thumbnail: { male: 'male.jpg', female: 'female.jpg' },
+    video: { male: 'male.mp4', female: 'female.mp4' },
+  } } as Exercise;
+  assert.deepEqual(exerciseMediaFor(exercise, 'male'), { thumbnail: 'male.jpg', video: 'male.mp4' });
+  assert.deepEqual(exerciseMediaFor(exercise, 'female'), { thumbnail: 'female.jpg', video: 'female.mp4' });
+
+  const calendar = readFileSync(new URL('../src/calendar/CalendarView.tsx', import.meta.url), 'utf8');
+  assert.match(calendar, /exerciseMediaFor\(exercise, preferredExerciseSex\(\)\)/);
+  assert.doesNotMatch(calendar, /thumbnail\?\.female \?\?/);
 });

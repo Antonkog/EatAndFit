@@ -9,7 +9,7 @@ test('application configuration centralizes edition and recipe photo switches', 
 
   const byok = resolveAppConfiguration({}, 'byok');
   assert.equal(byok.features.byokAi, true);
-  assert.equal(byok.features.recipePhotoGeneration, true);
+  assert.equal(byok.features.recipePhotoGeneration, false);
   assert.deepEqual(byok.providers, { meta: true, gemini: false });
 
   const bothProviders = resolveAppConfiguration({ META_API_ENABLED: 'true', GEMINI_API_ENABLED: 'true' }, 'byok');
@@ -24,6 +24,9 @@ test('application configuration centralizes edition and recipe photo switches', 
 
   const disabled = resolveAppConfiguration({ RECIPE_PHOTO_GENERATION_ENABLED: 'false' }, 'byok');
   assert.equal(disabled.features.recipePhotoGeneration, false);
+
+  const explicitlyEnabled = resolveAppConfiguration({ RECIPE_PHOTO_GENERATION_ENABLED: 'true' }, 'byok');
+  assert.equal(explicitlyEnabled.features.recipePhotoGeneration, true);
 
   const noProvider = resolveAppConfiguration({ META_API_ENABLED: 'false', GEMINI_API_ENABLED: 'false' }, 'byok');
   assert.equal(noProvider.features.recipePhotoGeneration, false);

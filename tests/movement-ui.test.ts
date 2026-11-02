@@ -44,8 +44,8 @@ test('unsupported exercises can record a silent set for advisory AI review witho
 test('voice cues are primed from a user action and expose a session control', () => {
   assert.match(session, /window\.speechSynthesis\.resume\(\)/);
   assert.match(session, /Sound cues enabled/);
-  assert.match(session, /Test sound/);
   assert.match(session, /Turn off voice cues/);
-  assert.match(session, /Voice cues are unavailable/);
+  assert.doesNotMatch(session, /Test sound/);
+  assert.doesNotMatch(session, /Voice cues are unavailable/);
 });
 

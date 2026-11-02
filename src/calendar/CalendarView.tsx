@@ -36,8 +36,9 @@ import {
 import { energySourceLabel, estimateExerciseEnergy, estimateSetDurationSeconds, type EnergyEstimate } from '../energy/estimates';
 import { classifyExercise, type EnergyProfileId } from '../energy/sources';
 import { applyWorkoutCompletion } from '../energy/workout';
+import { exerciseMediaFor } from '../exercises/media';
 import type { ExerciseCatalog } from '../exercises/types';
-import { PROFILE_CHANGED, readUserProfile, type UserProfile } from '../profile/userProfile';
+import { preferredExerciseSex, PROFILE_CHANGED, readUserProfile, type UserProfile } from '../profile/userProfile';
 import { getRecognitionKeyStatus, RECOGNITION_KEYS_CHANGED } from '../settings/secureKeys';
 import { ENERGY_CALIBRATION_CHANGED, readEnergyCalibration } from '../training/calibration';
 import { finalizeWorkoutNumberDraft, parseWorkoutNumberDraft, type WorkoutNumberKind } from './workoutNumber';
@@ -466,7 +467,7 @@ function WorkoutDay({
           {workouts.map((workout) => {
             const exercise = exerciseMap.get(workout.exerciseId);
             const energyProfile: EnergyProfileId = exercise ? classifyExercise(exercise) : 'resistance_general';
-            const thumbnail = exercise?.media.thumbnail?.female ?? exercise?.media.thumbnail?.male;
+            const thumbnail = exercise ? exerciseMediaFor(exercise, preferredExerciseSex()).thumbnail : undefined;
             const liveEstimate = workout.completed ? undefined : estimateWorkout(workout);
             const calories = workout.completed ? workout.caloriesBurned : liveEstimate?.calories;
             const duration = workout.completed ? workout.energyDurationMinutes : liveEstimate?.durationMinutes;
