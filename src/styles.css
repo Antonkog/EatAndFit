@@ -779,6 +779,9 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .exercise-session-header { display: flex; align-items: center; justify-content: space-between; gap: 20px; width: min(1120px,100%); margin: 0 auto; padding-bottom: 16px; border-bottom: 1px solid var(--border); }
 .exercise-session-header small { color: var(--primary); font-size: 10px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
 .exercise-session-header h2 { margin: 3px 0 0; font-size: clamp(1.4rem,3vw,2.2rem); }
+.session-header-actions { display: flex; align-items: center; gap: 8px; }
+.session-sound-test { padding: 8px 10px; font-size: 10px; }
+.voice-cue-error { position: fixed; z-index: 1002; top: max(76px,calc(env(safe-area-inset-top) + 62px)); left: 50%; max-width: min(460px,calc(100vw - 32px)); margin: 0; padding: 9px 12px; transform: translateX(-50%); border: 1px solid rgba(255,190,92,.35); border-radius: 11px; color: #ffdca4; background: rgba(20,12,4,.92); font-size: 11px; text-align: center; }
 .exercise-consent, .timer-session { display: grid; width: min(580px,100%); margin: auto; place-items: center; padding: 38px; border: 1px solid var(--border-strong); border-radius: 26px; background: var(--surface); text-align: center; box-shadow: 0 30px 90px rgba(0,0,0,.55); }
 .exercise-consent h3, .timer-session h3 { margin: 18px 0 8px; font-size: clamp(1.8rem,4vw,3rem); }
 .exercise-consent p, .timer-session p { max-width: 470px; margin: 5px 0; color: var(--muted-text); line-height: 1.6; }
@@ -796,6 +799,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .rep-progress::before { position: absolute; inset: 8px; content: ''; border-radius: inherit; background: rgba(4,6,4,.9); }
 .rep-progress strong { position: relative; z-index: 1; color: var(--primary); font-size: 35px; line-height: 1; }
 .rep-progress span { position: relative; z-index: 1; margin-top: 3px; color: var(--muted-text); font-size: 10px; }
+.recording-progress { background: conic-gradient(var(--primary) 100%,rgba(4,6,4,.78) 0); }
 .camera-setup, .live-session-controls { align-self: center; padding: 22px; border: 1px solid var(--border); border-radius: 22px; background: var(--surface); }
 .camera-setup h3 { margin: 0 0 7px; }
 .camera-setup p, .live-session-controls p { color: var(--muted-text); font-size: 12px; line-height: 1.55; }

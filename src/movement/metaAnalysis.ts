@@ -1,5 +1,6 @@
 import { frameIndexOf, parseVideoStream, recordsOfKind, type ResponsesEvent } from '@meta-sam/parser';
-import { getRecognitionCredentialForProvider } from '../settings/secureKeys';
+import { GEMINI_API_ENABLED, GEMINI_MOVEMENT_MODEL, META_API_ENABLED } from '../config/appConfig';
+import { getRecognitionCredentialForProvider, type RecognitionProvider } from '../settings/secureKeys';
 import type { FormAssessment, MetaCoaching, MetaMovementAnalysis } from './types';
 
 export const MAX_MOVEMENT_VIDEO_BYTES = 30 * 1024 * 1024;
@@ -10,7 +11,7 @@ const nullableString = { anyOf: [{ type: 'string' }, { type: 'null' }] };
 const coachingSchema = {
   type: 'object',
   properties: {
-    status: { type: 'string', enum: ['good_form', 'correction_needed', 'insufficient_evidence'] },
+    status: { type: 'string', enum: ['good_form', 'correction_needed', 'insufficient_evidence', 'ai_observation'] },
     positiveObservation: nullableString,
     primaryCorrection: nullableString,
     nextSetGoal: nullableString,
@@ -22,7 +23,10 @@ const coachingSchema = {
   additionalProperties: false,
 };
 
-type AnalysisInput = {
+export type MovementReviewMode = 'profiled' | 'generic';
+
+export type MovementReviewInput = {
+  mode: MovementReviewMode;
   video: Blob;
   exerciseId: string;
   exerciseName: string;
@@ -33,8 +37,15 @@ type AnalysisInput = {
   priorRepCount: number;
   repWindows: Array<{ index: number; startMs: number; endMs: number; confidence: number }>;
   activeDurationMs: number;
-  assessment: FormAssessment;
+  assessment?: FormAssessment;
+  plannedRepCount: number;
 };
+
+export interface MovementReviewProvider {
+  readonly provider: RecognitionProvider;
+  readonly modelLabel: string;
+  analyze(input: MovementReviewInput): Promise<MetaMovementAnalysis>;
+}
 
 function parseJsonObject(text: string) {
   const cleaned = text.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
@@ -182,7 +193,19 @@ async function requestSam(apiKey: string, fileId: string, media: Awaited<ReturnT
   };
 }
 
-function coachingPrompt(fields: AnalysisInput) {
+function coachingPrompt(fields: MovementReviewInput) {
+  if (fields.mode === 'generic') {
+    return `You are the AI video-review layer for Eat & Fit. Review the complete exercise set and independently count visible, completed movement cycles. This exercise has no validated on-device movement profile, so do not claim joint angles, range-of-motion measurements, numerical scores, medical conclusions, or deterministic tracking evidence.
+
+Exercise ID: ${fields.exerciseId}
+Exercise: ${fields.exerciseName}
+Catalog guidance and common mistakes: ${fields.movementGuidance}
+Set: ${fields.setNumber}
+Planned repetitions: ${fields.plannedRepCount}
+Active recording duration: ${fields.activeDurationMs} ms
+
+Return status ai_observation. Provide one concise observation based on the visible video and at most one practical next-set tip. Use positiveObservation for the observation, primaryCorrection only when a clear non-medical technique adjustment is visible, and nextSetGoal for the next-set tip. evidenceMetric must be null. Count only completed cycles clearly visible in this uploaded set. If the set cannot be counted reliably, return the best conservative count and low confidence.`;
+  }
   return `You are the Meta video-review layer for Eat & Fit. Review the complete exercise set and independently count visible, completed movement cycles. The application's MediaPipe count is context, not an answer to copy. Do not change the supplied assessment status, invent measurements, create scores, make medical claims, or criticize good form.
 
 Exercise ID: ${fields.exerciseId}
@@ -199,7 +222,24 @@ ${JSON.stringify(fields.assessment)}
 Count only complete repetitions visible in the uploaded segment; do not include prior repetitions. If the set cannot be counted reliably, return the best conservative observed count with low confidence. For good_form, give one concise positive observation and no correction. For correction_needed, give exactly one actionable correction tied to a supplied evidence metric. For insufficient_evidence, do not judge technique or give a correction; explain camera placement in nextSetGoal.`;
 }
 
-function validateMuseReview(value: any, assessment: FormAssessment) {
+function validateMuseReview(value: any, fields: MovementReviewInput) {
+  if (fields.mode === 'generic') {
+    if (!value || value.status !== 'ai_observation') throw new Error('Muse returned an invalid generic exercise review.');
+    const coaching: MetaCoaching = {
+      status: 'ai_observation',
+      positiveObservation: typeof value.positiveObservation === 'string' && value.positiveObservation.trim() ? value.positiveObservation.trim() : null,
+      primaryCorrection: typeof value.primaryCorrection === 'string' && value.primaryCorrection.trim() ? value.primaryCorrection.trim() : null,
+      nextSetGoal: typeof value.nextSetGoal === 'string' && value.nextSetGoal.trim() ? value.nextSetGoal.trim() : null,
+      evidenceMetric: null,
+    };
+    if (!coaching.positiveObservation || !coaching.nextSetGoal) throw new Error('Muse did not return a complete AI observation.');
+    const observedRepCount = Number(value.observedRepCount);
+    if (!Number.isInteger(observedRepCount) || observedRepCount < 0 || observedRepCount > MAX_REP_COUNT) throw new Error('Muse returned an invalid repetition count.');
+    if (!['low', 'medium', 'high'].includes(value.countConfidence)) throw new Error('Muse returned invalid count confidence.');
+    return { coaching, observedRepCount, countConfidence: value.countConfidence as 'low' | 'medium' | 'high' };
+  }
+  const assessment = fields.assessment;
+  if (!assessment) throw new Error('The local form assessment is missing.');
   if (!value || value.status !== assessment.status) throw new Error('Muse returned coaching that contradicted the measured assessment.');
   const coaching: MetaCoaching = {
     status: value.status,
@@ -222,7 +262,7 @@ function validateMuseReview(value: any, assessment: FormAssessment) {
   return { coaching, observedRepCount, countConfidence: value.countConfidence as 'low' | 'medium' | 'high' };
 }
 
-async function requestMuse(apiKey: string, fileId: string, fields: AnalysisInput) {
+async function requestMuse(apiKey: string, fileId: string, fields: MovementReviewInput) {
   const response = await fetch(`${META_API_BASE_URL}/responses`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
@@ -243,10 +283,10 @@ async function requestMuse(apiKey: string, fileId: string, fields: AnalysisInput
       ? 'Muse could not finish reviewing this set. Try the analysis again.'
       : 'Muse did not finish reviewing this set.');
   }
-  return validateMuseReview(parseJsonObject(text), fields.assessment);
+  return validateMuseReview(parseJsonObject(text), fields);
 }
 
-export async function analyzeMovementWithMeta(fields: AnalysisInput): Promise<MetaMovementAnalysis> {
+async function analyzeMovementWithMetaTransport(fields: MovementReviewInput): Promise<MetaMovementAnalysis> {
   const credential = await getRecognitionCredentialForProvider('META');
   if (!credential) throw new Error('Add and verify a Meta API key in Settings to analyze this set.');
   if (fields.video.size > MAX_MOVEMENT_VIDEO_BYTES) throw new Error('This exercise recording is larger than 30 MiB. Record the set again before using Meta analysis.');
@@ -259,8 +299,11 @@ export async function analyzeMovementWithMeta(fields: AnalysisInput): Promise<Me
     const muse = await requestMuse(credential.apiKey, uploadedFileId, fields);
     if (fields.priorRepCount + muse.observedRepCount > MAX_REP_COUNT) throw new Error('Muse returned an invalid repetition count.');
     return {
+      provider: 'META',
       sam,
       countReview: {
+        baselineKind: fields.mode === 'generic' ? 'planned' : 'mediapipe',
+        baselineRepCount: fields.mode === 'generic' ? fields.plannedRepCount : fields.priorRepCount + fields.localRepCount,
         localRepCount: fields.priorRepCount + fields.localRepCount,
         observedRepCount: muse.observedRepCount,
         suggestedSetRepCount: fields.priorRepCount + muse.observedRepCount,
@@ -282,4 +325,31 @@ export async function analyzeMovementWithMeta(fields: AnalysisInput): Promise<Me
       }).catch(() => undefined);
     }
   }
+}
+
+class MetaMovementReviewProvider implements MovementReviewProvider {
+  readonly provider = 'META' as const;
+  readonly modelLabel = 'SAM 3.1 + Muse Spark 1.3';
+  analyze(input: MovementReviewInput) { return analyzeMovementWithMetaTransport(input); }
+}
+
+class GeminiMovementReviewProvider implements MovementReviewProvider {
+  readonly provider = 'GEMINI' as const;
+  readonly modelLabel = GEMINI_MOVEMENT_MODEL || 'Gemini movement model';
+  async analyze(_input: MovementReviewInput): Promise<MetaMovementAnalysis> {
+    throw new Error(GEMINI_MOVEMENT_MODEL
+      ? 'Gemini movement review is prepared but not implemented in this build.'
+      : 'GEMINI_MOVEMENT_MODEL is not configured in this build.');
+  }
+}
+
+export function createMovementReviewProvider(provider: RecognitionProvider): MovementReviewProvider {
+  if (provider === 'META' && META_API_ENABLED) return new MetaMovementReviewProvider();
+  if (provider === 'GEMINI' && GEMINI_API_ENABLED) return new GeminiMovementReviewProvider();
+  throw new Error('The selected AI movement provider is disabled in this build.');
+}
+
+/** Backward-compatible Meta entry point used by the existing profiled-session tests. */
+export async function analyzeMovementWithMeta(input: MovementReviewInput): Promise<MetaMovementAnalysis> {
+  return new MetaMovementReviewProvider().analyze(input);
 }

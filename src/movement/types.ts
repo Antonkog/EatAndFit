@@ -35,7 +35,7 @@ export type RepMeasurement = {
 };
 
 export type MetaCoaching = {
-  status: FormAssessment['status'];
+  status: FormAssessment['status'] | 'ai_observation';
   positiveObservation: string | null;
   primaryCorrection: string | null;
   nextSetGoal: string | null;
@@ -51,6 +51,7 @@ export type SamTrackBox = {
 };
 
 export type MetaMovementAnalysis = {
+  provider: 'META' | 'GEMINI';
   sam: {
     model: string;
     coverage: number;
@@ -60,6 +61,8 @@ export type MetaMovementAnalysis = {
     boxes: SamTrackBox[];
   };
   countReview: {
+    baselineKind: 'mediapipe' | 'planned';
+    baselineRepCount: number;
     localRepCount: number;
     observedRepCount: number;
     suggestedSetRepCount: number;
@@ -71,9 +74,12 @@ export type MetaMovementAnalysis = {
 };
 
 export type StoredMetaMovementAnalysis = {
+  provider: 'META' | 'GEMINI';
   samModel: string;
   trackingCoverage: number;
   trackingConfidence: number | null;
+  baselineKind: 'mediapipe' | 'planned';
+  baselineRepCount: number;
   localRepCount: number;
   observedRepCount: number;
   suggestedSetRepCount: number;
@@ -86,8 +92,9 @@ export type StoredMetaMovementAnalysis = {
 };
 
 export type MovementSummary = {
-  profileId: string;
-  profileVersion: number;
+  source?: 'profiled' | 'generic-ai-recording';
+  profileId?: string;
+  profileVersion?: number;
   mode: 'camera' | 'timer';
   completedReps: number;
   elapsedSeconds: number;

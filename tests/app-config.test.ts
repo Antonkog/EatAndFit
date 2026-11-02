@@ -15,6 +15,10 @@ test('application configuration centralizes edition and recipe photo switches', 
   const bothProviders = resolveAppConfiguration({ META_API_ENABLED: 'true', GEMINI_API_ENABLED: 'true' }, 'byok');
   assert.deepEqual(bothProviders.providers, { meta: true, gemini: true });
 
+  const geminiMovement = resolveAppConfiguration({ GEMINI_MOVEMENT_MODEL: 'gemini-future-video' }, 'byok');
+  assert.equal(geminiMovement.movement.geminiModel, 'gemini-future-video');
+  assert.equal(byok.movement.geminiModel, '');
+
   const geminiOnly = resolveAppConfiguration({ META_API_ENABLED: 'false', GEMINI_API_ENABLED: 'true' }, 'byok');
   assert.deepEqual(geminiOnly.providers, { meta: false, gemini: true });
 

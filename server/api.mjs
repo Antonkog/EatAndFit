@@ -76,7 +76,7 @@ return createServer(async (request, response) => {
     if (smartScannerEnabled && url.pathname === '/api/ai/ingredients/detect' && request.method === 'POST') return json(response,200,await detectIngredients(await readBody(request,INGREDIENT_REQUEST_BODY_LIMIT),ingredientProvider,ingredientProvider ? undefined : recognitionCredentials(request,supportedProviders)));
     if (smartScannerEnabled && url.pathname === '/api/ai/training/generate' && request.method === 'POST') return json(response,200,await generateTrainingPlan(await readBody(request,1_500_000),trainingProvider,trainingProvider ? undefined : recognitionCredentials(request,supportedProviders)));
     if (smartScannerEnabled && url.pathname === '/api/ai/training/calibrate' && request.method === 'POST') return json(response,200,await calibrateTrainingEnergy(await readBody(request),trainingProvider,trainingProvider ? undefined : recognitionCredentials(request,supportedProviders)));
-    if (appConfiguration.providers.meta && url.pathname === '/api/ai/movement/prepare' && request.method === 'POST') {
+    if (smartScannerEnabled && url.pathname === '/api/ai/movement/prepare' && request.method === 'POST') {
       const video = movementProvider ? await movementProvider(request) : await prepareMovementVideoRequest(request);
       response.writeHead(200, { 'content-type': 'video/mp4', 'content-length': video.length, 'cache-control': 'no-store', 'access-control-allow-origin': 'http://localhost:5173' });
       response.end(video);

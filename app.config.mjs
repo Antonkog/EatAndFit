@@ -21,6 +21,9 @@ export function resolveAppConfiguration(environment = {}, requestedEdition = env
       meta: metaApi,
       gemini: geminiApi,
     }),
+    movement: Object.freeze({
+      geminiModel: String(environment.GEMINI_MOVEMENT_MODEL ?? '').trim(),
+    }),
     features: Object.freeze({
       byokAi,
       recipePhotoGeneration: (metaApi || geminiApi) && booleanSetting(environment.RECIPE_PHOTO_GENERATION_ENABLED, true),

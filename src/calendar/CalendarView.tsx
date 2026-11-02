@@ -199,7 +199,12 @@ export function CalendarView({
             onOpenDetails={setSelectedExercise}
             editDisabled={!everyWorkout.some((workout) => !workout.completed && workout.date >= date)}
             onEditTraining={() => setEditingTraining(true)}
-            onStart={(workout, setIndex) => setActiveSession({ workout, setIndex })}
+            onStart={(workout, setIndex) => {
+              // This runs in the Start exercise user gesture, which lets mobile browsers
+              // unlock the speech queue before the session's asynchronous camera setup.
+              window.speechSynthesis?.resume();
+              setActiveSession({ workout, setIndex });
+            }}
           />
         ) : (
           <FoodDay date={date} entries={food} onRecipes={() => onRecipes(date)} onProduct={() => onProduct(date)} onOpenDetails={setSelectedFood} />
@@ -213,6 +218,7 @@ export function CalendarView({
       <ExerciseSession
         workout={activeSession.workout}
         profile={movementProfileForExercise(activeSession.workout.exerciseId)}
+        exercise={exerciseMap.get(activeSession.workout.exerciseId)}
         initialSetIndex={activeSession.setIndex}
         onSave={updateWorkout}
         onClose={() => { setActiveSession(undefined); refresh(); }}

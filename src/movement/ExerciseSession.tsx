@@ -1,21 +1,22 @@
-import { Camera, Check, ChevronRight, Minus, Plus, RotateCcw, Timer, X } from 'lucide-react';
+import { Camera, Check, ChevronRight, Minus, Plus, RotateCcw, Timer, Volume2, VolumeX, X } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { BYOK_AI_ENABLED } from '../config/appConfig';
 import type { Workout } from '../data/db';
 import { runLoggedAiOperation } from '../diagnostics/clientLog';
+import type { Exercise } from '../exercises/types';
 import { useBackNavigation } from '../navigation/backNavigation';
 import { readUserProfile } from '../profile/userProfile';
-import { getRecognitionKeyStatus } from '../settings/secureKeys';
+import { getRecognitionKeyStatus, type RecognitionProvider } from '../settings/secureKeys';
 import { MovementTracker, selectRepresentativeRep } from './engine';
 import { applyAcceptedMovementCount } from './countReconciliation';
-import { analyzeMovementWithMeta } from './metaAnalysis';
+import { createMovementReviewProvider } from './metaAnalysis';
 import { CompatibilityPoseRuntime, type PoseDetection } from './poseCompatibility';
 import { drawPose } from './poseCanvas';
 import { evaluatePoseReadiness, nextReadinessFrameCount } from './readiness';
 import { cameraSetIsComplete, cameraSetProgress, resolveCameraSetTarget } from './setTarget';
 import type { FormAssessment, MetaMovementAnalysis, MovementProfile, StoredMetaMovementAnalysis } from './types';
 
-type Stage = 'consent' | 'setup' | 'countdown' | 'active' | 'camera-paused' | 'timer-ready' | 'timer-active' | 'timer-confirm' | 'rest';
+type Stage = 'initializing' | 'consent' | 'setup' | 'countdown' | 'active' | 'camera-paused' | 'timer-ready' | 'timer-active' | 'timer-confirm' | 'rest';
 type ScheduledFrame = { kind: 'video' | 'animation'; id: number };
 type CameraFacing = 'user' | 'environment';
 
@@ -23,12 +24,6 @@ type FrameVideo = HTMLVideoElement & {
   requestVideoFrameCallback?: (callback: (now: number) => void) => number;
   cancelVideoFrameCallback?: (id: number) => void;
 };
-
-function spoken(message: string) {
-  if (!('speechSynthesis' in window)) return;
-  window.speechSynthesis.cancel();
-  window.speechSynthesis.speak(new SpeechSynthesisUtterance(message));
-}
 
 function haptic(pattern: number | number[]) {
   navigator.vibrate?.(pattern);
@@ -46,9 +41,12 @@ function storedMetaAnalysis(
   acceptedRepCount?: number,
 ): StoredMetaMovementAnalysis {
   return {
+    provider: result.provider,
     samModel: result.sam.model,
     trackingCoverage: result.sam.coverage,
     trackingConfidence: result.sam.confidence,
+    baselineKind: result.countReview.baselineKind,
+    baselineRepCount: result.countReview.baselineRepCount,
     localRepCount: result.countReview.localRepCount,
     observedRepCount: result.countReview.observedRepCount,
     suggestedSetRepCount: result.countReview.suggestedSetRepCount,
@@ -84,30 +82,37 @@ async function requestExerciseCamera(facing: CameraFacing) {
 export function ExerciseSession({
   workout: initialWorkout,
   profile,
+  exercise,
   initialSetIndex,
   onSave,
   onClose,
 }: {
   workout: Workout;
   profile?: MovementProfile;
+  exercise?: Exercise;
   initialSetIndex: number;
   onSave: (workout: Workout) => void;
   onClose: () => void;
 }) {
   const [workout, setWorkout] = useState(initialWorkout);
   const [setIndex, setSetIndex] = useState(initialSetIndex);
-  const [stage, setStage] = useState<Stage>('consent');
+  const [stage, setStage] = useState<Stage>('initializing');
   const [message, setMessage] = useState('');
   const [countdown, setCountdown] = useState(3);
   const [repCount, setRepCount] = useState(initialWorkout.sets[initialSetIndex]?.completedReps ?? 0);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [restSeconds, setRestSeconds] = useState(60);
   const [recording, setRecording] = useState<Blob>();
-  const [analysis, setAnalysis] = useState<Awaited<ReturnType<typeof analyzeMovementWithMeta>>>();
+  const [analysis, setAnalysis] = useState<MetaMovementAnalysis>();
   const [analysisError, setAnalysisError] = useState('');
   const [analyzing, setAnalyzing] = useState(false);
   const [countDecision, setCountDecision] = useState<StoredMetaMovementAnalysis['countDecision']>('pending');
-  const [metaEligible, setMetaEligible] = useState(false);
+  const [aiProvider, setAiProvider] = useState<RecognitionProvider>();
+  const [providerCheckDone, setProviderCheckDone] = useState(false);
+  const [genericRecording, setGenericRecording] = useState(false);
+  const [previewReady, setPreviewReady] = useState(false);
+  const [voiceCuesEnabled, setVoiceCuesEnabled] = useState(true);
+  const [voiceCueError, setVoiceCueError] = useState('');
   const [poseStatus, setPoseStatus] = useState('Waiting for a stable full-body view…');
   const [cameraError, setCameraError] = useState('');
   const [trackingStable, setTrackingStable] = useState(false);
@@ -147,6 +152,7 @@ export function ExerciseSession({
   const stageRef = useRef(stage);
   const pausedByVisibilityRef = useRef(false);
   const startingSetRef = useRef(false);
+  const voiceCuesRef = useRef(true);
   const currentSet = workout.sets[setIndex];
   const setTarget = useMemo(
     () => resolveCameraSetTarget(currentSet),
@@ -156,9 +162,32 @@ export function ExerciseSession({
 
   useEffect(() => {
     const user = readUserProfile();
-    if (!BYOK_AI_ENABLED || Number(user.age) < 19) return;
-    void getRecognitionKeyStatus().then((status) => setMetaEligible(status.metaConfigured));
+    if (!BYOK_AI_ENABLED || Number(user.age) < 19) {
+      setProviderCheckDone(true);
+      return;
+    }
+    void getRecognitionKeyStatus().then((status) => {
+      const configured = status.activeProvider === 'META' ? status.metaConfigured : status.geminiConfigured;
+      if (configured) setAiProvider(status.activeProvider);
+    }).catch(() => undefined).finally(() => setProviderCheckDone(true));
   }, []);
+
+  useEffect(() => { voiceCuesRef.current = voiceCuesEnabled; }, [voiceCuesEnabled]);
+
+  const speak = useCallback((message: string) => {
+    if (!voiceCuesRef.current || !('speechSynthesis' in window)) return;
+    const utterance = new SpeechSynthesisUtterance(message);
+    utterance.onerror = () => setVoiceCueError('Voice cues are unavailable. Check your device volume or silent mode.');
+    window.speechSynthesis.cancel();
+    window.speechSynthesis.speak(utterance);
+  }, []);
+
+  const primeVoiceCues = useCallback((announcement = 'Sound cues enabled.') => {
+    if (!voiceCuesRef.current || !('speechSynthesis' in window)) return;
+    setVoiceCueError('');
+    window.speechSynthesis.resume();
+    speak(announcement);
+  }, [speak]);
 
   useEffect(() => { workoutRef.current = workout; }, [workout]);
   useEffect(() => { onSaveRef.current = onSave; }, [onSave]);
@@ -274,21 +303,21 @@ export function ExerciseSession({
   useEffect(() => {
     if (stage !== 'countdown') return;
     setCountdown(3);
-    spoken('Three');
+    speak('Three');
     const interval = window.setInterval(() => setCountdown((value) => {
       if (value <= 1) {
         window.clearInterval(interval);
         startedAtRef.current = performance.now();
         startMovementRecording();
-        spoken('Go');
+        speak('Go');
         setStage('active');
         return 0;
       }
-      spoken(String(value - 1));
+      speak(String(value - 1));
       return value - 1;
     }), 1000);
     return () => window.clearInterval(interval);
-  }, [stage, startMovementRecording]);
+  }, [speak, stage, startMovementRecording]);
 
   useEffect(() => {
     if (stage !== 'active' && stage !== 'timer-active') return;
@@ -300,8 +329,8 @@ export function ExerciseSession({
     if (stage !== 'timer-active' || elapsedSeconds < targetSeconds) return;
     setStage('timer-confirm');
     haptic([100, 80, 100]);
-    spoken(`Set ${setIndex + 1} timer complete.`);
-  }, [elapsedSeconds, setIndex, stage, targetSeconds]);
+    speak(`Set ${setIndex + 1} timer complete.`);
+  }, [elapsedSeconds, setIndex, speak, stage, targetSeconds]);
 
   useEffect(() => {
     if (stage !== 'rest') return;
@@ -310,15 +339,24 @@ export function ExerciseSession({
   }, [stage]);
 
   const saveCompletedSet = useCallback((mode: 'camera' | 'timer', reps = targetReps) => {
-    const summary = mode === 'camera' && profile && trackerRef.current ? {
-      profileId: profile.id,
-      profileVersion: profile.version,
-      mode,
-      completedReps: reps,
-      elapsedSeconds: baseDurationSecondsRef.current + elapsedSeconds,
-      reps: trackerRef.current.reps,
-      selectedRep: selectRepresentativeRep(trackerRef.current.reps)?.index,
-    } as const : undefined;
+    const summary = mode === 'camera'
+      ? profile && trackerRef.current ? {
+        source: 'profiled' as const,
+        profileId: profile.id,
+        profileVersion: profile.version,
+        mode,
+        completedReps: reps,
+        elapsedSeconds: baseDurationSecondsRef.current + elapsedSeconds,
+        reps: trackerRef.current.reps,
+        selectedRep: selectRepresentativeRep(trackerRef.current.reps)?.index,
+      } : genericRecording ? {
+        source: 'generic-ai-recording' as const,
+        mode,
+        completedReps: reps,
+        elapsedSeconds: baseDurationSecondsRef.current + elapsedSeconds,
+        reps: [],
+      } : undefined
+      : undefined;
     const current = workoutRef.current;
     const next = {
       ...current,
@@ -334,18 +372,46 @@ export function ExerciseSession({
     workoutRef.current = next;
     setWorkout(next);
     onSaveRef.current(next);
-    setRestSeconds(60);
+    const hasAnotherIncompleteSet = current.sets.some((set, index) => index !== setIndex && !set.complete);
+    setRestSeconds(hasAnotherIncompleteSet ? 60 : 0);
     setStage('rest');
-  }, [elapsedSeconds, profile, setIndex, targetReps]);
+  }, [elapsedSeconds, genericRecording, profile, setIndex, targetReps]);
 
   useEffect(() => {
-    if (stage !== 'active' || !cameraSetIsComplete(setTarget, repCount, elapsedSeconds)) return;
+    if (!profile || stage !== 'active' || !cameraSetIsComplete(setTarget, repCount, elapsedSeconds)) return;
     stopRecording();
     stopCamera();
     haptic([120, 80, 180]);
-    spoken(`Set ${setIndex + 1} complete.`);
+    speak(`Set ${setIndex + 1} complete.`);
     saveCompletedSet('camera', repCount);
-  }, [elapsedSeconds, repCount, saveCompletedSet, setIndex, setTarget, stage, stopCamera, stopRecording]);
+  }, [elapsedSeconds, profile, repCount, saveCompletedSet, setIndex, setTarget, speak, stage, stopCamera, stopRecording]);
+
+  const stopRecordingAndRead = useCallback(async () => {
+    const recorder = recorderRef.current;
+    if (!recorder || recorder.state !== 'recording') return recording;
+    return new Promise<Blob | undefined>((resolve) => {
+      recorder.addEventListener('stop', () => {
+        const blob = new Blob(chunksRef.current, { type: recorder.mimeType || 'video/webm' });
+        setRecording(blob);
+        resolve(blob);
+      }, { once: true });
+      recorder.stop();
+    });
+  }, [recording]);
+
+  const finishGenericRecording = useCallback(async () => {
+    if (!genericRecording || stageRef.current !== 'active') return;
+    await stopRecordingAndRead();
+    stopCamera();
+    haptic([120, 80, 180]);
+    speak(`Set ${setIndex + 1} recording complete.`);
+    saveCompletedSet('camera', targetReps);
+  }, [genericRecording, saveCompletedSet, setIndex, speak, stopCamera, stopRecordingAndRead, targetReps]);
+
+  useEffect(() => {
+    if (!genericRecording || stage !== 'active' || elapsedSeconds < 90) return;
+    void finishGenericRecording();
+  }, [elapsedSeconds, finishGenericRecording, genericRecording, stage]);
 
   const syncMediaGeometry = useCallback(() => {
     const video = videoRef.current;
@@ -407,7 +473,7 @@ export function ExerciseSession({
       setRepCount(count);
       persistCameraProgress(count, baseDurationSecondsRef.current + Math.round(exerciseTimestampMs / 1000));
       haptic(70);
-      spoken(`Rep ${count} complete.`);
+      speak(`Rep ${count} complete.`);
     }
   }, [persistCameraProgress, profile?.id]);
 
@@ -539,13 +605,15 @@ export function ExerciseSession({
     worker.postMessage({ type: 'init' });
   }, [handlePoseDetection, scheduleNextFrame, startCompatibilityTracking, stopTrackingBackend]);
 
-  const startCamera = useCallback(async (requestedFacing: CameraFacing = cameraFacing) => {
-    if (!profile) { setStage('timer-ready'); return; }
+  const startCamera = useCallback(async (requestedFacing: CameraFacing = cameraFacing, recordForAi = false) => {
+    if (!profile && !recordForAi) { setStage('timer-ready'); return; }
     stopCamera();
+    setGenericRecording(!profile && recordForAi);
+    setPreviewReady(false);
     setCameraError('');
     setMessage('');
     setTrackingStable(false);
-    setPoseStatus('Loading pose tracking…');
+    setPoseStatus(profile ? 'Loading pose tracking…' : 'Preparing camera recording…');
     stablePoseFramesRef.current = 0;
     startingSetRef.current = false;
     try {
@@ -558,7 +626,7 @@ export function ExerciseSession({
       }, { once: true }));
       setStage('setup');
       setCameraStreamVersion((version) => version + 1);
-      startWorkerTracking();
+      if (profile) startWorkerTracking();
       void refreshCameraAvailability();
     } catch (error) {
       const denied = error instanceof DOMException && error.name === 'NotAllowedError';
@@ -570,7 +638,7 @@ export function ExerciseSession({
 
   const switchCamera = () => {
     const nextFacing: CameraFacing = cameraFacing === 'user' ? 'environment' : 'user';
-    void startCamera(nextFacing);
+    void startCamera(nextFacing, genericRecording);
   };
 
   useEffect(() => { stageRef.current = stage; }, [stage]);
@@ -587,7 +655,7 @@ export function ExerciseSession({
     setAnalysis(undefined);
     setAnalysisError('');
     setCountDecision('pending');
-    scheduleNextFrame();
+    if (profile) scheduleNextFrame();
     setStage('countdown');
     try {
       wakeLockRef.current = await (navigator as Navigator & { wakeLock?: { request: (type: 'screen') => Promise<{ release: () => Promise<void> }> } }).wakeLock?.request('screen');
@@ -611,7 +679,8 @@ export function ExerciseSession({
         if (video.paused) await video.play();
         if (disposed) return;
         sync();
-        scheduleNextFrame();
+        setPreviewReady(true);
+        if (profile) scheduleNextFrame();
       } catch {
         const streamIsLive = stream.getVideoTracks().some((track) => track.readyState === 'live');
         if (disposed || video.srcObject !== stream || !streamIsLive) return;
@@ -625,12 +694,12 @@ export function ExerciseSession({
       video.removeEventListener('resize', sync);
       window.removeEventListener('orientationchange', sync);
     };
-  }, [cameraPreviewVisible, cameraStreamVersion, scheduleNextFrame, showCameraRecovery, syncMediaGeometry]);
+  }, [cameraPreviewVisible, cameraStreamVersion, profile, scheduleNextFrame, showCameraRecovery, syncMediaGeometry]);
 
   useEffect(() => {
-    if (stage !== 'setup' || !trackingStable) return;
-    void startCameraSet();
-  }, [stage, trackingStable]);
+    if (stage !== 'setup') return;
+    if (profile ? trackingStable : genericRecording && previewReady) void startCameraSet();
+  }, [genericRecording, previewReady, profile, stage, trackingStable]);
 
   useEffect(() => {
     const visibilityChanged = () => {
@@ -665,24 +734,36 @@ export function ExerciseSession({
       if (streamIsLive) {
         setStage('setup');
         setCameraStreamVersion((version) => version + 1);
-        if (!trackingReadyRef.current) startWorkerTracking();
+        if (profile && !trackingReadyRef.current) startWorkerTracking();
       } else {
-        void startCamera();
+        void startCamera(cameraFacing, genericRecording);
       }
     };
     document.addEventListener('visibilitychange', visibilityChanged);
     return () => document.removeEventListener('visibilitychange', visibilityChanged);
-  }, [cancelFrameLoop, persistCameraProgress, startCamera, startWorkerTracking, stopRecording]);
+  }, [cameraFacing, cancelFrameLoop, genericRecording, persistCameraProgress, profile, startCamera, startWorkerTracking, stopRecording]);
 
-  const startTimer = () => {
+  const startTimer = (fromGesture = false) => {
+    if (fromGesture) primeVoiceCues();
     setElapsedSeconds(0);
     startedAtRef.current = performance.now();
     setStage('timer-active');
   };
 
+  useEffect(() => {
+    if (!providerCheckDone || stage !== 'initializing') return;
+    if (aiProvider) {
+      setStage('consent');
+      return;
+    }
+    if (profile) void startCamera('user');
+    else startTimer();
+  }, [aiProvider, profile, providerCheckDone, stage, startCamera]);
+
   const continueWithTimer = () => {
     stopRecording();
     stopCamera();
+    setGenericRecording(false);
     setStage('timer-ready');
   };
 
@@ -708,7 +789,8 @@ export function ExerciseSession({
     setAnalysis(undefined);
     setAnalysisError('');
     setCountDecision('pending');
-    setStage(profile ? 'consent' : 'timer-ready');
+    setGenericRecording(false);
+    setStage('initializing');
   };
 
   const selectedRep = useMemo(() => trackerRef.current ? selectRepresentativeRep(trackerRef.current.reps) : undefined, [repCount, stage]);
@@ -723,21 +805,26 @@ export function ExerciseSession({
     return improved ? `Improvement verified: ${profile.countMetricLabel.toLowerCase()} changed from ${before} to ${after}.` : '';
   }, [profile, selectedRep]);
   const runMetaAnalysis = async () => {
-    if (!recording) return;
-    if (!window.confirm('Send this muted set recording temporarily to Eat & Fit for video preparation, then directly from this browser to Meta? SAM 3.1 will track the athlete and Muse Spark 1.3 will review the repetition count and coaching evidence. All temporary files are deleted after processing.')) return;
+    if (!recording || !aiProvider) return;
+    const providerName = aiProvider === 'META' ? 'Meta' : 'Gemini';
+    if (!window.confirm(`Send this muted set recording temporarily to Eat & Fit for video preparation, then directly from this browser to ${providerName}? The provider will track the athlete, review the repetition count, and return one coaching observation. All temporary files are deleted after processing.`)) return;
     setAnalyzing(true);
     setAnalysisError('');
     const analyzedSetIndex = setIndex;
     const analyzedSetId = workout.sets[setIndex]?.id;
     try {
-      const localReps = trackerRef.current?.reps ?? [];
+      const localReps = profile ? trackerRef.current?.reps ?? [] : [];
       const localSegmentRepCount = Math.max(0, repCount - recordingBaseRepCountRef.current);
       const fallbackAssessment: FormAssessment = { status: 'insufficient_evidence', reason: 'tracking_lost', evidence: [] };
-      const metaResult = await runLoggedAiOperation('Meta exercise movement review', () => analyzeMovementWithMeta({
+      const provider = createMovementReviewProvider(aiProvider);
+      const metaResult = await runLoggedAiOperation(`${providerName} exercise movement review`, () => provider.analyze({
+        mode: profile ? 'profiled' : 'generic',
         video: recording,
         exerciseId: workout.exerciseId,
-        exerciseName: profile?.displayName ?? workout.exerciseName,
-        movementGuidance: profile ? `${profile.countMetricLabel}; good-form target ${profile.goodFormTarget}. ${profile.setupInstruction}` : workout.exerciseName,
+        exerciseName: exercise?.name ?? profile?.displayName ?? workout.exerciseName,
+        movementGuidance: profile
+          ? `${profile.countMetricLabel}; good-form target ${profile.goodFormTarget}. ${profile.setupInstruction}`
+          : [exercise?.instructions, exercise?.commonMistakes].filter(Boolean).join(' ') || 'Review only the visible movement and avoid unsupported claims.',
         setNumber: setIndex + 1,
         selectedRep: selectedRep ? { ...selectedRep, startMs: selectedRep.startMs + recordingOffsetMsRef.current, endMs: selectedRep.endMs + recordingOffsetMsRef.current } : undefined,
         localRepCount: localSegmentRepCount,
@@ -751,17 +838,19 @@ export function ExerciseSession({
             confidence: rep.confidence,
           })),
         activeDurationMs: Math.max(0, Math.round(elapsedSeconds * 1000)),
-        assessment: selectedRep?.assessment ?? fallbackAssessment,
-      }), { provider: 'META', model: 'SAM 3.1 + Muse Spark 1.3', outputCount: 1 });
+        assessment: profile ? selectedRep?.assessment ?? fallbackAssessment : undefined,
+        plannedRepCount: workout.sets[setIndex]?.reps ?? targetReps,
+      }), { provider: aiProvider, model: provider.modelLabel, outputCount: 1 });
       if (metaResult.state === 'failure') throw new Error(metaResult.error.message);
       if (metaResult.state !== 'success') return;
       const result = metaResult.data;
       if (!mountedRef.current) return;
       if (mountedRef.current && setIndexRef.current === analyzedSetIndex) setAnalysis(result);
-      const countsMatch = result.countReview.localRepCount === result.countReview.suggestedSetRepCount;
+      const baselineCount = result.countReview.baselineRepCount;
+      const countsMatch = baselineCount === result.countReview.suggestedSetRepCount;
       const initialDecision = countsMatch ? 'matched' : 'pending';
       setCountDecision(initialDecision);
-      const storedAnalysis = storedMetaAnalysis(result, initialDecision, countsMatch ? result.countReview.localRepCount : undefined);
+      const storedAnalysis = storedMetaAnalysis(result, initialDecision, countsMatch ? baselineCount : undefined);
       const current = workoutRef.current;
       const next = {
         ...current,
@@ -782,7 +871,7 @@ export function ExerciseSession({
   const chooseMetaCount = (choice: 'local' | 'muse') => {
     if (!analysis) return;
     const acceptedRepCount = choice === 'local'
-      ? analysis.countReview.localRepCount
+      ? analysis.countReview.baselineRepCount
       : analysis.countReview.suggestedSetRepCount;
     const current = workoutRef.current;
     const currentSetId = current.sets[setIndex]?.id;
@@ -805,17 +894,32 @@ export function ExerciseSession({
     <div className={`exercise-session${cameraSessionOpen ? ' camera-session-open' : ''}`} role="dialog" aria-modal="true" aria-labelledby="exercise-session-title">
       <header className="exercise-session-header">
         <div><small>Set {setIndex + 1} of {workout.sets.length}</small><h2 id="exercise-session-title">{workout.exerciseName}</h2></div>
-        <button className="icon-button" aria-label="Close exercise session" onClick={() => { releaseSession(); onClose(); }}><X /></button>
+        <div className="session-header-actions">
+          {voiceCuesEnabled && <button className="text-button session-sound-test" onClick={() => primeVoiceCues('This is a sound test.')}>Test sound</button>}
+          <button className="icon-button" aria-label={voiceCuesEnabled ? 'Turn off voice cues' : 'Turn on voice cues'} aria-pressed={voiceCuesEnabled} onClick={() => {
+            const enabled = !voiceCuesEnabled;
+            setVoiceCuesEnabled(enabled);
+            if (enabled) primeVoiceCues();
+            else window.speechSynthesis?.cancel();
+          }}>{voiceCuesEnabled ? <Volume2 /> : <VolumeX />}</button>
+          <button className="icon-button" aria-label="Close exercise session" onClick={() => { releaseSession(); onClose(); }}><X /></button>
+        </div>
       </header>
+
+      {voiceCueError && <p className="voice-cue-error" role="status">{voiceCueError}</p>}
+
+      {stage === 'initializing' && <section className="timer-session"><span className="session-icon"><Timer /></span><h3>Preparing exercise</h3><p>Checking the available exercise mode…</p></section>}
 
       {stage === 'consent' && (
         <section className="exercise-consent">
           <span className="session-icon"><Camera /></span>
-          <h3>{profile ? 'Enable camera?' : 'Start with a set timer'}</h3>
-          {profile ? <><p>Eat &amp; Fit uses your camera to count repetitions and evaluate movement. Live analysis runs on this device.</p><p>Video is not uploaded unless you later choose to analyze the set with Meta AI.</p></> : <p>This exercise does not have a validated camera profile yet. You can complete it with a set timer.</p>}
+          <h3>{profile ? 'Enable camera?' : 'Record set with AI'}</h3>
+          {profile
+            ? <><p>Eat &amp; Fit uses your camera to count repetitions and evaluate movement. Live analysis runs on this device.</p><p>Video is not uploaded unless you later choose to analyze the set with AI.</p></>
+            : <p>Eat &amp; Fit will record this set without sound. After recording, AI can track the athlete, count repetitions, and provide an AI coaching observation.</p>}
           <div className="session-actions">
-            {profile && <button className="primary-button" onClick={() => void startCamera('user')}><Camera size={18} /> Enable camera</button>}
-            <button className="text-button" onClick={continueWithTimer}><Timer size={18} /> Use timer instead</button>
+            <button className="primary-button" onClick={() => { primeVoiceCues(); void startCamera('user', !profile); }}><Camera size={18} /> {profile ? 'Enable camera' : 'Record with camera'}</button>
+            <button className="text-button" onClick={() => { primeVoiceCues(); continueWithTimer(); }}><Timer size={18} /> Use timer instead</button>
           </div>
         </section>
       )}
@@ -824,12 +928,16 @@ export function ExerciseSession({
         <section className="camera-session">
           <div className={`camera-stage camera-facing-${cameraFacing}`}>
             <video ref={videoRef} muted playsInline />
-            <canvas ref={canvasRef} width="1280" height="720" />
+            {profile && <canvas ref={canvasRef} width="1280" height="720" />}
             {stage === 'countdown' && <strong className="session-countdown">{countdown || 'Go'}</strong>}
-            {stage === 'active' && <div className="rep-progress" style={{ '--rep-progress': `${cameraSetProgress(setTarget, repCount, elapsedSeconds)}%` } as CSSProperties}><strong>{repCount}</strong><span>{targetReps > 0 ? `of ${targetReps} reps` : `${Math.min(elapsedSeconds, targetSeconds)} of ${targetSeconds}s`}</span></div>}
+            {stage === 'active' && (genericRecording
+              ? <div className="rep-progress recording-progress"><strong>{elapsedSeconds}s</strong><span>of 1:30 maximum</span></div>
+              : <div className="rep-progress" style={{ '--rep-progress': `${cameraSetProgress(setTarget, repCount, elapsedSeconds)}%` } as CSSProperties}><strong>{repCount}</strong><span>{targetReps > 0 ? `of ${targetReps} reps` : `${Math.min(elapsedSeconds, targetSeconds)} of ${targetSeconds}s`}</span></div>)}
           </div>
-          {stage === 'setup' && <div className="camera-setup"><h3>{profile?.cameraView === 'side' ? 'Use a side view' : 'Use a front view'}</h3><p>{profile?.setupInstruction}</p>{canSwitchCamera && <button className="text-button camera-switch" type="button" onClick={switchCamera}><Camera size={17} /> Use {cameraFacing === 'user' ? 'rear' : 'selfie'} camera</button>}<p className="tracking-status" role="status">{trackingStable ? 'Tracking ready. Starting automatically…' : poseStatus}</p>{cameraError && <p className="session-error" role="alert">{cameraError}</p>}</div>}
-          {stage === 'active' && <div className="live-session-controls"><p>{poseStatus}</p><strong>{elapsedSeconds}s</strong><div><button className="text-button" disabled={repCount === 0} onClick={() => adjustRep(-1)}><Minus size={17} /> Undo last rep</button><button className="text-button" onClick={() => adjustRep(1)}><Plus size={17} /> Add rep</button></div></div>}
+          {stage === 'setup' && <div className="camera-setup"><h3>{profile ? profile.cameraView === 'side' ? 'Use a side view' : 'Use a front view' : 'Get ready to record'}</h3><p>{profile ? profile.setupInstruction : 'The muted recording starts automatically after the countdown. Keep only the athlete in frame.'}</p>{canSwitchCamera && <button className="text-button camera-switch" type="button" onClick={switchCamera}><Camera size={17} /> Use {cameraFacing === 'user' ? 'rear' : 'selfie'} camera</button>}<p className="tracking-status" role="status">{profile ? trackingStable ? 'Tracking ready. Starting automatically…' : poseStatus : previewReady ? 'Camera ready. Starting automatically…' : 'Preparing camera preview…'}</p>{cameraError && <p className="session-error" role="alert">{cameraError}</p>}</div>}
+          {stage === 'active' && (genericRecording
+            ? <div className="live-session-controls"><p>Recording set for AI</p><strong>{elapsedSeconds}s / 1:30</strong><button className="text-button" onClick={() => void finishGenericRecording()}>Stop recording</button></div>
+            : <div className="live-session-controls"><p>{poseStatus}</p><strong>{elapsedSeconds}s</strong><div><button className="text-button" disabled={repCount === 0} onClick={() => adjustRep(-1)}><Minus size={17} /> Undo last rep</button><button className="text-button" onClick={() => adjustRep(1)}><Plus size={17} /> Add rep</button></div></div>)}
         </section>
       )}
 
@@ -839,8 +947,8 @@ export function ExerciseSession({
           <h3>Camera paused</h3>
           <p className="session-message" role="alert">{cameraError || message || 'Camera tracking paused. Enable the camera again or continue with the set timer.'}</p>
           <div className="session-actions">
-            <button className="primary-button" onClick={() => void startCamera()}><Camera size={18} /> Enable camera</button>
-            <button className="text-button" onClick={continueWithTimer}><Timer size={18} /> Start timer</button>
+            <button className="primary-button" onClick={() => { primeVoiceCues(); void startCamera('user', genericRecording); }}><Camera size={18} /> Enable camera</button>
+            <button className="text-button" onClick={() => { primeVoiceCues(); continueWithTimer(); }}><Timer size={18} /> Start timer</button>
           </div>
         </section>
       )}
@@ -851,20 +959,20 @@ export function ExerciseSession({
           <h3>{stage === 'timer-confirm' ? `Did you complete set ${setIndex + 1}?` : `Set ${setIndex + 1} timer`}</h3>
           <strong className="timer-value">{stage === 'timer-active' ? Math.max(0, targetSeconds - elapsedSeconds) : targetSeconds}s</strong>
           {message && <p className="session-message">{message}</p>}
-          {stage === 'timer-ready' && <button className="primary-button" onClick={startTimer}>Start timer</button>}
-          {stage === 'timer-confirm' && <div className="session-actions"><button className="primary-button" onClick={() => saveCompletedSet('timer')}><Check size={18} /> Yes, mark complete</button><button className="text-button" onClick={startTimer}><RotateCcw size={17} /> Retry timer</button><button className="text-button" onClick={onClose}>Exit</button></div>}
+          {stage === 'timer-ready' && <button className="primary-button" onClick={() => startTimer(true)}>Start timer</button>}
+          {stage === 'timer-confirm' && <div className="session-actions"><button className="primary-button" onClick={() => saveCompletedSet('timer')}><Check size={18} /> Yes, mark complete</button><button className="text-button" onClick={() => startTimer(true)}><RotateCcw size={17} /> Retry timer</button><button className="text-button" onClick={onClose}>Exit</button></div>}
         </section>
       )}
 
       {stage === 'rest' && (
         <section className="set-result">
-          <div className="set-complete-heading"><span><Check /></span><div><small>Set {setIndex + 1} complete</small><h3>{restSeconds ? `Rest ${restSeconds}s` : 'Ready for your next set'}</h3></div></div>
+          <div className="set-complete-heading"><span><Check /></span><div><small>Set {setIndex + 1} complete</small><h3>{restSeconds ? `Rest ${restSeconds}s` : nextSetIndex >= 0 ? 'Ready for your next set' : 'Set complete'}</h3></div></div>
           {selectedRep && <LocalAssessment rep={selectedRep} />}
           {improvement && <p className="improvement-verified"><Check size={16} /> {improvement}</p>}
-          {recording && metaEligible && !analysis && <button className="text-button analyze-rep" disabled={analyzing} onClick={() => void runMetaAnalysis()}>{analyzing ? 'Analyzing set with Meta AI…' : 'Analyze with Meta AI'}</button>}
+          {recording && aiProvider && !analysis && <button className="text-button analyze-rep" disabled={analyzing} onClick={() => void runMetaAnalysis()}>{analyzing ? 'Analyzing set with AI…' : 'Analyze with AI'}</button>}
           {analysisError && <p className="session-error" role="alert">{analysisError}</p>}
           {analysis && <MetaResult analysis={analysis} recording={recording} countDecision={countDecision} onCountChoice={chooseMetaCount} />}
-          {analysis && <div className="session-attributions"><span>Tracked with SAM 3.1</span><span>Reviewed by Muse Spark 1.3</span></div>}
+          {analysis && aiProvider === 'META' && <div className="session-attributions"><span>Tracked with SAM 3.1</span><span>Reviewed by Muse Spark 1.3</span></div>}
           <button className="primary-button next-set-button" onClick={beginNextSet}>{nextSetIndex >= 0 ? 'Start next set' : 'Finish exercise'} <ChevronRight size={18} /></button>
         </section>
       )}
@@ -887,26 +995,27 @@ function MetaResult({
   countDecision,
   onCountChoice,
 }: {
-  analysis: Awaited<ReturnType<typeof analyzeMovementWithMeta>>;
+  analysis: MetaMovementAnalysis;
   recording?: Blob;
   countDecision: StoredMetaMovementAnalysis['countDecision'];
   onCountChoice: (choice: 'local' | 'muse') => void;
 }) {
   const coaching = analysis.coaching;
   const review = analysis.countReview;
-  const countsDiffer = review.localRepCount !== review.suggestedSetRepCount;
+  const baselineLabel = review.baselineKind === 'planned' ? 'This set was planned for' : 'MediaPipe counted';
+  const countsDiffer = review.baselineRepCount !== review.suggestedSetRepCount;
   return <article className={`meta-coaching ${coaching.status}`}>
-    <small>Meta full-set review</small>
+    <small>AI full-set review</small>
     <section className="meta-count-review">
       {countsDiffer
-        ? <p>MediaPipe counted <strong>{review.localRepCount}</strong> repetitions. Muse observed <strong>{review.suggestedSetRepCount}</strong>.</p>
-        : <p>MediaPipe and Muse both counted <strong>{review.localRepCount}</strong> repetitions.</p>}
-      <small>Muse count confidence: {review.confidence}</small>
-      {countsDiffer && countDecision === 'pending' && <div className="session-actions"><button className="text-button" onClick={() => onCountChoice('local')}>Keep {review.localRepCount}</button><button className="primary-button" onClick={() => onCountChoice('muse')}>Use {review.suggestedSetRepCount}</button></div>}
-      {countsDiffer && countDecision === 'local' && <p>Saved the MediaPipe count: {review.localRepCount}.</p>}
-      {countsDiffer && countDecision === 'muse' && <p>Saved the Muse-reviewed count: {review.suggestedSetRepCount}.</p>}
+        ? <p>{baselineLabel} <strong>{review.baselineRepCount}</strong> repetitions. AI observed <strong>{review.suggestedSetRepCount}</strong>.</p>
+        : <p>{baselineLabel} <strong>{review.baselineRepCount}</strong> repetitions. AI observed the same count.</p>}
+      <small>AI count confidence: {review.confidence}</small>
+      {countsDiffer && countDecision === 'pending' && <div className="session-actions"><button className="text-button" onClick={() => onCountChoice('local')}>Keep {review.baselineRepCount} reps</button><button className="primary-button" onClick={() => onCountChoice('muse')}>Use {review.suggestedSetRepCount} reps</button></div>}
+      {countsDiffer && countDecision === 'local' && <p>Saved {review.baselineRepCount} repetitions.</p>}
+      {countsDiffer && countDecision === 'muse' && <p>Saved the AI-observed count: {review.suggestedSetRepCount}.</p>}
     </section>
-    <h3>{coaching.status === 'good_form' ? 'Good rep' : coaching.status === 'correction_needed' ? 'One adjustment for your next set' : 'We could not assess this rep reliably'}</h3>
+    <h3>{coaching.status === 'good_form' ? 'Good rep' : coaching.status === 'correction_needed' ? 'One adjustment for your next set' : coaching.status === 'ai_observation' ? 'AI observation' : 'We could not assess this rep reliably'}</h3>
     {recording && analysis.sam.boxes.length > 0 && <SamReplay video={recording} analysis={analysis} />}
     {coaching.positiveObservation && <p>{coaching.positiveObservation}</p>}
     {coaching.primaryCorrection && <p><strong>{coaching.primaryCorrection}</strong></p>}
@@ -914,7 +1023,7 @@ function MetaResult({
   </article>;
 }
 
-function SamReplay({ video, analysis }: { video: Blob; analysis: Awaited<ReturnType<typeof analyzeMovementWithMeta>> }) {
+function SamReplay({ video, analysis }: { video: Blob; analysis: MetaMovementAnalysis }) {
   const url = useMemo(() => URL.createObjectURL(video), [video]);
   const [time, setTime] = useState(0);
   useEffect(() => () => URL.revokeObjectURL(url), [url]);

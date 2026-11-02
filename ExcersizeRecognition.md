@@ -4,7 +4,7 @@
 
 This document is the source of truth for camera-guided exercise sessions in Eat & Fit. It defines which models perform each task, the user experience, privacy boundaries, data contracts, supported exercises, rollout sequence, and acceptance criteria.
 
-Implementation status as of November 2, 2026: the local MediaPipe session, eight movement profiles, timer fallback, full-set recording, direct-browser SAM/Muse review, and explicit count reconciliation are implemented on `main`. Provider availability must still be validated with the user's current Meta key, and device-level accuracy remains an ongoing acceptance activity.
+Implementation status as of November 2, 2026: the local MediaPipe session, eight movement profiles, timer fallback, provider-neutral full-set recording, direct-browser SAM/Muse review, generic AI recording for catalog exercises without a validated profile, and explicit count reconciliation are implemented on `main`. Meta is the enabled movement-review provider; the Gemini adapter is intentionally disabled pending a configured movement model and implementation.
 
 The first release uses a hybrid architecture:
 
@@ -12,7 +12,7 @@ The first release uses a hybrid architecture:
 - Meta SAM 3.1 optionally supplies post-set person segmentation and tracking evidence.
 - Meta Muse Spark 1.3 optionally converts measured movement evidence into concise coaching.
 - Meta Muse may propose a second full-set repetition count, but it never changes completed workout history until the user explicitly accepts it and never invents deterministic movement measurements or numerical scores.
-- Camera tracking and the timer fallback remain useful without an API key. Meta analysis is an optional BYOK enhancement.
+- Camera tracking and the timer fallback remain useful without an API key. Meta analysis is an optional BYOK enhancement. Generic recordings use no skeleton or MediaPipe-derived measurements.
 
 This separation keeps the live workout responsive and reliable while giving Meta models a visible, useful role that matches their documented capabilities.
 
@@ -135,6 +135,12 @@ Actions:
 
 Camera permission is requested only after a camera action is pressed. General application terms do not count as camera or Meta-upload consent.
 
+### Generic AI recording
+
+Exercises without a validated movement profile keep the timer-only path for users without a verified enabled AI key. For an eligible adult, the entry panel instead reads **Record set with AI** and explains that the set is recorded without sound for optional athlete tracking, repetition review, and one advisory coaching observation. `Record with camera` uses the selfie camera by default and retains the rear-camera switch where a second camera exists; `Use timer instead` keeps the ordinary timer flow.
+
+The recording begins after a visible and spoken three-second countdown, shows `Recording set for AI`, elapsed time, a `Stop recording` action, and a 1:30 maximum. It does not start MediaPipe or draw a skeleton. When stopped manually or at the limit, the planned repetitions provisionally complete the set. `Analyze with AI` is explicit and optional. The active Meta adapter sends the catalog exercise name, instructions, and common mistakes to SAM 3.1 and Muse Spark 1.3 but no fabricated local angles or metrics. Muse can return only an integer count, confidence, one concise observation, and at most one next-set tip. If it differs from planned repetitions, the user must choose the count to save.
+
 ### Camera setup
 
 Before counting begins:
@@ -171,7 +177,7 @@ Counting pauses when confidence becomes insufficient. The current count remains 
 
 The application must never stop the user between individual repetitions. Stopping between repetitions would make normal strength-training cadence awkward and potentially distracting. Interaction occurs between sets instead.
 
-A rep-based set ends only after its configured repetition target. A time-based set can continue counting repetitions but ends only when its configured duration expires. Missing rep and duration targets fall back to a 30-second timed set rather than a one-repetition set. Set completion starts the 60-second rest timer.
+A rep-based set ends only after its configured repetition target. A time-based set can continue counting repetitions but ends only when its configured duration expires. Missing rep and duration targets fall back to a 30-second timed set rather than a one-repetition set. Set completion starts a 60-second rest timer only when another incomplete set remains in the current exercise.
 
 ### Set completion and rest
 
@@ -179,7 +185,7 @@ When the target is reached:
 
 1. Mark the set complete locally.
 2. Display `Set 1 complete.`
-3. Start a skippable 60-second rest timer.
+3. Start a skippable 60-second rest timer only when another incomplete set remains; otherwise show `Set complete` and `Finish exercise`.
 4. Offer `Start next set`.
 5. If eligible, offer explicit full-set analysis with Meta AI.
 

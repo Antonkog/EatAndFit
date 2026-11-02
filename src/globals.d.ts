@@ -4,6 +4,9 @@ declare const __APP_CONFIG__: {
     meta: boolean;
     gemini: boolean;
   };
+  movement: {
+    geminiModel: string;
+  };
   features: {
     byokAi: boolean;
     recipePhotoGeneration: boolean;

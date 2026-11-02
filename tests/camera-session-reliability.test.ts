@@ -96,10 +96,11 @@ test('camera session delegates readiness without delaying skeleton rendering', (
 });
 
 test('stable tracking automatically starts the three-second countdown', () => {
-  assert.match(session, /if \(stage !== 'setup' \|\| !trackingStable\) return;/);
+  assert.match(session, /if \(stage !== 'setup'\) return;/);
+  assert.match(session, /profile \? trackingStable : genericRecording && previewReady/);
   assert.match(session, /void startCameraSet\(\)/);
   assert.match(session, /Tracking ready\. Starting automatically…/);
-  assert.match(session, /spoken\('Three'\)/);
-  assert.match(session, /spoken\('Go'\)/);
+  assert.match(session, /speak\('Three'\)/);
+  assert.match(session, /speak\('Go'\)/);
   assert.doesNotMatch(session, /> Start set</);
 });
