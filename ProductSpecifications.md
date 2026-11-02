@@ -165,7 +165,7 @@ The action panel is headed `Update your balance`; it does not repeat a separate 
 
 ### 6.2 Browsing and search
 
-The first Exercises view shows muscle cards and a catalog-wide exercise autocomplete. Typing a term such as `Press` displays up to five matching exercises; users can choose with a pointer or keyboard to open the existing exercise detail directly. Opening a muscle continues to show its matching movements with a search scoped to that group. Both searches match exercise name, body part, target, equipment, and aliases case-insensitively.
+The first Exercises view shows muscle cards and a catalog-wide exercise autocomplete. Typing a term such as `Press` displays up to five matching exercises; users can choose with a pointer or keyboard to open the existing exercise detail directly. Selecting a suggestion dismisses the mobile keyboard. Opening a muscle continues to show its matching movements with a search scoped to that group. Both searches match exercise name, body part, target, equipment, and aliases case-insensitively.
 
 Exercise cards display a compact `AI` badge when the exercise has a versioned camera-recognition profile. The badge is derived from the movement-profile registry, so unsupported exercises are never presented as AI-capable.
 
@@ -396,7 +396,7 @@ The production catalog contains exactly 39,447 DataHive `recipes-with-nutrition`
 - Minimum and maximum calories are per-serving filters and must be non-negative; minimum cannot exceed maximum.
 - Filter choices and counts come from real dataset facets rather than hard-coded options.
 - Results are ordered by title and stable recipe ID.
-- Typing in the recipe search field requests up to five matching database recipes after a short debounce. The dropdown shows recipe title, source, calories, and image or fallback. Mouse/touch selection opens that recipe's detail directly; Arrow Up/Down, Enter, and Escape provide keyboard control. Submitting the search form still loads the normal paginated results.
+- Typing in the recipe search field requests up to five matching database recipes after a short debounce. The dropdown shows recipe title, source, calories, and image or fallback. Mouse/touch selection opens that recipe's detail directly and dismisses the mobile keyboard; Arrow Up/Down, Enter, and Escape provide keyboard control. Submitting the search form still loads the normal paginated results.
 
 ### 11.3 Daily localized suggestions
 

@@ -17,6 +17,7 @@ import { classifyExercise } from '../energy/sources';
 import { movementProfileForExercise } from '../movement/profiles';
 import { useBackNavigation } from '../navigation/backNavigation';
 import { preferredExerciseSex, profileIssue, readUserProfile, setExerciseModelPreference, type ProfileSex } from '../profile/userProfile';
+import { dismissKeyboard } from '../ui/dismissKeyboard';
 import { exerciseMatches, exerciseSearchSuggestions } from './search';
 import type { Exercise, ExerciseCatalog } from './types';
 
@@ -255,6 +256,7 @@ export function ExerciseLibrary({ onWorkoutAdded, aiFeaturesEnabled = false }: {
   );
 
   const chooseCatalogSuggestion = (exercise: Exercise) => {
+    dismissKeyboard();
     setSelected(exercise);
     setCatalogQuery(exercise.name);
     setCatalogSuggestionsOpen(false);

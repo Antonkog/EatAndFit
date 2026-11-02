@@ -18,6 +18,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { FoodScheduleGrid } from '../components/FoodScheduleGrid';
 import { BYOK_AI_ENABLED } from '../config/appConfig';
 import { localDate, saveFood, type MealType } from '../data/db';
+import { dismissKeyboard } from '../ui/dismissKeyboard';
 import { useBackNavigation } from '../navigation/backNavigation';
 import { recipeSearchParams } from './filters';
 import { getCuisineLocation, type CuisineLocation } from './location';
@@ -154,6 +155,7 @@ export function RecipeView({
   };
 
   const chooseSuggestion = (recipe: RecipeSummary) => {
+    dismissKeyboard();
     setSuggestionsOpen(false);
     setSuggestionIndex(-1);
     void openRecipe(recipe);
