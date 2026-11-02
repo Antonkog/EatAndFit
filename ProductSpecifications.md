@@ -59,7 +59,7 @@ The main navigation order is:
 
 Balance is the default screen. Selecting the Eat & Fit brand also opens Balance. Settings is a separate icon in the desktop header and is not part of the five-item primary navigation.
 
-Desktop uses a translucent top header with centered navigation. Mobile uses a fixed bottom navigation bar with the same five destinations and a dark gradient beneath it to blend it into the page. Navigation resets destination-specific state where appropriate, including the Calendar date/mode and Scan mode.
+Desktop uses a translucent top header with centered navigation. Mobile uses a fixed bottom navigation bar with the same five destinations and a dark gradient that begins at the top of the navigation row and blends into the page below it. Navigation resets destination-specific state where appropriate, including the Calendar date/mode and Scan mode.
 
 On touch devices, a deliberate rightward swipe beginning within the left edge performs contextual back navigation when a destination exists. The topmost dialog, exercise session, product result, or exercise-group view closes first; otherwise the app returns to the previously visited primary screen. Short, slow, predominantly vertical, and non-edge gestures are ignored so normal scrolling and controls are unaffected.
 
@@ -461,7 +461,7 @@ Minimum nutrition values cannot exceed their corresponding maximum values. Servi
 
 The selected provider must return exactly two recipes. Each recipe requires a title, description, 1–20 servings, 1–720 minutes, 1–40 ingredients, 1–30 steps, and non-negative calories/protein/carbohydrates/fat per serving. Invalid or non-JSON output is rejected.
 
-Users can inspect a generated recipe, run the USDA nutrition check, choose date/meal/servings, and save it to Calendar. Date, meal, and servings use one reusable full-width three-column grid on mobile and desktop; values are vertically centered and left-aligned. Calendar food editing uses the same component, with spacing before Update and Delete actions. AI values are always presented as estimates requiring review.
+Users can inspect a generated recipe, run the USDA nutrition check, choose date/meal/servings, and save it to Calendar. Date, meal, and servings use one reusable full-width three-column grid on mobile and desktop; values are vertically centered and left-aligned. The visible date face is compact while retaining the browser’s native date picker, avoiding native-control overflow in mobile grids. Calendar food editing uses the same component, with spacing before Update and Delete actions. AI values are always presented as estimates requiring review.
 
 ### 13.3 Generated photos
 

@@ -333,12 +333,13 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 }
 
 @media (max-width: 800px) {
+  :root { --mobile-nav-bottom: 12px; --mobile-nav-height: 64px; }
   .app-shell { padding-bottom: 92px; }
   .topbar-inner { height: 66px; grid-template-columns: 1fr auto; }
   .desktop-nav { display: none; }
   .page { padding-top: 34px; padding-bottom: 40px; }
-  .bottom-nav-scrim { position: fixed; z-index: 49; right: 0; bottom: 0; left: 0; display: block; height: 42px; pointer-events: none; background: linear-gradient(180deg,rgba(7,10,7,0),#070a07 82%); }
-  .bottom-nav { position: fixed; inset: auto 12px 12px; z-index: 50; display: grid; grid-template-columns: repeat(5,1fr); padding: 6px; border: 1px solid var(--border-strong); border-radius: 18px; background: rgba(23,32,25,.95); box-shadow: 0 18px 45px rgba(0,0,0,.5); backdrop-filter: blur(20px); }
+  .bottom-nav-scrim { position: fixed; z-index: 49; right: 0; bottom: 0; left: 0; display: block; height: calc(var(--mobile-nav-height) + var(--mobile-nav-bottom)); pointer-events: none; background: linear-gradient(180deg,rgba(7,10,7,0),#070a07 100%); }
+  .bottom-nav { position: fixed; inset: auto 12px var(--mobile-nav-bottom); z-index: 50; display: grid; grid-template-columns: repeat(5,1fr); padding: 6px; border: 1px solid var(--border-strong); border-radius: 18px; background: rgba(23,32,25,.95); box-shadow: 0 18px 45px rgba(0,0,0,.5); backdrop-filter: blur(20px); }
   .bottom-nav button { display: flex; min-width: 0; flex-direction: column; align-items: center; justify-content: center; gap: 4px; padding: 8px 3px; border: 0; border-radius: 12px; color: var(--muted-text); background: transparent; font-size: 10px; cursor: pointer; }
   .bottom-nav button.active { color: var(--primary); background: rgba(183,255,79,.1); }
   .exercise-hero { grid-template-columns: 1fr; }
@@ -353,6 +354,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 }
 
 @media (max-width: 600px) {
+  :root { --mobile-nav-height: 72px; }
   .page { padding-inline: 14px; }
   .brand { font-size: 13px; }
   .brand-mark { width: 38px; height: 38px; }
@@ -508,8 +510,11 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .food-schedule-grid { display: grid; width: 100%; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 8px; }
 .food-schedule-grid label { display: grid; min-width: 0; grid-template-rows: auto 40px; color: var(--muted-text); font-size: 9px; font-weight: 750; }
 .food-schedule-grid input, .food-schedule-grid select { display: block; box-sizing: border-box; width: 100%; min-width: 0; min-inline-size: 0; max-width: 100%; height: 40px; margin-top: 4px; padding: 0 9px; overflow: hidden; border-radius: 8px; line-height: normal; text-align: left; }
-.food-schedule-grid input[type="date"]::-webkit-datetime-edit { padding: 0; line-height: 40px; }
-.food-schedule-grid input::-webkit-date-and-time-value { min-width: 0; min-height: 1.2em; margin: 0; text-align: left; }
+.compact-date-control { position: relative; display: flex; min-width: 0; align-items: center; overflow: hidden; border: 1px solid var(--border-strong); border-radius: 8px; background: var(--surface); color: var(--text); }
+.compact-date-control > span { overflow: hidden; padding: 0 9px; font: inherit; line-height: 1.2; text-align: left; text-overflow: ellipsis; white-space: nowrap; }
+.compact-date-control > input { position: absolute; inset: 0; width: 100%; min-width: 0; height: 100%; margin: 0; padding: 0; opacity: 0; cursor: pointer; }
+.compact-date-control:focus-within { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(183,255,79,.12); }
+.food-schedule-grid .compact-date-control { height: 40px; margin-top: 4px; }
 .food-log-actions { margin-top: 10px; }
 .calendar-entry-detail-image { width: 100%; min-height: 220px; max-height: 330px; border-radius: 16px; object-fit: contain; background: #fff; }
 .calendar-product-facts dl { overflow: hidden; margin: 0; border: 1px solid var(--border); border-radius: 13px; }
@@ -737,8 +742,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .four-fields { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 9px; }
 .four-fields label { display: block; min-width: 0; color: var(--muted-text); font-size: 10px; font-weight: 700; }
 .four-fields input, .four-fields select { display: block; box-sizing: border-box; width: 100%; min-width: 0; min-inline-size: 0; max-width: 100%; height: 39px; margin-top: 5px; padding: 0 8px; overflow: hidden; border-radius: 8px; }
-.four-fields input[type="date"]::-webkit-datetime-edit { padding: 0; line-height: 39px; text-align: left; }
-.four-fields input[type="date"]::-webkit-date-and-time-value { min-width: 0; margin: 0; text-align: left; }
+.four-fields .compact-date-control { height: 39px; margin-top: 5px; }
 .product-log-panel > h3 { margin: 18px 0 9px; }
 .product-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; }
 
@@ -902,7 +906,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   .food-log-actions { justify-content: flex-start; }
   .food-schedule-grid { grid-template-columns: repeat(3,minmax(0,1fr)); gap: 8px; }
   .food-schedule-grid input, .food-schedule-grid select { height: 44px; padding-inline: 7px; font-size: 12px; }
-  .food-schedule-grid input[type="date"]::-webkit-datetime-edit { line-height: 44px; }
+  .food-schedule-grid .compact-date-control { height: 44px; }
   .recipe-heading { align-items: stretch; flex-direction: column; }
   .recipe-heading-actions { display: grid; grid-template-columns: 1fr; }
   .recipe-heading-actions > button { width: 100%; }
@@ -930,7 +934,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   .product-summary > img, .product-summary > span { width: 120px; height: 120px; }
   .manual-nutrition > div, .four-fields { grid-template-columns: repeat(2,minmax(0,1fr)); }
   .four-fields input, .four-fields select { height: 44px; font-size: 12px; }
-  .four-fields input[type="date"]::-webkit-datetime-edit { line-height: 44px; text-align: left; }
+  .four-fields .compact-date-control { height: 44px; }
   .product-actions { align-items: stretch; flex-direction: column; }
   .profile-measurements { grid-template-columns: repeat(3,minmax(0,1fr)); gap: 6px; }
   .profile-measurements label > span:last-child { gap: 4px; }
@@ -980,6 +984,6 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 }
 
 @media (display-mode: standalone) and (max-width: 800px) {
+  :root { --mobile-nav-bottom: max(12px, env(safe-area-inset-bottom)); }
   .app-shell { padding-bottom: calc(92px + env(safe-area-inset-bottom)); }
-  .bottom-nav { bottom: max(12px, env(safe-area-inset-bottom)); }
 }

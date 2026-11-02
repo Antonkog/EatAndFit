@@ -66,24 +66,27 @@ test('profile measurements and adult goals stay in compact three-column rows on 
 
 test('recipe review and Calendar food editing share the full-width schedule grid', () => {
   const component = readFileSync(new URL('../src/components/FoodScheduleGrid.tsx', import.meta.url), 'utf8');
+  const compactDate = readFileSync(new URL('../src/components/CompactDateInput.tsx', import.meta.url), 'utf8');
   const aiRecipes = readFileSync(new URL('../src/ai/AiRecipeBuilder.tsx', import.meta.url), 'utf8');
   const calendar = readFileSync(new URL('../src/calendar/CalendarView.tsx', import.meta.url), 'utf8');
   const styles = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
   assert.match(component, /className="food-schedule-grid"/);
+  assert.match(component, /<CompactDateInput value=\{date\}/);
+  assert.match(compactDate, /<input type="date"/);
   assert.match(aiRecipes, /<FoodScheduleGrid date=\{date\}/);
   assert.match(calendar, /<FoodScheduleGrid date=\{date\}/);
   assert.match(styles, /\.food-schedule-grid \{[^}]*width: 100%;[^}]*grid-template-columns:/);
-  assert.match(styles, /input::-webkit-date-and-time-value \{[^}]*text-align: left/);
+  assert.match(styles, /\.compact-date-control > span \{[^}]*text-align: left/);
 });
 
 test('mobile food and barcode date controls cannot overlap neighboring fields', () => {
   const styles = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
   assert.match(styles, /\.food-schedule-grid \{[^}]*repeat\(3,minmax\(0,1fr\)\)/);
   assert.match(styles, /\.food-schedule-grid input, \.food-schedule-grid select \{[^}]*min-inline-size: 0;[^}]*max-width: 100%/);
-  assert.match(styles, /\.four-fields input, \.four-fields select \{[^}]*min-inline-size: 0;[^}]*max-width: 100%/);
+  assert.match(styles, /\.four-fields \.compact-date-control \{ height: 39px; margin-top: 5px; \}/);
   assert.match(styles, /\.four-fields label \{ display: block; min-width: 0;/);
   assert.match(styles, /\.food-log-actions \{ margin-top: 10px; \}/);
-  assert.match(styles, /\.bottom-nav-scrim \{[^}]*linear-gradient/);
+  assert.match(styles, /\.bottom-nav-scrim \{[^}]*height: calc\(var\(--mobile-nav-height\) \+ var\(--mobile-nav-bottom\)\);[^}]*linear-gradient/);
 });
 
 test('calendar workout, food, and scanned-product entries open stored details', () => {

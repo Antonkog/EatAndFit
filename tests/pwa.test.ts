@@ -35,9 +35,9 @@ test('standalone mobile navigation uses the earlier fixed safe-area position', (
   assert.match(app, /<main ref=\{pageRef\} className="page">/);
   assert.match(styles, /@media \(display-mode: standalone\) and \(max-width: 800px\)/);
   assert.match(styles, /\.app-shell \{ padding-bottom: calc\(92px \+ env\(safe-area-inset-bottom\)\); \}/);
-  assert.match(styles, /\.bottom-nav \{ bottom: max\(12px, env\(safe-area-inset-bottom\)\); \}/);
+  assert.match(styles, /:root \{ --mobile-nav-bottom: max\(12px, env\(safe-area-inset-bottom\)\); \}/);
   assert.doesNotMatch(styles, /grid-template-rows: auto minmax\(0, 1fr\) auto/);
-  assert.match(styles, /@media \(max-width: 800px\)[\s\S]*?\.bottom-nav \{ position: fixed; inset: auto 12px 12px;/);
+  assert.match(styles, /@media \(max-width: 800px\)[\s\S]*?\.bottom-nav \{ position: fixed; inset: auto 12px var\(--mobile-nav-bottom\);/);
 });
 
 test('service worker caches only the app shell and static same-origin requests', () => {

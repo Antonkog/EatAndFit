@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { saveFood, saveProduct, type MealType } from '../data/db';
+import { CompactDateInput } from '../components/CompactDateInput';
 import { useBackNavigation } from '../navigation/backNavigation';
 
 type Product = {
@@ -202,7 +203,7 @@ export function ProductScanner({ initialDate, onAdded, onUseInRecipe }: {
           </section>
           <section className="product-log-panel">
             <div className="four-fields">
-              <label>Date<input type="date" value={date} onChange={(event) => setDate(event.target.value)} /></label>
+              <label>Date<CompactDateInput value={date} onChange={setDate} /></label>
               <label>Meal<select value={meal} onChange={(event) => setMeal(event.target.value as MealType)}>{meals.map((item) => <option value={item} key={item}>{titleCase(item)}</option>)}</select></label>
               <label>Amount<input type="number" min="1" value={amount} onChange={(event) => setAmount(Number(event.target.value))} /></label>
               <label>Unit<select><option>g</option></select></label>
