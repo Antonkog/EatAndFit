@@ -111,6 +111,7 @@ export function TrainingPlanner({ catalog, onClose, onSaved }: { catalog: Exerci
           notes: session.title,
           completed: false,
           trainingPlanId: planId,
+          suggestionDefaultsVersion: 1,
           sets: setsForItem(item).map((set) => ({
             id: crypto.randomUUID(),
             reps: set.reps,

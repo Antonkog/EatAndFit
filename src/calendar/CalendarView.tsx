@@ -27,6 +27,7 @@ import {
   removePlannedWorkoutsForDate,
   removeWorkout,
   saveFood,
+  saveTrainingPlan,
   saveWorkout,
   workoutsForDate,
   type FoodEntry,
@@ -37,6 +38,7 @@ import { estimateExerciseEnergy, estimateSetDurationSeconds, wholeMinuteDuration
 import { classifyExercise, type EnergyProfileId } from '../energy/sources';
 import { applyWorkoutCompletion } from '../energy/workout';
 import { exerciseMediaFor } from '../exercises/media';
+import { upgradeWorkoutSuggestionDefaults } from '../exercises/workoutDefaults';
 import type { ExerciseCatalog } from '../exercises/types';
 import { preferredExerciseSex, PROFILE_CHANGED, readUserProfile, type UserProfile } from '../profile/userProfile';
 import { getRecognitionKeyStatus, RECOGNITION_KEYS_CHANGED } from '../settings/secureKeys';
@@ -134,6 +136,19 @@ export function CalendarView({
 
   const exerciseMap = useMemo(() => new Map(catalog?.exercises.map((exercise) => [exercise.id, exercise]) ?? []), [catalog]);
   const days = useMemo(() => calendarDays(month), [month]);
+
+  useEffect(() => {
+    if (!catalog || !Number.isFinite(profile.weightKg) || Number(profile.weightKg) <= 0) return;
+    void allWorkouts().then(async (items) => {
+      const changed = items.flatMap((workout) => {
+        const exercise = exerciseMap.get(workout.exerciseId);
+        if (!exercise) return [];
+        const upgraded = upgradeWorkoutSuggestionDefaults(workout, exercise, profile.weightKg);
+        return upgraded === workout ? [] : [upgraded];
+      });
+      if (changed.length) await saveTrainingPlan(changed);
+    });
+  }, [catalog, exerciseMap, profile.weightKg]);
 
   const selectDate = (selected: Date) => {
     const value = localDate(selected);

@@ -185,6 +185,8 @@ The detail panel can show:
 
 Adding an exercise manually creates one planned, incomplete set with 10 repetitions and a whole-minute duration rounded upward from the local activity estimate. Bodyweight exercises use the saved profile weight in the visible `Weight (kg)` field. Manually selected equipment exercises start at 10 kg so the suggestion is immediately editable rather than zero.
 
+On first load after this rule was introduced, incomplete legacy workouts without a defaults version are normalized once: zero bodyweight loads receive the saved profile weight, zero manually added equipment loads receive 10 kg, and incomplete-set durations round upward to whole minutes. Completed workouts and completed sets are never rewritten.
+
 ### 6.4 Personalized training entry point
 
 `Personalized training program` is visible only in the BYOK edition when all of the following are true:

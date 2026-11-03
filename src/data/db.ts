@@ -25,6 +25,7 @@ export type Workout = {
   energyDurationMinutes?: number;
   energyEquivalentKg?: number;
   trainingPlanId?: string;
+  suggestionDefaultsVersion?: 1;
 };
 export type MealType = 'breakfast' | 'lunch' | 'dinner' | 'snack';
 export type FoodEntry = { id: string; date: string; title: string; calories?: number; protein?: number; carbs?: number; fat?: number; provider: string; mealType?: MealType; quantity?: number; quantityUnit?: 'serving' | 'g' | 'ml'; imageUrl?: string; localImageId?: string; payload?: unknown };
@@ -91,7 +92,7 @@ export async function allWorkouts() { return all<Workout>('workouts'); }
 export async function allFood() { return all<FoodEntry>('food'); }
 
 export async function scheduleWorkout(exerciseId: string, exerciseName: string, date = localDate(), durationSeconds = 60, weightKg = 0) {
-  const workout: Workout = { id: crypto.randomUUID(), date, exerciseId, exerciseName, notes: '', completed: false, sets: [{ id: crypto.randomUUID(), reps: 10, weightKg, durationSeconds, complete: false }] };
+  const workout: Workout = { id: crypto.randomUUID(), date, exerciseId, exerciseName, notes: '', completed: false, suggestionDefaultsVersion: 1, sets: [{ id: crypto.randomUUID(), reps: 10, weightKg, durationSeconds, complete: false }] };
   await put('workouts', workout);
   window.dispatchEvent(new Event('eatfit-data-change'));
   return workout;
