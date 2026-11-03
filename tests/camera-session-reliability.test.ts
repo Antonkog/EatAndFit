@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
+import { shouldOfferCameraSwitch } from '../src/movement/cameraCapabilities';
 
 const session = readFileSync(new URL('../src/movement/ExerciseSession.tsx', import.meta.url), 'utf8');
 const worker = readFileSync(new URL('../src/movement/pose.worker.ts', import.meta.url), 'utf8');
@@ -28,11 +29,22 @@ test('exercise tracking defaults to selfie camera and permits an explicit rear-c
   assert.match(session, /height: \{ ideal: 720 \}/);
   assert.match(session, /> Enable camera</);
   assert.match(session, /enumerateDevices/);
-  assert.match(session, /setCanSwitchCamera\(devices\.filter/);
+  assert.match(session, /isHandheldCameraContext\(\)/);
+  assert.match(session, /track\?\.getCapabilities/);
+  assert.match(session, /shouldOfferCameraSwitch/);
+  assert.doesNotMatch(session, /setCanSwitchCamera\(devices\.filter/);
   assert.match(session, /canSwitchCamera &&/);
   assert.match(session, /cameraFacing === 'user' \? 'environment' : 'user'/);
   assert.doesNotMatch(session, /Enable selfie camera/);
   assert.doesNotMatch(session, /zoom/);
+});
+
+test('camera switch is offered only for a confirmed handheld multi-camera context', () => {
+  assert.equal(shouldOfferCameraSwitch({ handheld: false, facingModes: ['user', 'environment'], labeledVideoInputs: 3 }), false);
+  assert.equal(shouldOfferCameraSwitch({ handheld: true, facingModes: ['user'], labeledVideoInputs: 1 }), false);
+  assert.equal(shouldOfferCameraSwitch({ handheld: true, facingModes: ['user', 'environment'], labeledVideoInputs: 1 }), true);
+  assert.equal(shouldOfferCameraSwitch({ handheld: true, labeledVideoInputs: 2 }), true);
+  assert.equal(shouldOfferCameraSwitch({ handheld: true, labeledVideoInputs: 0 }), false);
 });
 
 test('exercise recording uses a controlled bitrate for Meta uploads', () => {
@@ -80,9 +92,17 @@ test('portrait camera session fills the viewport and overlays a translucent inst
   assert.match(styles, /\.exercise-session\.camera-session-open[^}]+height: 100dvh/);
   assert.match(styles, /\.camera-session-open \.camera-stage[^}]+height: 100dvh/);
   assert.match(styles, /object-fit: cover/);
-  assert.match(session, /const coverScale = Math\.max/);
-  assert.match(session, /video\.style\.objectFit = 'fill'/);
+  assert.match(session, /scheduleMediaGeometrySync/);
+  assert.match(session, /cameraStage\.getBoundingClientRect\(\)/);
+  assert.doesNotMatch(session, /video\.style\.width/);
+  assert.doesNotMatch(session, /video\.style\.objectFit/);
+  assert.doesNotMatch(session, /height: \{ ideal: 1280 \}/);
   assert.match(styles, /background: rgba\(4,6,4,\.5\)/);
+});
+
+test('starting MediaRecorder cannot replace the CSS-owned preview geometry', () => {
+  assert.match(session, /recorder\.start\(500\);[\s\S]+scheduleMediaGeometrySync\(\)/);
+  assert.match(styles, /\.camera-stage video[^}]+width: 100%[^}]+height: 100%[^}]+object-fit: cover/);
 });
 
 test('camera video fills the viewport on desktop and landscape as well', () => {

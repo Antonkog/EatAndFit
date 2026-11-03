@@ -9,6 +9,7 @@ import { readUserProfile } from '../profile/userProfile';
 import { getRecognitionKeyStatus, type RecognitionProvider } from '../settings/secureKeys';
 import { MovementTracker, selectRepresentativeRep } from './engine';
 import { applyAcceptedMovementCount } from './countReconciliation';
+import { isHandheldCameraContext, shouldOfferCameraSwitch } from './cameraCapabilities';
 import { createMovementReviewProvider, MOVEMENT_ANALYSIS_STAGE_LABELS, type MovementAnalysisStage } from './metaAnalysis';
 import { CompatibilityPoseRuntime, type PoseDetection } from './poseCompatibility';
 import { drawPose } from './poseCanvas';
@@ -59,7 +60,7 @@ function storedMetaAnalysis(
   };
 }
 
-async function requestExerciseCamera(facing: CameraFacing) {
+async function requestExerciseCamera(facing: CameraFacing, exactOnly = false) {
   const base = {
     width: { ideal: 1280 },
     height: { ideal: 720 },
@@ -72,6 +73,7 @@ async function requestExerciseCamera(facing: CameraFacing) {
     });
   } catch (error) {
     if (error instanceof DOMException && !['OverconstrainedError', 'NotFoundError'].includes(error.name)) throw error;
+    if (exactOnly) throw error;
     return navigator.mediaDevices.getUserMedia({
       audio: false,
       video: { ...base, facingMode: { ideal: facing } },
@@ -134,6 +136,7 @@ export function ExerciseSession({
   const mountedRef = useRef(true);
   const previousRepRef = useRef<NonNullable<ReturnType<typeof selectRepresentativeRep>> | undefined>(undefined);
   const frameLoopRef = useRef<ScheduledFrame | undefined>(undefined);
+  const geometrySyncFrameRef = useRef<number | undefined>(undefined);
   const workerInitTimerRef = useRef<number | undefined>(undefined);
   const workerResponseTimerRef = useRef<number | undefined>(undefined);
   const processingFrameRef = useRef(false);
@@ -193,11 +196,20 @@ export function ExerciseSession({
   useEffect(() => { onSaveRef.current = onSave; }, [onSave]);
   useEffect(() => { setIndexRef.current = setIndex; }, [setIndex]);
 
-  const refreshCameraAvailability = useCallback(async () => {
-    if (!navigator.mediaDevices?.enumerateDevices) return;
+  const refreshCameraAvailability = useCallback(async (stream?: MediaStream) => {
+    if (!isHandheldCameraContext() || !navigator.mediaDevices?.enumerateDevices) {
+      setCanSwitchCamera(false);
+      return;
+    }
     try {
       const devices = await navigator.mediaDevices.enumerateDevices();
-      setCanSwitchCamera(devices.filter((device) => device.kind === 'videoinput').length > 1);
+      const track = stream?.getVideoTracks()[0];
+      const capabilities = track?.getCapabilities?.() as (MediaTrackCapabilities & { facingMode?: string[] }) | undefined;
+      setCanSwitchCamera(shouldOfferCameraSwitch({
+        handheld: true,
+        facingModes: capabilities?.facingMode,
+        labeledVideoInputs: devices.filter((device) => device.kind === 'videoinput' && device.label.trim()).length,
+      }));
     } catch {
       setCanSwitchCamera(false);
     }
@@ -205,9 +217,39 @@ export function ExerciseSession({
 
   useEffect(() => {
     void refreshCameraAvailability();
-    navigator.mediaDevices?.addEventListener?.('devicechange', refreshCameraAvailability);
-    return () => navigator.mediaDevices?.removeEventListener?.('devicechange', refreshCameraAvailability);
+    const handleDeviceChange = () => { void refreshCameraAvailability(streamRef.current); };
+    navigator.mediaDevices?.addEventListener?.('devicechange', handleDeviceChange);
+    return () => navigator.mediaDevices?.removeEventListener?.('devicechange', handleDeviceChange);
   }, [refreshCameraAvailability]);
+
+  const syncMediaGeometry = useCallback(() => {
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+    const cameraStage = video?.parentElement;
+    if (!video || !cameraStage) return;
+    const bounds = cameraStage.getBoundingClientRect();
+    const stageWidth = Math.max(1, bounds.width || cameraStage.clientWidth);
+    const stageHeight = Math.max(1, bounds.height || cameraStage.clientHeight);
+    const density = Math.max(1, window.devicePixelRatio || 1);
+    if (canvas) {
+      const displayWidth = Math.max(1, Math.round(stageWidth * density));
+      const displayHeight = Math.max(1, Math.round(stageHeight * density));
+      if (canvas.width !== displayWidth) canvas.width = displayWidth;
+      if (canvas.height !== displayHeight) canvas.height = displayHeight;
+    }
+    if (frameCanvasRef.current && video.videoWidth && video.videoHeight) {
+      frameCanvasRef.current.width = video.videoWidth;
+      frameCanvasRef.current.height = video.videoHeight;
+    }
+  }, []);
+
+  const scheduleMediaGeometrySync = useCallback(() => {
+    if (geometrySyncFrameRef.current !== undefined) cancelAnimationFrame(geometrySyncFrameRef.current);
+    geometrySyncFrameRef.current = requestAnimationFrame(() => {
+      geometrySyncFrameRef.current = undefined;
+      syncMediaGeometry();
+    });
+  }, [syncMediaGeometry]);
 
   const cancelFrameLoop = useCallback(() => {
     const scheduled = frameLoopRef.current;
@@ -300,7 +342,8 @@ export function ExerciseSession({
     recorder.onstop = () => setRecording(new Blob(chunksRef.current, { type: recorder.mimeType || 'video/webm' }));
     recorder.start(500);
     recorderRef.current = recorder;
-  }, []);
+    scheduleMediaGeometrySync();
+  }, [scheduleMediaGeometrySync]);
 
   useEffect(() => {
     if (stage !== 'countdown') return;
@@ -414,34 +457,6 @@ export function ExerciseSession({
     if (!genericRecording || stage !== 'active' || elapsedSeconds < 90) return;
     void finishGenericRecording();
   }, [elapsedSeconds, finishGenericRecording, genericRecording, stage]);
-
-  const syncMediaGeometry = useCallback(() => {
-    const video = videoRef.current;
-    const canvas = canvasRef.current;
-    const stage = video?.parentElement;
-    if (!video || !stage || !video.videoWidth || !video.videoHeight) return;
-    const stageWidth = Math.max(1, stage.clientWidth);
-    const stageHeight = Math.max(1, stage.clientHeight);
-    const coverScale = Math.max(stageWidth / video.videoWidth, stageHeight / video.videoHeight);
-    video.style.width = `${Math.ceil(video.videoWidth * coverScale)}px`;
-    video.style.height = `${Math.ceil(video.videoHeight * coverScale)}px`;
-    video.style.top = '50%';
-    video.style.right = 'auto';
-    video.style.bottom = 'auto';
-    video.style.left = '50%';
-    video.style.objectFit = 'fill';
-    const density = Math.max(1, window.devicePixelRatio || 1);
-    if (canvas) {
-      const displayWidth = Math.max(1, Math.round(stageWidth * density));
-      const displayHeight = Math.max(1, Math.round(stageHeight * density));
-      if (canvas.width !== displayWidth) canvas.width = displayWidth;
-      if (canvas.height !== displayHeight) canvas.height = displayHeight;
-    }
-    if (frameCanvasRef.current) {
-      frameCanvasRef.current.width = video.videoWidth;
-      frameCanvasRef.current.height = video.videoHeight;
-    }
-  }, []);
 
   const scheduleNextFrame = useCallback(() => {
     if (frameLoopRef.current || !trackingReadyRef.current || !(['setup', 'countdown', 'active'] as Stage[]).includes(stageRef.current)) return;
@@ -625,7 +640,7 @@ export function ExerciseSession({
     worker.postMessage({ type: 'init' });
   }, [handlePoseDetection, scheduleNextFrame, startCompatibilityTracking, stopTrackingBackend]);
 
-  const startCamera = useCallback(async (requestedFacing: CameraFacing = cameraFacing, recordForAi = false) => {
+  const startCamera = useCallback(async (requestedFacing: CameraFacing = cameraFacing, recordForAi = false, exactFacing = false) => {
     if (!profile && !recordForAi) { setStage('timer-ready'); return; }
     stopCamera();
     setGenericRecording(!profile && recordForAi);
@@ -637,7 +652,7 @@ export function ExerciseSession({
     stablePoseFramesRef.current = 0;
     startingSetRef.current = false;
     try {
-      const stream = await requestExerciseCamera(requestedFacing);
+      const stream = await requestExerciseCamera(requestedFacing, exactFacing);
       setCameraFacing(requestedFacing);
       streamRef.current = stream;
       stream.getVideoTracks().forEach((track) => track.addEventListener('ended', () => {
@@ -647,8 +662,11 @@ export function ExerciseSession({
       setStage('setup');
       setCameraStreamVersion((version) => version + 1);
       if (profile) startWorkerTracking();
-      void refreshCameraAvailability();
+      void refreshCameraAvailability(stream);
     } catch (error) {
+      if (exactFacing && error instanceof DOMException && ['OverconstrainedError', 'NotFoundError'].includes(error.name)) {
+        setCanSwitchCamera(false);
+      }
       const denied = error instanceof DOMException && error.name === 'NotAllowedError';
       showCameraRecovery(denied
         ? 'Camera access is blocked. Allow camera access in your browser settings, then try again.'
@@ -658,7 +676,7 @@ export function ExerciseSession({
 
   const switchCamera = () => {
     const nextFacing: CameraFacing = cameraFacing === 'user' ? 'environment' : 'user';
-    void startCamera(nextFacing, genericRecording);
+    void startCamera(nextFacing, genericRecording, true);
   };
 
   useEffect(() => { stageRef.current = stage; }, [stage]);
@@ -690,7 +708,7 @@ export function ExerciseSession({
     const stream = streamRef.current;
     const video = videoRef.current;
     let disposed = false;
-    const sync = () => syncMediaGeometry();
+    const sync = () => scheduleMediaGeometrySync();
     const resizeObserver = typeof ResizeObserver === 'undefined' ? undefined : new ResizeObserver(sync);
     video.addEventListener('loadedmetadata', sync);
     video.addEventListener('playing', sync);
@@ -703,7 +721,7 @@ export function ExerciseSession({
       try {
         if (video.paused) await video.play();
         if (disposed) return;
-        sync();
+        syncMediaGeometry();
         setPreviewReady(true);
         if (profile) scheduleNextFrame();
       } catch {
@@ -721,8 +739,10 @@ export function ExerciseSession({
       window.removeEventListener('orientationchange', sync);
       window.visualViewport?.removeEventListener('resize', sync);
       resizeObserver?.disconnect();
+      if (geometrySyncFrameRef.current !== undefined) cancelAnimationFrame(geometrySyncFrameRef.current);
+      geometrySyncFrameRef.current = undefined;
     };
-  }, [cameraPreviewVisible, cameraStreamVersion, profile, scheduleNextFrame, showCameraRecovery, syncMediaGeometry]);
+  }, [cameraPreviewVisible, cameraStreamVersion, profile, scheduleMediaGeometrySync, scheduleNextFrame, showCameraRecovery, syncMediaGeometry]);
 
   useEffect(() => {
     if (stage !== 'setup') return;
