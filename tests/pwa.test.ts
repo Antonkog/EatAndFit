@@ -45,7 +45,7 @@ test('service worker caches the app shell and viewed exercise posters but not ex
   const worker = readFileSync(new URL('../public/sw.js', import.meta.url), 'utf8');
   assert.match(main, /import\.meta\.env\.PROD/);
   assert.match(main, /serviceWorker\.register\('\/sw\.js'\)/);
-  assert.match(worker, /eat-and-fit-shell-v6/);
+  assert.match(worker, /eat-and-fit-shell-v7/);
   assert.match(worker, /eat-and-fit-exercise-previews-v1/);
   assert.match(worker, /MAX_EXERCISE_PREVIEWS = 160/);
   assert.match(worker, /url\.pathname\.startsWith\('\/exercise-posters\/'\)/);

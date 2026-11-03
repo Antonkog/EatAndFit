@@ -1,4 +1,4 @@
-const CACHE_NAME = 'eat-and-fit-shell-v6';
+const CACHE_NAME = 'eat-and-fit-shell-v7';
 const EXERCISE_PREVIEW_CACHE = 'eat-and-fit-exercise-previews-v1';
 const EXERCISE_MEDIA_ORIGIN = 'https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev';
 const MAX_EXERCISE_PREVIEWS = 160;
