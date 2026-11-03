@@ -137,6 +137,8 @@ export function ExerciseSession({
   const previousRepRef = useRef<NonNullable<ReturnType<typeof selectRepresentativeRep>> | undefined>(undefined);
   const frameLoopRef = useRef<ScheduledFrame | undefined>(undefined);
   const geometrySyncFrameRef = useRef<number | undefined>(undefined);
+  const previewRefreshTimerRef = useRef<number | undefined>(undefined);
+  const previewRefreshFrameRef = useRef<number | undefined>(undefined);
   const workerInitTimerRef = useRef<number | undefined>(undefined);
   const workerResponseTimerRef = useRef<number | undefined>(undefined);
   const processingFrameRef = useRef(false);
@@ -148,6 +150,7 @@ export function ExerciseSession({
   const baseDurationSecondsRef = useRef(initialWorkout.sets[initialSetIndex]?.actualDurationSeconds ?? 0);
   const startedAtRef = useRef(0);
   const recorderRef = useRef<MediaRecorder | undefined>(undefined);
+  const recorderStreamRef = useRef<MediaStream | undefined>(undefined);
   const analysisAbortRef = useRef<AbortController | undefined>(undefined);
   const recordingOffsetMsRef = useRef(0);
   const recordingBaseRepCountRef = useRef(initialWorkout.sets[initialSetIndex]?.completedReps ?? 0);
@@ -251,6 +254,24 @@ export function ExerciseSession({
     });
   }, [syncMediaGeometry]);
 
+  const schedulePreviewLayerRefresh = useCallback(() => {
+    if (previewRefreshTimerRef.current !== undefined) window.clearTimeout(previewRefreshTimerRef.current);
+    previewRefreshTimerRef.current = window.setTimeout(() => {
+      previewRefreshTimerRef.current = undefined;
+      const video = videoRef.current;
+      const stream = streamRef.current;
+      if (!video || !stream || video.srcObject !== stream || !stream.getVideoTracks().some((track) => track.readyState === 'live')) return;
+      video.srcObject = null;
+      previewRefreshFrameRef.current = requestAnimationFrame(() => {
+        previewRefreshFrameRef.current = undefined;
+        if (videoRef.current !== video || streamRef.current !== stream) return;
+        video.srcObject = stream;
+        void video.play().catch(() => undefined);
+        scheduleMediaGeometrySync();
+      });
+    }, 160);
+  }, [scheduleMediaGeometrySync]);
+
   const cancelFrameLoop = useCallback(() => {
     const scheduled = frameLoopRef.current;
     if (scheduled?.kind === 'video') (videoRef.current as FrameVideo | null)?.cancelVideoFrameCallback?.(scheduled.id);
@@ -274,6 +295,10 @@ export function ExerciseSession({
   }, [cancelFrameLoop]);
 
   const stopCamera = useCallback(() => {
+    if (previewRefreshTimerRef.current !== undefined) window.clearTimeout(previewRefreshTimerRef.current);
+    previewRefreshTimerRef.current = undefined;
+    if (previewRefreshFrameRef.current !== undefined) cancelAnimationFrame(previewRefreshFrameRef.current);
+    previewRefreshFrameRef.current = undefined;
     stopTrackingBackend();
     streamRef.current?.getTracks().forEach((track) => track.stop());
     streamRef.current = undefined;
@@ -283,6 +308,10 @@ export function ExerciseSession({
   const stopRecording = useCallback(() => {
     const recorder = recorderRef.current;
     if (recorder?.state === 'recording') recorder.stop();
+    else {
+      recorderStreamRef.current?.getTracks().forEach((track) => track.stop());
+      recorderStreamRef.current = undefined;
+    }
   }, []);
 
   const releaseSession = useCallback(() => {
@@ -334,16 +363,31 @@ export function ExerciseSession({
     recordingOffsetMsRef.current = 0;
     if (!streamRef.current || typeof MediaRecorder === 'undefined') return;
     const mimeType = supportedMimeType();
-    const recorder = new MediaRecorder(streamRef.current, {
+    recorderStreamRef.current?.getTracks().forEach((track) => track.stop());
+    recorderStreamRef.current = undefined;
+    let recordingStream = streamRef.current;
+    try {
+      const clonedTracks = streamRef.current.getVideoTracks().map((track) => track.clone());
+      if (clonedTracks.length) {
+        recordingStream = new MediaStream(clonedTracks);
+        recorderStreamRef.current = recordingStream;
+      }
+    } catch { /* MediaRecorder can use the preview stream when track cloning is unavailable. */ }
+    const recorder = new MediaRecorder(recordingStream, {
       ...(mimeType ? { mimeType } : {}),
       videoBitsPerSecond: MOVEMENT_VIDEO_BITS_PER_SECOND,
     });
     recorder.ondataavailable = (event) => { if (event.data.size) chunksRef.current.push(event.data); };
-    recorder.onstop = () => setRecording(new Blob(chunksRef.current, { type: recorder.mimeType || 'video/webm' }));
+    recorder.onstop = () => {
+      setRecording(new Blob(chunksRef.current, { type: recorder.mimeType || 'video/webm' }));
+      recorderStreamRef.current?.getTracks().forEach((track) => track.stop());
+      recorderStreamRef.current = undefined;
+    };
     recorder.start(500);
     recorderRef.current = recorder;
     scheduleMediaGeometrySync();
-  }, [scheduleMediaGeometrySync]);
+    schedulePreviewLayerRefresh();
+  }, [scheduleMediaGeometrySync, schedulePreviewLayerRefresh]);
 
   useEffect(() => {
     if (stage !== 'countdown') return;

@@ -52,6 +52,15 @@ test('exercise recording uses a controlled bitrate for Meta uploads', () => {
   assert.match(session, /videoBitsPerSecond: MOVEMENT_VIDEO_BITS_PER_SECOND/);
 });
 
+test('exercise recording isolates the iPhone preview and refreshes its media layer once', () => {
+  assert.match(session, /getVideoTracks\(\)\.map\(\(track\) => track\.clone\(\)\)/);
+  assert.match(session, /recordingStream = new MediaStream\(clonedTracks\)/);
+  assert.match(session, /new MediaRecorder\(recordingStream/);
+  assert.match(session, /schedulePreviewLayerRefresh\(\)/);
+  assert.match(session, /video\.srcObject = null;[\s\S]+video\.srcObject = stream;[\s\S]+video\.play\(\)/);
+  assert.match(session, /recorderStreamRef\.current\?\.getTracks\(\)\.forEach\(\(track\) => track\.stop\(\)\)/);
+});
+
 test('saving a repetition does not restart the live camera preview', () => {
   assert.match(session, /onSaveRef\.current\(partial\)/);
   assert.match(session, /cameraPreviewVisible/);
