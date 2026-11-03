@@ -491,13 +491,13 @@ The user can take a photo or choose one from the device. Before submission, the 
 
 The model is asked to identify only distinct edible ingredients visibly present. Output is limited to 30 English/Latin-name ingredients, each at most 80 characters. Names are whitespace-normalized, case-insensitively deduplicated, and shown for user review.
 
-The user can edit, remove, and manually add ingredients, then either find matching catalog recipes or generate AI recipes. Multiple ingredients in one image are supported.
+Recognition progress is shown inside the `Recognize ingredients` button; the screen does not add a second progress or successful-review notice below it. Errors and the no-results message remain visible. The user can edit, remove, and manually add ingredients, then either find matching catalog recipes or continue through `AI Recipe Generation`. Multiple ingredients in one image are supported.
 
 ### 14.2 Barcode and packaged products
 
 Barcode lookup is available in both editions. On HTTPS or localhost, the screen dynamically loads the ZXing browser decoder and scans the rear-camera stream for EAN-8, EAN-13, UPC-A, UPC-E, and ITF/GTIN-14 codes. The first valid 8–14 digit result stops the camera, optionally vibrates the device, and automatically starts product lookup. Duplicate frame results are ignored.
 
-On mobile, the visible camera panel is 170 CSS pixels high: the 130-pixel barcode target remains centered with approximately 20 pixels of camera preview above and below it. Its width continues to fill the available Scan content width.
+On mobile, the visible camera panel is 170 CSS pixels high: the 130-pixel barcode target remains centered with approximately 20 pixels of camera preview above and below it. The app calculates a cover-sized video rectangle from the live camera dimensions so iOS fills the entire available Scan content width without stretching the image or leaving intrinsic-size side gaps.
 
 Camera tracks are stopped when the scanner is left, hidden, reset, or replaced by a product result. `Scan another product` starts a fresh decoding session. Permission, browser-support, decoder, or secure-context failures show a retry action while numeric manual entry remains available.
 

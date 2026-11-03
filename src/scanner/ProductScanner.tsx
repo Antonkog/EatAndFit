@@ -54,6 +54,17 @@ export function ProductScanner({ initialDate, onAdded, onUseInRecipe }: {
   const [meal, setMeal] = useState<MealType>('dinner');
   const [amount, setAmount] = useState(100);
 
+  const syncCameraGeometry = useCallback(() => {
+    const video = videoRef.current;
+    const frame = video?.parentElement;
+    if (!video || !frame || !video.videoWidth || !video.videoHeight) return;
+    const frameWidth = Math.max(1, frame.clientWidth);
+    const frameHeight = Math.max(1, frame.clientHeight);
+    const coverScale = Math.max(frameWidth / video.videoWidth, frameHeight / video.videoHeight);
+    video.style.width = `${Math.ceil(video.videoWidth * coverScale)}px`;
+    video.style.height = `${Math.ceil(video.videoHeight * coverScale)}px`;
+  }, []);
+
   const stopCamera = useCallback(() => {
     scannerControls.current?.stop();
     scannerControls.current = undefined;
@@ -134,6 +145,28 @@ export function ProductScanner({ initialDate, onAdded, onUseInRecipe }: {
     document.addEventListener('visibilitychange', handleVisibility);
     return () => document.removeEventListener('visibilitychange', handleVisibility);
   }, [stopCamera]);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || product) return;
+    const sync = () => syncCameraGeometry();
+    const resizeObserver = typeof ResizeObserver === 'undefined' ? undefined : new ResizeObserver(sync);
+    video.addEventListener('loadedmetadata', sync);
+    video.addEventListener('playing', sync);
+    video.addEventListener('resize', sync);
+    window.addEventListener('orientationchange', sync);
+    window.visualViewport?.addEventListener('resize', sync);
+    if (video.parentElement) resizeObserver?.observe(video.parentElement);
+    sync();
+    return () => {
+      video.removeEventListener('loadedmetadata', sync);
+      video.removeEventListener('playing', sync);
+      video.removeEventListener('resize', sync);
+      window.removeEventListener('orientationchange', sync);
+      window.visualViewport?.removeEventListener('resize', sync);
+      resizeObserver?.disconnect();
+    };
+  }, [cameraKey, product, syncCameraGeometry]);
 
   const updateProduct = (key: keyof Product, value: string | number) => setProduct((item) => item ? { ...item, [key]: value } : item);
   const calculated = product ? {

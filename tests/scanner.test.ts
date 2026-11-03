@@ -23,6 +23,23 @@ test('product scanner decodes supported formats once, auto-lookups, retries, and
 
 test('mobile barcode camera stays close to the scan target height', () => {
   const styles = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
+  const productScanner = readFileSync(new URL('../src/scanner/ProductScanner.tsx', import.meta.url), 'utf8');
   assert.match(styles, /@media \(max-width: 800px\)[\s\S]*?\.camera-frame \{ height: 170px; min-height: 170px; \}/);
   assert.match(styles, /\.camera-frame > span[^}]+height: 130px/);
+  assert.match(styles, /\.camera-frame video[^}]+position: absolute[^}]+object-fit: fill[^}]+translate\(-50%,-50%\)/);
+  assert.match(productScanner, /const coverScale = Math\.max\(frameWidth \/ video\.videoWidth, frameHeight \/ video\.videoHeight\)/);
+  assert.match(productScanner, /visualViewport\?\.addEventListener\('resize'/);
+});
+
+test('ingredient recognition uses the button for progress and keeps only useful status messages', () => {
+  const source = readFileSync(new URL('../src/scanner/ScanView.tsx', import.meta.url), 'utf8');
+  assert.match(source, /scanning \? 'Recognizing…' : 'Recognize ingredients'/);
+  assert.doesNotMatch(source, /setStatus\('Recognizing ingredients…'\)/);
+  assert.doesNotMatch(source, /setStatus\(result\.data\.length \? 'Review every ingredient/);
+  assert.match(source, /AI Recipe Generation/);
+});
+
+test('generated recipe calendar action has spacing below its schedule fields', () => {
+  const styles = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
+  assert.match(styles, /\.save-food-panel \.primary-button \{ width: 100%; margin-top: 8px; \}/);
 });

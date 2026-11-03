@@ -129,7 +129,7 @@ function IngredientScannerPanel({
   const scan = async () => {
     if (!file) return;
     setScanning(true);
-    setStatus('Recognizing ingredients…');
+    setStatus('');
     try {
       const recognition = await getRecognitionCredential();
       if (!recognition) throw new Error(`Add a ${ENABLED_AI_PROVIDER_LABEL} API key in Settings first.`);
@@ -152,7 +152,7 @@ function IngredientScannerPanel({
       if (result.state === 'failure') throw new Error(result.error.message);
       if (result.state !== 'success') return;
       setIngredients(result.data);
-      setStatus(result.data.length ? 'Review every ingredient before continuing.' : 'No ingredients were recognized. Try another photo.');
+      setStatus(result.data.length ? '' : 'No ingredients were recognized. Try another photo.');
     } catch (value) {
       // Provider-request failures were already logged by runLoggedAiOperation.
       if ((value as Error)?.message?.includes('API key in Settings')) recordAiFailure('AI ingredient recognition setup', value);
@@ -189,7 +189,7 @@ function IngredientScannerPanel({
       <p className="scanner-provider">Using {credential.provider}. Review every recognized item before searching recipes.</p>
       <footer className="ingredient-actions">
         {onConfirm && <button className="primary-button" disabled={!merged.length} onClick={() => onConfirm(merged)}><Plus size={17} /> Use ingredients</button>}
-        {onOpenAi && <button className="primary-button" disabled={!merged.length} onClick={() => onOpenAi(merged)}><Sparkles size={17} /> Generate AI recipe</button>}
+        {onOpenAi && <button className="primary-button" disabled={!merged.length} onClick={() => onOpenAi(merged)}><Sparkles size={17} /> AI Recipe Generation</button>}
         {onChooseRecipes && <button className="text-button" disabled={!merged.length} onClick={() => onChooseRecipes(merged)}><Search size={17} /> Find matching recipes</button>}
       </footer>
     </section>
