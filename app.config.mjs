@@ -6,8 +6,10 @@ function booleanSetting(value, fallback) {
 export function resolveAppConfiguration(environment = {}, requestedEdition = environment.APP_EDITION) {
   const edition = String(requestedEdition).trim().toLowerCase() === 'byok' ? 'byok' : 'core';
   const byokAi = edition === 'byok';
+  const requestedCredentialMode = String(environment.AI_CREDENTIAL_MODE ?? 'hybrid').trim().toLowerCase();
+  const credentialMode = byokAi && ['byok', 'server', 'hybrid'].includes(requestedCredentialMode) ? requestedCredentialMode : byokAi ? 'hybrid' : 'none';
   const metaApi = byokAi && booleanSetting(environment.META_API_ENABLED, true);
-  const geminiApi = byokAi && booleanSetting(environment.GEMINI_API_ENABLED, false);
+  const geminiApi = byokAi && credentialMode !== 'server' && booleanSetting(environment.GEMINI_API_ENABLED, false);
   const firebaseAnalytics = Boolean(
     environment.VITE_FIREBASE_API_KEY &&
     environment.VITE_FIREBASE_PROJECT_ID &&
@@ -21,12 +23,16 @@ export function resolveAppConfiguration(environment = {}, requestedEdition = env
       meta: metaApi,
       gemini: geminiApi,
     }),
+    credentials: Object.freeze({
+      mode: credentialMode,
+      keySetup: credentialMode === 'byok' || credentialMode === 'hybrid',
+    }),
     movement: Object.freeze({
       geminiModel: String(environment.GEMINI_MOVEMENT_MODEL ?? '').trim(),
     }),
     features: Object.freeze({
       byokAi,
-      recipePhotoGeneration: (metaApi || geminiApi) && booleanSetting(environment.RECIPE_PHOTO_GENERATION_ENABLED, false),
+      recipePhotoGeneration: credentialMode === 'byok' && (metaApi || geminiApi) && booleanSetting(environment.RECIPE_PHOTO_GENERATION_ENABLED, false),
       firebaseAnalytics,
     }),
   });

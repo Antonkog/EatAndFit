@@ -1,11 +1,13 @@
-import { GEMINI_API_ENABLED, META_API_ENABLED } from '../config/appConfig';
+import { AI_KEY_SETUP_ENABLED, GEMINI_API_ENABLED, HYBRID_AI_CREDENTIALS, META_API_ENABLED, SERVER_MANAGED_AI } from '../config/appConfig';
 
 export type RecognitionProvider = 'META' | 'GEMINI';
-export type RecognitionCredential = { provider: RecognitionProvider; apiKey: string };
+export type RecognitionCredential = { provider: RecognitionProvider; apiKey: string; source: 'device' | 'server' };
 export type RecognitionKeyStatus = {
   activeProvider: RecognitionProvider;
   metaConfigured: boolean;
   geminiConfigured: boolean;
+  metaDeviceConfigured: boolean;
+  geminiDeviceConfigured: boolean;
 };
 
 type StoredKey = { id: 'device-key'; key: CryptoKey };
@@ -73,18 +75,26 @@ async function records() {
 }
 
 export async function getRecognitionKeyStatus(): Promise<RecognitionKeyStatus> {
+  if (SERVER_MANAGED_AI && !HYBRID_AI_CREDENTIALS) {
+    return { activeProvider: 'META', metaConfigured: META_API_ENABLED, geminiConfigured: false, metaDeviceConfigured: false, geminiDeviceConfigured: false };
+  }
   const { secrets, preference } = await records();
   const providers = new Set(secrets.map((secret) => secret.provider).filter(recognitionProviderEnabled));
-  const fallback = providers.has('META') ? 'META' : providers.has('GEMINI') ? 'GEMINI' : META_API_ENABLED ? 'META' : 'GEMINI';
-  const activeProvider = preference?.value && providers.has(preference.value) ? preference.value : fallback;
+  const sharedMeta = HYBRID_AI_CREDENTIALS && META_API_ENABLED;
+  const available = (provider: RecognitionProvider) => providers.has(provider) || (provider === 'META' && sharedMeta);
+  const fallback = sharedMeta || providers.has('META') ? 'META' : 'GEMINI';
+  const activeProvider = preference?.value && available(preference.value) ? preference.value : fallback;
   return {
     activeProvider,
-    metaConfigured: providers.has('META'),
+    metaConfigured: providers.has('META') || sharedMeta,
     geminiConfigured: providers.has('GEMINI'),
+    metaDeviceConfigured: providers.has('META'),
+    geminiDeviceConfigured: providers.has('GEMINI'),
   };
 }
 
 export async function saveRecognitionKey(provider: RecognitionProvider, value: string) {
+  if (!AI_KEY_SETUP_ENABLED) throw new Error('API credentials are managed by the Eat & Fit server in this build.');
   if (!recognitionProviderEnabled(provider)) throw new Error('This AI provider is disabled in the application configuration.');
   const apiKey = value.trim();
   if (!apiKey) throw new Error('Enter an API key before saving.');
@@ -107,6 +117,7 @@ export async function saveRecognitionKey(provider: RecognitionProvider, value: s
 }
 
 export async function removeRecognitionKey(provider: RecognitionProvider) {
+  if (!AI_KEY_SETUP_ENABLED) throw new Error('API credentials are managed by the Eat & Fit server in this build.');
   const database = await openDatabase();
   await requestResult(database.transaction('secrets', 'readwrite').objectStore('secrets').delete(provider));
   database.close();
@@ -118,6 +129,7 @@ export async function removeRecognitionKey(provider: RecognitionProvider) {
 }
 
 export async function setActiveRecognitionProvider(provider: RecognitionProvider) {
+  if (!AI_KEY_SETUP_ENABLED) throw new Error('The AI provider is managed by the Eat & Fit server in this build.');
   if (!recognitionProviderEnabled(provider)) throw new Error('This AI provider is disabled in the application configuration.');
   const status = await getRecognitionKeyStatus();
   const configured = provider === 'META' ? status.metaConfigured : status.geminiConfigured;
@@ -129,26 +141,32 @@ export async function setActiveRecognitionProvider(provider: RecognitionProvider
 }
 
 export async function getRecognitionCredential(): Promise<RecognitionCredential | undefined> {
+  if (SERVER_MANAGED_AI && !HYBRID_AI_CREDENTIALS) return META_API_ENABLED ? { provider: 'META', apiKey: '', source: 'server' } : undefined;
   const status = await getRecognitionKeyStatus();
   const configured = status.activeProvider === 'META' ? status.metaConfigured : status.geminiConfigured;
   if (!configured) return undefined;
   const database = await openDatabase();
   try {
     const secret = await requestResult(database.transaction('secrets').objectStore('secrets').get(status.activeProvider)) as StoredSecret | undefined;
-    if (!secret) return undefined;
-    return { provider: status.activeProvider, apiKey: await decryptSecret(secret, await deviceKey(database)) };
+    if (!secret) return HYBRID_AI_CREDENTIALS && status.activeProvider === 'META' && META_API_ENABLED
+      ? { provider: 'META', apiKey: '', source: 'server' }
+      : undefined;
+    return { provider: status.activeProvider, apiKey: await decryptSecret(secret, await deviceKey(database)), source: 'device' };
   } finally {
     database.close();
   }
 }
 
 export async function getRecognitionCredentialForProvider(provider: RecognitionProvider): Promise<RecognitionCredential | undefined> {
+  if (SERVER_MANAGED_AI && !HYBRID_AI_CREDENTIALS) return provider === 'META' && META_API_ENABLED ? { provider: 'META', apiKey: '', source: 'server' } : undefined;
   if (!recognitionProviderEnabled(provider)) return undefined;
   const database = await openDatabase();
   try {
     const secret = await requestResult(database.transaction('secrets').objectStore('secrets').get(provider)) as StoredSecret | undefined;
-    if (!secret) return undefined;
-    return { provider, apiKey: await decryptSecret(secret, await deviceKey(database)) };
+    if (!secret) return HYBRID_AI_CREDENTIALS && provider === 'META' && META_API_ENABLED
+      ? { provider: 'META', apiKey: '', source: 'server' }
+      : undefined;
+    return { provider, apiKey: await decryptSecret(secret, await deviceKey(database)), source: 'device' };
   } finally {
     database.close();
   }

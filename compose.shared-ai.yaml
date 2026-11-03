@@ -1,0 +1,11 @@
+services:
+  api:
+    environment:
+      AI_CREDENTIAL_MODE: hybrid
+      META_API_KEY_FILE: /run/secrets/meta_api_key
+    secrets:
+      - meta_api_key
+
+secrets:
+  meta_api_key:
+    file: ${META_API_KEY_FILE_HOST:-./secrets/meta_api_key}

@@ -4,6 +4,10 @@ declare const __APP_CONFIG__: {
     meta: boolean;
     gemini: boolean;
   };
+  credentials: {
+    mode: 'none' | 'byok' | 'server' | 'hybrid';
+    keySetup: boolean;
+  };
   movement: {
     geminiModel: string;
   };

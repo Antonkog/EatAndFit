@@ -15,7 +15,7 @@ test('guided sessions separate local camera permission from explicit provider re
   assert.match(session, /Enable camera\?/);
   assert.match(session, /Video is not uploaded unless you later choose/);
   assert.match(session, /Send this muted set recording temporarily/);
-  assert.match(session, /directly from this browser to \$\{providerName\}/);
+  assert.match(session, /through Eat & Fit to \$\{providerName\}/);
   assert.match(session, /Analyze with AI/);
   assert.match(session, /MediaPipe counted/);
   assert.match(session, /AI observed/);

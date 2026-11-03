@@ -102,7 +102,7 @@ test('Gemini server provider parses inline image data and maps safety failure', 
 
 test('recipe image API is enabled only for configured BYOK builds', async () => {
   const provider = { generate: async () => ({ imageBase64: Buffer.from('photo').toString('base64'), mimeType: 'image/png', provider: 'GEMINI', model: 'test' }) };
-  const enabled = createApiServer({ edition: 'byok', recipePhotoGenerationEnabled: true, recipeImageProvider: provider });
+  const enabled = createApiServer({ edition: 'byok', credentialMode: 'byok', recipePhotoGenerationEnabled: true, recipeImageProvider: provider });
   await new Promise<void>((resolve) => enabled.listen(0, '127.0.0.1', resolve));
   try {
     const address = enabled.address();
@@ -118,7 +118,7 @@ test('recipe image API is enabled only for configured BYOK builds', async () => 
     await new Promise<void>((resolve, reject) => enabled.close((error) => error ? reject(error) : resolve()));
   }
 
-  const disabled = createApiServer({ edition: 'byok', recipePhotoGenerationEnabled: false, recipeImageProvider: provider });
+  const disabled = createApiServer({ edition: 'byok', credentialMode: 'byok', recipePhotoGenerationEnabled: false, recipeImageProvider: provider });
   await new Promise<void>((resolve) => disabled.listen(0, '127.0.0.1', resolve));
   try {
     const address = disabled.address();

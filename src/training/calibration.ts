@@ -1,4 +1,5 @@
 import { requestMetaChat, throwMetaRequestError } from '../ai/metaChat';
+import { aiApiHeaders, usesDirectMetaTransport } from '../ai/credentialTransport';
 import { estimateExerciseEnergy } from '../energy/estimates';
 import { ENERGY_SOURCE_REGISTRY_VERSION } from '../energy/sources';
 import type { ExerciseCatalog } from '../exercises/types';
@@ -61,7 +62,7 @@ async function requestMetaCalibration(profile: UserProfile, baselines: ReturnTyp
 async function requestGeminiCalibration(profile: UserProfile, baselines: ReturnType<typeof benchmarkBaselines>, credential: RecognitionCredential) {
   const response = await fetch('/api/ai/training/calibrate', {
     method: 'POST',
-    headers: { authorization: `Bearer ${credential.apiKey}`, 'content-type': 'application/json', 'x-recognition-provider': credential.provider },
+    headers: aiApiHeaders(credential),
     body: JSON.stringify({ profile, baselines }),
   });
   const body = await response.json().catch(() => ({}));
@@ -78,7 +79,7 @@ export async function ensureEnergyCalibration(catalog: ExerciseCatalog, profile:
   if (pendingCalibration) return pendingCalibration;
   pendingCalibration = (async () => {
     const baselines = benchmarkBaselines(catalog, profile);
-    const result = credential.provider === 'META'
+    const result = usesDirectMetaTransport(credential)
       ? await requestMetaCalibration(profile, baselines, credential.apiKey)
       : await requestGeminiCalibration(profile, baselines, credential);
     const factor = calibrationFactor(baselines, result.corrections);

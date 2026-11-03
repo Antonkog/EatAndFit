@@ -863,7 +863,7 @@ export function ExerciseSession({
   const runMetaAnalysis = async () => {
     if (!recording || !aiProvider) return;
     const providerName = aiProvider === 'META' ? 'Meta' : 'Gemini';
-    if (!window.confirm(`Send this muted set recording temporarily to Eat & Fit for video preparation, then directly from this browser to ${providerName}? The provider will track the athlete, review the repetition count, and return one coaching observation. All temporary files are deleted after processing.`)) return;
+    if (!window.confirm(`Send this muted set recording temporarily through Eat & Fit to ${providerName}? The provider will track the athlete, review the repetition count, and return one coaching observation. All temporary files are deleted after processing.`)) return;
     setAnalyzing(true);
     setAnalysisError('');
     setAnalysisStage('preparing');

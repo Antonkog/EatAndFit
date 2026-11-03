@@ -1,4 +1,5 @@
 import { requestMetaChat, throwMetaRequestError } from '../ai/metaChat';
+import { aiApiHeaders, usesDirectMetaTransport } from '../ai/credentialTransport';
 import type { ExerciseCatalog } from '../exercises/types';
 import type { TrainingGoal, UserProfile } from '../profile/userProfile';
 import type { RecognitionCredential } from '../settings/secureKeys';
@@ -24,7 +25,7 @@ function prompt(value: ReturnType<typeof requestBody>) {
 export async function generateTrainingPlan(profile: UserProfile, goal: TrainingGoal, catalog: ExerciseCatalog, credential: RecognitionCredential) {
   const body = requestBody(profile, goal, catalog);
   let generated: unknown;
-  if (credential.provider === 'META') {
+  if (usesDirectMetaTransport(credential)) {
     const result = await requestMetaChat(credential.apiKey, {
       temperature: 0.35,
       messages: [
@@ -39,7 +40,7 @@ export async function generateTrainingPlan(profile: UserProfile, goal: TrainingG
   } else {
     const response = await fetch('/api/ai/training/generate', {
       method: 'POST',
-      headers: { authorization: `Bearer ${credential.apiKey}`, 'content-type': 'application/json', 'x-recognition-provider': credential.provider },
+      headers: aiApiHeaders(credential),
       body: JSON.stringify(body),
     });
     const responseBody = await response.json().catch(() => ({}));

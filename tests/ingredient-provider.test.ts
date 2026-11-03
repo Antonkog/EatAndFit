@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { createApiServer } from '../server/api.mjs';
+import { createAiCredentialResolver } from '../server/ai-credentials.mjs';
 import {
   createIngredientRecognitionProvider,
   detectIngredients,
@@ -14,6 +15,12 @@ import {
 
 const JPEG_BASE64 = '/9j/2Q==';
 const JPEG_DATA_URL = `data:image/jpeg;base64,${JPEG_BASE64}`;
+
+test('hybrid credentials prefer a supplied personal key and otherwise use the shared Meta secret', () => {
+  const resolve = createAiCredentialResolver({ mode: 'hybrid', enabledProviders: ['meta'], sharedMetaApiKey: 'shared-secret' });
+  assert.deepEqual(resolve({ headers: {} }), { provider: 'META', apiKey: 'shared-secret' });
+  assert.deepEqual(resolve({ headers: { authorization: 'Bearer personal-key', 'x-recognition-provider': 'META' } }), { provider: 'META', apiKey: 'personal-key' });
+});
 
 function errorStatus(status: number, code?: string) {
   return (error: unknown) => error instanceof IngredientRecognitionError && error.status === status && (!code || error.code === code);
@@ -148,7 +155,7 @@ test('ingredient HTTP contract reports health, accepts Base64 capacity, and maps
     getHealth: () => ({ provider: 'meta', model: 'muse-spark-1.3', configured: true }),
     detect: async (image: string) => { received = image; return ['Tomato']; },
   };
-  const server = createApiServer({ edition: 'byok', ingredientProvider: provider });
+  const server = createApiServer({ edition: 'byok', credentialMode: 'byok', ingredientProvider: provider });
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
   const address = server.address();
   assert.ok(address && typeof address === 'object');
@@ -198,6 +205,7 @@ test('ingredient HTTP contract reports health, accepts Base64 capacity, and maps
 
   const limitedServer = createApiServer({
     edition: 'byok',
+    credentialMode: 'byok',
     ingredientProvider: {
       getHealth: provider.getHealth,
       detect: async () => { throw new IngredientRecognitionError('Meta rate limit reached.', 429, 'rate_limited'); },
@@ -218,7 +226,7 @@ test('ingredient HTTP contract reports health, accepts Base64 capacity, and maps
     await new Promise<void>((resolve, reject) => limitedServer.close((error) => error ? reject(error) : resolve()));
   }
 
-  const byokServer = createApiServer({ edition: 'byok' });
+  const byokServer = createApiServer({ edition: 'byok', credentialMode: 'byok' });
   await new Promise<void>((resolve) => byokServer.listen(0, '127.0.0.1', resolve));
   const byokAddress = byokServer.address();
   assert.ok(byokAddress && typeof byokAddress === 'object');
@@ -229,7 +237,7 @@ test('ingredient HTTP contract reports health, accepts Base64 capacity, and maps
       body: JSON.stringify({ image: JPEG_DATA_URL }),
     });
     assert.equal(missingKey.status, 401);
-    assert.deepEqual(await missingKey.json(), { error: 'Add an API key in Settings before using Smart Scan.' });
+    assert.deepEqual(await missingKey.json(), { error: 'Add an API key in Settings before using AI features.' });
 
     const invalidProvider = await fetch(`http://127.0.0.1:${byokAddress.port}/api/ai/ingredients/detect`, {
       method: 'POST',
@@ -252,12 +260,44 @@ test('BYOK settings show concise key security text and only configured recogniti
   assert.match(source, /Legal, data sources &amp; safety/);
 });
 
+test('shared Meta mode needs no browser credential and reports only server availability', async () => {
+  const server = createApiServer({
+    edition: 'byok',
+    credentialMode: 'server',
+    sharedMetaApiKey: 'server-only-test-secret',
+    ingredientProvider: { detect: async () => ['Onion'] },
+  });
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  try {
+    const address = server.address();
+    assert.ok(address && typeof address === 'object');
+    const base = `http://127.0.0.1:${address.port}`;
+    assert.deepEqual(await fetch(`${base}/api/ai/ingredients/healthz`).then((response) => response.json()), {
+      ok: true,
+      keySource: 'server-secret',
+      configured: true,
+      supportedProviders: ['meta'],
+    });
+    const response = await fetch(`${base}/api/ai/ingredients/detect`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ image: JPEG_DATA_URL }),
+    });
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), { ingredients: ['Onion'] });
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+  }
+});
+
 test('smart scanner sends the selected device key only with a cloud request', () => {
   const source = readFileSync(new URL('../src/scanner/ScanView.tsx', import.meta.url), 'utf8');
+  const transport = readFileSync(new URL('../src/ai/credentialTransport.ts', import.meta.url), 'utf8');
   const coreSource = readFileSync(new URL('../src/scanner/CoreScanView.tsx', import.meta.url), 'utf8');
   assert.match(source, /fetch\('\/api\/ai\/ingredients\/detect'/);
-  assert.match(source, /authorization: `Bearer \$\{recognition\.apiKey\}`/);
-  assert.match(source, /x-recognition-provider/);
+  assert.match(source, /aiApiHeaders\(recognition\)/);
+  assert.match(transport, /authorization: `Bearer \$\{credential\.apiKey\}`/);
+  assert.match(transport, /x-recognition-provider/);
   assert.doesNotMatch(source, /Recognition mode|recognitionMode|On-device|YOLOE/);
   assert.match(source, /title="Photo"/);
   assert.match(source, /title="Barcode"/);

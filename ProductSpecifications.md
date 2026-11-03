@@ -18,7 +18,7 @@ Every feature addition, behavior change, data-model change, provider change, cal
 
 Eat & Fit combines exercise planning, workout history, food logging, recipe discovery, nutrition reference data, calorie-balance tracking, barcode lookup, and optional user-funded AI tools in one local-first application.
 
-The product has no user accounts and no cloud synchronization. Personal profile information, workout history, food history, saved products, AI-provider preferences, and encrypted provider keys stay in the current browser unless a user explicitly sends content to an external provider or exports a history backup.
+The product has no user accounts and no cloud synchronization. Personal profile information, workout history, food history, and saved products stay in the current browser unless a user explicitly sends content to an external provider or exports a history backup. Optional BYOK provider preferences and encrypted keys also stay in that browser. The hackathon deployment instead keeps its shared Meta credential only on the server.
 
 The application is educational. Exercise-energy and nutrition values are estimates and are not medical advice.
 
@@ -34,16 +34,16 @@ Eat & Fit is built in two free editions.
 | DataHive recipe catalog | Yes | Yes |
 | USDA nutrition checks | Yes | Yes |
 | Barcode and packaged-product lookup | Yes | Yes |
-| Photo ingredient recognition | Hidden | Available after a verified key is saved |
-| AI recipe generation | Hidden | Available after a verified key is saved |
+| Photo ingredient recognition | Hidden | Available through the configured Meta service |
+| AI recipe generation | Hidden | Available through the configured Meta service |
 | AI recipe illustrations | Hidden | Bundled category illustrations with a standard fallback |
-| Adult AI energy calibration | No | Automatic when an eligible profile and key exist |
-| Personalized two-week training | Hidden | Available to eligible adults after a verified key is saved |
+| Adult AI energy calibration | No | Automatic for an eligible profile when Meta is available |
+| Personalized two-week training | Hidden | Available to eligible adults when Meta is available |
 | Local camera-guided exercise sessions | Yes | Yes |
-| Post-set SAM/Muse movement coaching | Hidden | Available to adults with a verified Meta key and separate per-set consent |
-| Provider-key settings | Hidden | Yes |
+| Post-set SAM/Muse movement coaching | Hidden | Available to adults through Meta with separate per-set consent |
+| Provider-key settings | Hidden | Optional personal-key override in hybrid mode |
 
-The shared application configuration resolves `APP_EDITION=core` or `APP_EDITION=byok` and all feature availability used by the browser and API. `META_API_ENABLED` defaults to true, `GEMINI_API_ENABLED` defaults to false, and disabled providers are hidden and rejected by the browser and API. `RECIPE_PHOTO_GENERATION_ENABLED` defaults to false in every edition and is always false for Core. Generated recipes use bundled category illustrations selected from the requested dish or meal type and then from the generated title, description, and ingredients. Available categories are breakfast, soup, salad, sandwich/wrap, meat, fish/seafood, vegetarian/vegan, pasta/noodles, rice/grain/bowl, side dish, dessert, snack, and drinks. If the app cannot select a category confidently, it keeps the standard utensils placeholder. Firebase Analytics availability is derived from its public configuration rather than treated as a user-facing switch. The Core API does not expose AI routes. The application never stores a model API key in source control, `.env`, Docker configuration, or server environment variables.
+The shared application configuration resolves `APP_EDITION=core` or `APP_EDITION=byok` and all feature availability used by the browser and API. `AI_CREDENTIAL_MODE=hybrid` is the hackathon default: Meta works through a read-only server secret, while Settings retains an optional personal-key override. A saved personal key takes precedence for that browser; removing it returns to the shared service. A failed personal-key request is shown to the user and never silently retried with the application author’s credential. The server Meta credential is never compiled into JavaScript, returned by an API, placed in browser storage, written to logs, or exposed through Docker environment variables. `AI_CREDENTIAL_MODE=server` hides personal-key setup, while `AI_CREDENTIAL_MODE=byok` disables the shared credential and uses only device keys. `META_API_ENABLED` defaults to true and `GEMINI_API_ENABLED` defaults to false. `RECIPE_PHOTO_GENERATION_ENABLED` defaults to false in every edition and is always false for Core. Generated recipes use bundled category illustrations selected from the requested dish or meal type and then from the generated title, description, and ingredients. Available categories are breakfast, soup, salad, sandwich/wrap, meat, fish/seafood, vegetarian/vegan, pasta/noodles, rice/grain/bowl, side dish, dessert, snack, and drinks. If the app cannot select a category confidently, it keeps the standard utensils placeholder. Firebase Analytics availability is derived from its public configuration rather than treated as a user-facing switch. The Core API does not expose AI routes. The application never stores a model API key in source control, `.env`, Docker configuration, or the web image.
 
 ## 3. Navigation and global behavior
 
@@ -191,7 +191,7 @@ On first load after this rule was introduced, incomplete legacy workouts without
 
 `Personalized training program` is visible only in the BYOK edition when all of the following are true:
 
-- The active AI provider has a saved, previously verified key.
+- The configured Meta service is available, or BYOK mode has a saved, previously verified key.
 - The profile is complete.
 - Age is 19 or older.
 
@@ -254,7 +254,7 @@ Pressing a workout's exercise summary opens the existing full exercise detail vi
 
 ### 8.3 Camera-guided exercise sessions
 
-An incomplete workout scheduled for the current day displays `Start exercise`. The first release has versioned camera profiles for Barbell Back Squat, Dumbbell Deadlift, Barbell Bench Press, Pull-Up / Chin-Up, Military Press, bodyweight Squat, Push-Up, and Jumping Jack. Other exercises immediately use the complete-set timer when no enabled verified AI key exists. With an enabled verified key, they offer `Record set with AI` and `Use timer instead`.
+An incomplete workout scheduled for the current day displays `Start exercise`. The first release has versioned camera profiles for Barbell Back Squat, Dumbbell Deadlift, Barbell Bench Press, Pull-Up / Chin-Up, Military Press, bodyweight Squat, Push-Up, and Jumping Jack. Other exercises immediately use the complete-set timer when no enabled AI service exists. With the shared Meta service or an enabled verified BYOK key, they offer `Record set with AI` and `Use timer instead`.
 
 After explicit camera permission, Eat & Fit defaults to the front-facing selfie camera at approximately 1280 × 720. The setup overlay offers a rear-camera switch only when the browser reports multiple video inputs. For either choice, the app requests the exact facing mode first and falls back to a preferred facing mode when a browser cannot satisfy the exact constraint. It does not request wide-angle, zoom, or a particular rear lens. The selfie preview uses familiar mirrored orientation; the rear preview is not mirrored. The skeleton always uses the same transform as its video. A self-hosted MediaPipe Pose Landmarker normally runs in a dedicated browser worker at approximately 10–12 analyzed frames per second. Initialization tries GPU and then CPU. If worker transport remains unavailable or stops responding, the app starts a main-thread compatibility mode using the same pinned local model. Camera frames use `requestVideoFrameCallback` when available, with animation-frame scheduling and a canvas extraction fallback for browsers that cannot create an image bitmap directly from the video.
 
@@ -452,7 +452,7 @@ After at least one ingredient is matched, all chosen ingredients are calculated 
 
 ## 13. AI recipe generation
 
-AI Recipes is available only in the BYOK edition with an active saved key. It can be opened from Recipes or from recognized ingredients on Scan.
+AI Recipes is available in the AI edition when the shared Meta service or an active BYOK credential is available. It can be opened from Recipes or from recognized ingredients on Scan.
 
 ### 13.1 Inputs
 
@@ -484,7 +484,7 @@ The dormant compatibility implementation retains the existing provider and local
 
 ### 14.1 Photo ingredient recognition
 
-Photo recognition is cloud-only and exists only in the BYOK edition after the active provider has a saved key. There is no on-device recognition mode and no UI switch for one.
+Photo recognition is cloud-only and exists only in the AI edition when the shared Meta service or an active BYOK credential is available. There is no on-device recognition mode and no UI switch for one.
 
 The user can take a photo or choose one from the device. Before submission, the browser:
 
@@ -518,7 +518,7 @@ The implementation contains exactly two provider adapters:
 - Meta, using Muse Spark 1.3 (`muse-spark-1.3-contributor`, with `muse-spark-1.3` tried when the contributor model is reported missing).
 - Google Gemini, using `gemini-3.1-flash-lite` by default.
 
-Build configuration decides which adapters are available. The default BYOK build enables Meta and disables Gemini, so Settings shows only Meta and the server advertises only Meta. Enabling `GEMINI_API_ENABLED=true` restores the Gemini key field and provider selection without changing the adapters. A disabled provider's previously encrypted key is left on the device but is ignored until that provider is enabled again.
+Build configuration decides which adapters are available. The default hackathon build enables Meta in hybrid mode and disables Gemini. Settings therefore shows an optional Meta personal-key override while the shared service remains the no-setup default. Enabling `GEMINI_API_ENABLED=true` in hybrid or BYOK mode restores the Gemini key field and provider selection without changing the adapters. A disabled provider's previously encrypted key is left on the device but is ignored until that provider is enabled again.
 
 Recipe-photo provider code is dormant and disabled in current builds. It does not affect the provider selected for the active text, scanner, training, or movement features.
 
@@ -526,22 +526,26 @@ The selected provider is shared by ingredient recognition, AI recipes, adult cal
 
 There is no automatic cross-provider fallback.
 
-### 15.2 Key verification and storage
+### 15.2 Credential isolation and optional BYOK storage
 
-Before a key is saved, the app performs one small provider request. Success displays `API key set`; authentication failure displays `Wrong API key`. A newly saved key becomes the active provider. When multiple providers are enabled, a user can save their keys, select either configured provider, replace a key, or remove it.
+In the shared and hybrid hackathon deployment modes, the Meta key is stored only in a Docker-mounted server secret. The API entrypoint copies it into container tmpfs with node-only permissions and then drops permanently to the unprivileged `node` user; the key is not placed in the process environment. The browser receives only provider availability and uses restricted same-origin endpoints unless it has a personal override. Ingredient, recipe, training, calibration, file-upload, SAM, Muse, and cleanup requests are made by the API with the server-held credential only when no personal key is active. The restricted Meta proxy permits only the Files API operations needed for temporary movement clips and the `sam-3.1` and `muse-spark-1.3` response models. It never returns the credential.
+
+The following device-key behavior applies only when `AI_CREDENTIAL_MODE=byok`:
+
+In optional BYOK mode, before a key is saved, the app performs one small provider request. Success displays `API key set`; authentication failure displays `Wrong API key`. A newly saved key becomes the active provider. When multiple providers are enabled, a user can save their keys, select either configured provider, replace a key, or remove it.
 
 Keys are encrypted with AES-GCM using a non-exportable, device-local 256-bit key. The encryption key and encrypted secrets are stored in the separate `eat-and-fit-secure-settings` IndexedDB database. Initialization vectors are random 12-byte values. Keys are not included in backups or analytics.
 
-Meta ingredient, recipe, training, and calibration requests are made directly from the browser. Gemini AI requests are sent through the same-origin Eat & Fit API, which forwards the supplied key for that request. Key verification is also performed through the API. The application server does not persist request keys or submitted content.
+Meta ingredient, recipe, training, and calibration requests are made directly from the browser only in BYOK mode. Gemini AI requests are sent through the same-origin Eat & Fit API, which forwards the supplied key for that request. Key verification is also performed through the API. The application server does not persist BYOK request keys or submitted content.
 
-Removing or switching a key updates AI-dependent UI immediately. If no active key exists, Smart Scan defaults to barcode-only behavior and AI controls are hidden or direct the user to Settings.
+Removing or switching a personal key updates AI-dependent UI immediately. In hybrid mode, removal returns to shared Meta. In BYOK mode, absence of an active credential makes Smart Scan default to barcode-only behavior and hides or redirects AI controls.
 
 ## 16. Settings
 
 Settings contains:
 
 - Personal profile editing.
-- BYOK-only key fields for providers enabled by application configuration, saved status, removal, and active-provider selection when more than one provider is enabled.
+- An optional personal Meta-key override in hybrid mode; BYOK mode requires a personal key and server-only mode hides key controls.
 - BYOK-only AI diagnostics with `Download log.txt` and log clearing.
 - JSON history export.
 - JSON history import.
@@ -610,10 +614,11 @@ Import validates the top-level schema version and array presence, clears the exi
 | POST | `/api/ai/recipes/image` | Server-side recipe-image path used by Gemini when enabled |
 | POST | `/api/ai/training/generate` | Server-side training path used by Gemini |
 | POST | `/api/ai/training/calibrate` | Server-side calibration path used by Gemini |
-| POST | `/api/ai/movement/prepare` | Temporarily normalize a consented movement recording to muted MP4; no Meta key is sent to Eat & Fit |
+| POST | `/api/ai/movement/prepare` | Temporarily normalize a consented movement recording to muted MP4 |
+| POST/DELETE | `/api/ai/meta/*` | Restricted shared-server transport for temporary Meta files, SAM 3.1, Muse Spark 1.3, and cleanup |
 | POST | `/api/ai/keys/verify` | One-request credential verification; Meta validates authentication through its model-list endpoint without requiring a region-specific inference model |
 
-AI requests authenticate with the user-supplied key in a Bearer header and select the provider with `x-recognition-provider`. The API accepts only providers enabled by the centralized configuration. Movement review is the exception: Eat & Fit receives only the video-preparation request, while the browser sends the key and prepared clip directly to Meta. Provider timeouts, authentication, billing, authorization, missing-model, rate-limit, content-policy, and invalid-response conditions are converted into user-readable errors.
+In hybrid mode, AI requests use a saved personal credential when one exists; otherwise they use the server-mounted Meta secret and the browser sends no provider credential. In BYOK mode, requests authenticate with the user-supplied key in a Bearer header and select the provider with `x-recognition-provider`. There is no automatic fallback from a failing personal request to the shared key. The API accepts only providers enabled by the centralized configuration. Provider timeouts, authentication, billing, authorization, missing-model, rate-limit, content-policy, and invalid-response conditions are converted into user-readable errors.
 
 Browser AI operations use a shared `NetworkResult<T>` state contract with loading, success, and structured `AppError` failure variants. The bounded diagnostics log records successful and failed recipe generation, photo generation/storage, ingredient recognition, training generation/calibration, key verification, and Meta exercise review. Each event begins with an ISO timestamp followed by safe metadata on subsequent lines. Failures include the provider/model, HTTP status when available, and a sanitized, length-bounded raw error response to support troubleshooting. API keys, prompts, recipe text, ingredients, photos, videos, and successful image payloads are never logged.
 

@@ -11,21 +11,26 @@ test('application configuration centralizes edition and recipe photo switches', 
   assert.equal(byok.features.byokAi, true);
   assert.equal(byok.features.recipePhotoGeneration, false);
   assert.deepEqual(byok.providers, { meta: true, gemini: false });
+  assert.deepEqual(byok.credentials, { mode: 'hybrid', keySetup: true });
 
-  const bothProviders = resolveAppConfiguration({ META_API_ENABLED: 'true', GEMINI_API_ENABLED: 'true' }, 'byok');
+  const serverOnly = resolveAppConfiguration({ AI_CREDENTIAL_MODE: 'server' }, 'byok');
+  assert.deepEqual(serverOnly.credentials, { mode: 'server', keySetup: false });
+
+  const bothProviders = resolveAppConfiguration({ AI_CREDENTIAL_MODE: 'byok', META_API_ENABLED: 'true', GEMINI_API_ENABLED: 'true' }, 'byok');
   assert.deepEqual(bothProviders.providers, { meta: true, gemini: true });
+  assert.deepEqual(bothProviders.credentials, { mode: 'byok', keySetup: true });
 
   const geminiMovement = resolveAppConfiguration({ GEMINI_MOVEMENT_MODEL: 'gemini-future-video' }, 'byok');
   assert.equal(geminiMovement.movement.geminiModel, 'gemini-future-video');
   assert.equal(byok.movement.geminiModel, '');
 
-  const geminiOnly = resolveAppConfiguration({ META_API_ENABLED: 'false', GEMINI_API_ENABLED: 'true' }, 'byok');
+  const geminiOnly = resolveAppConfiguration({ AI_CREDENTIAL_MODE: 'byok', META_API_ENABLED: 'false', GEMINI_API_ENABLED: 'true' }, 'byok');
   assert.deepEqual(geminiOnly.providers, { meta: false, gemini: true });
 
   const disabled = resolveAppConfiguration({ RECIPE_PHOTO_GENERATION_ENABLED: 'false' }, 'byok');
   assert.equal(disabled.features.recipePhotoGeneration, false);
 
-  const explicitlyEnabled = resolveAppConfiguration({ RECIPE_PHOTO_GENERATION_ENABLED: 'true' }, 'byok');
+  const explicitlyEnabled = resolveAppConfiguration({ AI_CREDENTIAL_MODE: 'byok', RECIPE_PHOTO_GENERATION_ENABLED: 'true' }, 'byok');
   assert.equal(explicitlyEnabled.features.recipePhotoGeneration, true);
 
   const noProvider = resolveAppConfiguration({ META_API_ENABLED: 'false', GEMINI_API_ENABLED: 'false' }, 'byok');

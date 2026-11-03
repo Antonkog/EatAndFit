@@ -1,6 +1,6 @@
 import { ChevronDown, Download, ExternalLink, FileText, KeyRound, Share2, ShieldCheck, Smartphone, Trash2, Upload, UserRound } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
-import { BYOK_AI_ENABLED, ENABLED_AI_PROVIDER_LABEL, GEMINI_API_ENABLED, META_API_ENABLED } from '../config/appConfig';
+import { AI_KEY_SETUP_ENABLED, BYOK_AI_ENABLED, ENABLED_AI_PROVIDER_LABEL, GEMINI_API_ENABLED, META_API_ENABLED, SERVER_MANAGED_AI } from '../config/appConfig';
 import { APP_EDITION_LABEL } from '../config/edition';
 import { clearData, exportBackup, importBackup, isBackup } from '../data/db';
 import { clearDiagnosticLog, downloadDiagnosticLog, recordAiFailure, recordAiSuccess } from '../diagnostics/clientLog';
@@ -28,7 +28,7 @@ export function SettingsView() {
   const [installMessage, setInstallMessage] = useState('');
 
   useEffect(() => {
-    if (!BYOK_AI_ENABLED) return;
+    if (!AI_KEY_SETUP_ENABLED) return;
     const refresh = () => void getRecognitionKeyStatus().then(setKeyStatus).catch(() => setKeyMessage('Secure key storage is unavailable in this browser.'));
     refresh();
     window.addEventListener(RECOGNITION_KEYS_CHANGED, refresh);
@@ -124,17 +124,17 @@ export function SettingsView() {
         )}
         {installMessage && <p className="key-message" role="status">{installMessage}</p>}
       </article>
-      {BYOK_AI_ENABLED && (
+      {AI_KEY_SETUP_ENABLED && (
         <article className="settings-card api-key-settings">
           <h3><KeyRound size={20} /> AI provider keys</h3>
-          <p>Smart Scan, AI recipe generation, adult energy calibration, and personalized training are enabled when a verified {ENABLED_AI_PROVIDER_LABEL} key is saved.{META_API_ENABLED ? ' Adults with a verified Meta key can also choose post-set movement coaching.' : ''} Your provider may charge your account for API requests.</p>
+          <p>{SERVER_MANAGED_AI ? 'Meta AI features are available through Eat & Fit. You can optionally save your own verified key; this browser will then use your key instead of the shared service until you remove it.' : `Smart Scan, AI recipe generation, adult energy calibration, and personalized training are enabled when a verified ${ENABLED_AI_PROVIDER_LABEL} key is saved.`}{META_API_ENABLED ? ' Adults can also choose post-set movement coaching.' : ''}</p>
           <div className="key-security-note">
             <ShieldCheck size={20} />
             <p>Keys are encrypted.</p>
           </div>
           <div className={`provider-key-grid${Number(META_API_ENABLED) + Number(GEMINI_API_ENABLED) === 1 ? ' single' : ''}`}>
-            {META_API_ENABLED && <ProviderKeyField label="Meta API key" configured={Boolean(keyStatus?.metaConfigured)} value={metaKey} onChange={setMetaKey} onSave={() => void saveKey('META')} onRemove={() => void removeKey('META')} />}
-            {GEMINI_API_ENABLED && <ProviderKeyField label="Google Gemini API key" configured={Boolean(keyStatus?.geminiConfigured)} value={geminiKey} onChange={setGeminiKey} onSave={() => void saveKey('GEMINI')} onRemove={() => void removeKey('GEMINI')} />}
+            {META_API_ENABLED && <ProviderKeyField label={SERVER_MANAGED_AI ? 'Personal Meta API key' : 'Meta API key'} configured={Boolean(keyStatus?.metaDeviceConfigured)} value={metaKey} onChange={setMetaKey} onSave={() => void saveKey('META')} onRemove={() => void removeKey('META')} />}
+            {GEMINI_API_ENABLED && <ProviderKeyField label="Google Gemini API key" configured={Boolean(keyStatus?.geminiDeviceConfigured)} value={geminiKey} onChange={setGeminiKey} onSave={() => void saveKey('GEMINI')} onRemove={() => void removeKey('GEMINI')} />}
           </div>
           {META_API_ENABLED && GEMINI_API_ENABLED && <label className="active-provider">AI provider
             <select value={hasAnyKey ? keyStatus?.activeProvider : ''} disabled={!hasAnyKey} onChange={(event) => void selectProvider(event.target.value as RecognitionProvider)}>
@@ -148,7 +148,7 @@ export function SettingsView() {
       )}
       <article className="settings-card">
         <h3>Local data</h3>
-        <p>Your workout and food history stays in this browser unless you export it.{BYOK_AI_ENABLED ? ' API keys are intentionally excluded from backups.' : ''}</p>
+        <p>Your workout and food history stays in this browser unless you export it.{AI_KEY_SETUP_ENABLED ? ' API keys are intentionally excluded from backups.' : ''}</p>
         <div className="settings-actions">
           <button className="text-button" onClick={() => void download()}><Download size={17} /> Export backup</button>
           <button className="text-button" onClick={() => input.current?.click()}><Upload size={17} /> Import backup</button>

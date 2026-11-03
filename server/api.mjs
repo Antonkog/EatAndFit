@@ -14,20 +14,13 @@ import { generateRecipeImage, RecipeImageGenerationError } from './recipe-image-
 import { calibrateTrainingEnergy, generateTrainingPlan, TrainingProviderError, verifyAiCredential } from './training-provider.mjs';
 import { resolveCuisineLocation } from './location-provider.mjs';
 import { MovementAnalysisError, prepareMovementVideoRequest } from './movement-provider.mjs';
+import { createAiCredentialResolver, proxySharedMetaRequest, readServerMetaCredential } from './ai-credentials.mjs';
 
 const port = Number(process.env.API_PORT ?? 3000);
 const host = process.env.API_HOST ?? '0.0.0.0';
 const nutritionPath = process.env.NUTRITION_DB_PATH ?? './data/nutrition.sqlite';
 function json(response, status, payload) { response.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'access-control-allow-origin': 'http://localhost:5173' }); response.end(JSON.stringify(payload)); }
 function readBody(request, maxBytes = 250000){return new Promise((resolve,reject)=>{const chunks=[];let size=0;let rejected=false;request.on('data',(chunk)=>{size+=chunk.length;if(size>maxBytes){if(!rejected){rejected=true;reject(new IngredientRecognitionError('Request body is too large.',413,'request_too_large'))}return}chunks.push(chunk)});request.on('end',()=>{if(rejected)return;try{resolve(JSON.parse(Buffer.concat(chunks).toString('utf8')||'{}'))}catch{reject(new IngredientRecognitionError('Request body must contain valid JSON.',400,'invalid_json'))}});request.on('error',reject)})}
-function recognitionCredentials(request, enabledProviders) {
-  const provider = String(request.headers['x-recognition-provider'] ?? '').trim().toUpperCase();
-  const authorization = String(request.headers.authorization ?? '');
-  const match = authorization.match(/^Bearer\s+(.+)$/i);
-  if (!match?.[1]?.trim()) throw new IngredientRecognitionError('Add an API key in Settings before using Smart Scan.', 401, 'missing_user_key');
-  if (!enabledProviders.includes(provider.toLowerCase())) throw new IngredientRecognitionError('This AI provider is disabled in the application configuration.', 403, 'provider_disabled');
-  return { provider, apiKey: match[1].trim() };
-}
 export function createApiServer({
   edition = process.env.APP_EDITION === 'byok' ? 'byok' : 'core',
   ingredientProvider,
@@ -39,15 +32,21 @@ export function createApiServer({
   trainingProvider,
   locationProvider,
   movementProvider,
+  sharedMetaApiKey,
+  credentialMode,
 } = {}) {
 const appConfiguration = resolveAppConfiguration({
   ...process.env,
   APP_EDITION: edition,
+  ...(credentialMode === undefined ? {} : { AI_CREDENTIAL_MODE: credentialMode }),
   ...(recipePhotoGenerationEnabled === undefined ? {} : { RECIPE_PHOTO_GENERATION_ENABLED: String(recipePhotoGenerationEnabled) }),
 });
 const supportedProviders = Object.entries(appConfiguration.providers).filter(([, enabled]) => enabled).map(([provider]) => provider);
 const smartScannerEnabled = appConfiguration.features.byokAi && supportedProviders.length > 0;
 const recipePhotosEnabled = appConfiguration.features.recipePhotoGeneration;
+const sharedCredentialMode = appConfiguration.credentials.mode === 'server' || appConfiguration.credentials.mode === 'hybrid';
+const sharedMetaKey = sharedCredentialMode ? readServerMetaCredential(sharedMetaApiKey) : '';
+const credentials = createAiCredentialResolver({ mode: appConfiguration.credentials.mode, enabledProviders: supportedProviders, sharedMetaApiKey: sharedMetaKey });
 let recipeCatalog = recipeProvider;
 const getRecipeCatalog = () => recipeCatalog ??= createRecipeProvider();
 let nutritionCatalog = nutritionProvider;
@@ -69,20 +68,24 @@ return createServer(async (request, response) => {
     }
     if (url.pathname === '/api/recipes') return json(response, 200, getRecipeCatalog().search(url.searchParams));
     if (url.pathname.startsWith('/api/recipes/')) return json(response, 200, getRecipeCatalog().getRecipe(decodeURIComponent(url.pathname.slice('/api/recipes/'.length))));
-    if (smartScannerEnabled && url.pathname === '/api/ai/recipes/healthz') return json(response,200,{ok:true,keySource:'user-device',configured:false,supportedProviders});
-    if (smartScannerEnabled && url.pathname === '/api/ai/recipes/generate' && request.method === 'POST') return json(response,200,await generateRecipes(await readBody(request),recipeGenerationProvider,recipeGenerationProvider ? undefined : recognitionCredentials(request,supportedProviders)));
-    if (recipePhotosEnabled && url.pathname === '/api/ai/recipes/image' && request.method === 'POST') return json(response,200,await generateRecipeImage(await readBody(request),recipeImageProvider,recipeImageProvider ? undefined : recognitionCredentials(request,supportedProviders)));
-    if (smartScannerEnabled && url.pathname === '/api/ai/ingredients/healthz') return json(response,200,{ok:true,keySource:'user-device',configured:false,supportedProviders});
-    if (smartScannerEnabled && url.pathname === '/api/ai/ingredients/detect' && request.method === 'POST') return json(response,200,await detectIngredients(await readBody(request,INGREDIENT_REQUEST_BODY_LIMIT),ingredientProvider,ingredientProvider ? undefined : recognitionCredentials(request,supportedProviders)));
-    if (smartScannerEnabled && url.pathname === '/api/ai/training/generate' && request.method === 'POST') return json(response,200,await generateTrainingPlan(await readBody(request,1_500_000),trainingProvider,trainingProvider ? undefined : recognitionCredentials(request,supportedProviders)));
-    if (smartScannerEnabled && url.pathname === '/api/ai/training/calibrate' && request.method === 'POST') return json(response,200,await calibrateTrainingEnergy(await readBody(request),trainingProvider,trainingProvider ? undefined : recognitionCredentials(request,supportedProviders)));
+    if (smartScannerEnabled && url.pathname === '/api/ai/recipes/healthz') return json(response,200,{ok:true,keySource:sharedCredentialMode ? 'server-secret' : 'user-device',configured:sharedCredentialMode ? Boolean(sharedMetaKey) : false,supportedProviders});
+    if (smartScannerEnabled && url.pathname === '/api/ai/recipes/generate' && request.method === 'POST') return json(response,200,await generateRecipes(await readBody(request),recipeGenerationProvider,recipeGenerationProvider ? undefined : credentials(request)));
+    if (recipePhotosEnabled && url.pathname === '/api/ai/recipes/image' && request.method === 'POST') return json(response,200,await generateRecipeImage(await readBody(request),recipeImageProvider,recipeImageProvider ? undefined : credentials(request)));
+    if (smartScannerEnabled && url.pathname === '/api/ai/ingredients/healthz') return json(response,200,{ok:true,keySource:sharedCredentialMode ? 'server-secret' : 'user-device',configured:sharedCredentialMode ? Boolean(sharedMetaKey) : false,supportedProviders});
+    if (smartScannerEnabled && url.pathname === '/api/ai/ingredients/detect' && request.method === 'POST') return json(response,200,await detectIngredients(await readBody(request,INGREDIENT_REQUEST_BODY_LIMIT),ingredientProvider,ingredientProvider ? undefined : credentials(request)));
+    if (smartScannerEnabled && url.pathname === '/api/ai/training/generate' && request.method === 'POST') return json(response,200,await generateTrainingPlan(await readBody(request,1_500_000),trainingProvider,trainingProvider ? undefined : credentials(request)));
+    if (smartScannerEnabled && url.pathname === '/api/ai/training/calibrate' && request.method === 'POST') return json(response,200,await calibrateTrainingEnergy(await readBody(request),trainingProvider,trainingProvider ? undefined : credentials(request)));
     if (smartScannerEnabled && url.pathname === '/api/ai/movement/prepare' && request.method === 'POST') {
       const video = movementProvider ? await movementProvider(request) : await prepareMovementVideoRequest(request);
       response.writeHead(200, { 'content-type': 'video/mp4', 'content-length': video.length, 'cache-control': 'no-store', 'access-control-allow-origin': 'http://localhost:5173' });
       response.end(video);
       return;
     }
-    if (smartScannerEnabled && url.pathname === '/api/ai/keys/verify' && request.method === 'POST') return json(response,200,await verifyAiCredential(trainingProvider,trainingProvider ? undefined : recognitionCredentials(request,supportedProviders)));
+    if (smartScannerEnabled && sharedCredentialMode && url.pathname.startsWith('/api/ai/meta/')) {
+      credentials(request);
+      return proxySharedMetaRequest(request, response, url, sharedMetaKey);
+    }
+    if (smartScannerEnabled && url.pathname === '/api/ai/keys/verify' && request.method === 'POST') return json(response,200,await verifyAiCredential(trainingProvider,trainingProvider ? undefined : credentials(request)));
     if (url.pathname.startsWith('/api/products/')) { const product=await findProduct(url.pathname.split('/').at(-1)); return json(response,product?200:404,product??{error:'Product not found.'}); }
     if (url.pathname === '/api/nutrition/healthz') {
       try { return json(response, 200, getNutritionCatalog().getHealth()); }

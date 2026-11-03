@@ -1,11 +1,11 @@
 import { frameIndexOf, parseVideoStream, recordsOfKind, type ResponsesEvent } from '@meta-sam/parser';
+import { metaTransportHeaders, metaTransportUrl } from '../ai/credentialTransport';
 import { GEMINI_API_ENABLED, GEMINI_MOVEMENT_MODEL, META_API_ENABLED } from '../config/appConfig';
 import { recordAiFailure, recordAiSuccess } from '../diagnostics/clientLog';
-import { getRecognitionCredentialForProvider, type RecognitionProvider } from '../settings/secureKeys';
+import { getRecognitionCredentialForProvider, type RecognitionCredential, type RecognitionProvider } from '../settings/secureKeys';
 import type { FormAssessment, MetaCoaching, MetaMovementAnalysis } from './types';
 
 export const MAX_MOVEMENT_VIDEO_BYTES = 30 * 1024 * 1024;
-const META_API_BASE_URL = 'https://api.meta.ai/v1';
 const OUTPUT_FPS = 12;
 const MAX_REP_COUNT = 200;
 const nullableString = { anyOf: [{ type: 'string' }, { type: 'null' }] };
@@ -215,15 +215,15 @@ async function videoMetadata(videoBlob: Blob) {
   }
 }
 
-async function uploadMetaFile(apiKey: string, video: Blob, signal: AbortSignal) {
+async function uploadMetaFile(credential: RecognitionCredential, video: Blob, signal: AbortSignal) {
   const body = new FormData();
   body.append('purpose', 'user_data');
   body.append('expires_after[anchor]', 'created_at');
   body.append('expires_after[seconds]', '3600');
   body.append('file', new File([video], 'exercise-set.mp4', { type: 'video/mp4' }));
-  const response = await fetch(`${META_API_BASE_URL}/files`, {
+  const response = await fetch(metaTransportUrl(credential, '/files'), {
     method: 'POST',
-    headers: { Authorization: `Bearer ${apiKey}` },
+    headers: metaTransportHeaders(credential),
     body,
     signal,
   });
@@ -264,10 +264,10 @@ async function* responseEvents(response: Response): AsyncIterable<ResponsesEvent
   }
 }
 
-async function requestSam(apiKey: string, fileId: string, media: Awaited<ReturnType<typeof videoMetadata>>, signal: AbortSignal) {
-  const response = await fetch(`${META_API_BASE_URL}/responses`, {
+async function requestSam(credential: RecognitionCredential, fileId: string, media: Awaited<ReturnType<typeof videoMetadata>>, signal: AbortSignal) {
+  const response = await fetch(metaTransportUrl(credential, '/responses'), {
     method: 'POST',
-    headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json', Accept: 'text/event-stream' },
+    headers: metaTransportHeaders(credential, { 'Content-Type': 'application/json', Accept: 'text/event-stream' }),
     body: JSON.stringify({
       model: 'sam-3.1',
       input: [{ role: 'user', content: [{ type: 'input_text', text: 'person' }, { type: 'input_video', file_id: fileId }] }],
@@ -373,10 +373,10 @@ function validateMuseReview(value: any, fields: MovementReviewInput) {
   return { coaching, observedRepCount, countConfidence: value.countConfidence as 'low' | 'medium' | 'high' };
 }
 
-async function requestMuse(apiKey: string, fileId: string, fields: MovementReviewInput, signal: AbortSignal) {
-  const response = await fetch(`${META_API_BASE_URL}/responses`, {
+async function requestMuse(credential: RecognitionCredential, fileId: string, fields: MovementReviewInput, signal: AbortSignal) {
+  const response = await fetch(metaTransportUrl(credential, '/responses'), {
     method: 'POST',
-    headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+    headers: metaTransportHeaders(credential, { 'Content-Type': 'application/json' }),
     body: JSON.stringify({
       model: 'muse-spark-1.3',
       input: [{ role: 'user', content: [{ type: 'input_text', text: coachingPrompt(fields) }, { type: 'input_file', file_id: fileId }] }],
@@ -399,7 +399,7 @@ async function requestMuse(apiKey: string, fileId: string, fields: MovementRevie
 
 async function analyzeMovementWithMetaTransport(fields: MovementReviewInput, options: MovementReviewOptions = {}): Promise<MetaMovementAnalysis> {
   const credential = await getRecognitionCredentialForProvider('META');
-  if (!credential) throw new Error('Add and verify a Meta API key in Settings to analyze this set.');
+  if (!credential) throw new Error('Meta movement analysis is unavailable.');
   if (fields.video.size > MAX_MOVEMENT_VIDEO_BYTES) throw new Error('This exercise recording is larger than 30 MiB. Record the set again before using Meta analysis.');
   let uploadedFileId = '';
   try {
@@ -407,9 +407,9 @@ async function analyzeMovementWithMetaTransport(fields: MovementReviewInput, opt
       const video = await prepareVideo(fields.video, signal);
       return { preparedVideo: video, media: await videoMetadata(video) };
     });
-    uploadedFileId = await runMovementStage('uploading', 90_000, options, (signal) => uploadMetaFile(credential.apiKey, preparedVideo, signal));
-    const sam = await runMovementStage('tracking', 180_000, options, (signal) => requestSam(credential.apiKey, uploadedFileId, media, signal));
-    const muse = await runMovementStage('reviewing', 180_000, options, (signal) => requestMuse(credential.apiKey, uploadedFileId, fields, signal));
+    uploadedFileId = await runMovementStage('uploading', 90_000, options, (signal) => uploadMetaFile(credential, preparedVideo, signal));
+    const sam = await runMovementStage('tracking', 180_000, options, (signal) => requestSam(credential, uploadedFileId, media, signal));
+    const muse = await runMovementStage('reviewing', 180_000, options, (signal) => requestMuse(credential, uploadedFileId, fields, signal));
     if (fields.priorRepCount + muse.observedRepCount > MAX_REP_COUNT) throw new Error('Muse returned an invalid repetition count.');
     return {
       provider: 'META',
@@ -429,9 +429,9 @@ async function analyzeMovementWithMetaTransport(fields: MovementReviewInput, opt
   } finally {
     if (uploadedFileId) {
       await runMovementStage('cleaning', 30_000, { onStage: options.onStage }, async (signal) => {
-        const response = await fetch(`${META_API_BASE_URL}/files/${encodeURIComponent(uploadedFileId)}`, {
+        const response = await fetch(metaTransportUrl(credential, `/files/${encodeURIComponent(uploadedFileId)}`), {
           method: 'DELETE',
-          headers: { Authorization: `Bearer ${credential.apiKey}` },
+          headers: metaTransportHeaders(credential),
           signal,
         });
         if (!response.ok) return metaError(response, 'temporary-file cleanup');

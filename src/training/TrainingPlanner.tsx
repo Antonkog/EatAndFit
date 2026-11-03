@@ -66,7 +66,7 @@ export function TrainingPlanner({ catalog, onClose, onSaved }: { catalog: Exerci
     setError('');
     try {
       const credential = await getRecognitionCredential();
-      if (!credential) throw new Error('Add and verify an AI provider key in Settings first.');
+      if (!credential) throw new Error('Personalized AI training is unavailable.');
       const model = credential.provider === 'META' ? 'Muse Spark 1.3' : 'Gemini training model';
       const calibration = await runLoggedAiOperation('AI exercise-energy calibration', () => ensureEnergyCalibration(catalog, profile, credential), { provider: credential.provider, model });
       setFactor(calibration.state === 'success' ? calibration.data : undefined);

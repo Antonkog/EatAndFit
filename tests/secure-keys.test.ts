@@ -16,10 +16,15 @@ test('build editions keep key-dependent features out of Core navigation', () => 
   const configuration = readFileSync(new URL('../src/config/appConfig.ts', import.meta.url), 'utf8');
   const app = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
   const recipe = readFileSync(new URL('../src/recipes/RecipeView.tsx', import.meta.url), 'utf8');
+  const settings = readFileSync(new URL('../src/settings/SettingsView.tsx', import.meta.url), 'utf8');
+  const transport = readFileSync(new URL('../src/ai/credentialTransport.ts', import.meta.url), 'utf8');
   assert.match(edition, /BYOK_AI_ENABLED/);
   assert.match(configuration, /__APP_CONFIG__/);
   assert.match(app, /lazy\(\(\) => import\('\.\/scanner\/ScanView'\)/);
   assert.match(app, /lazy\(\(\) => import\('\.\/ai\/AiRecipeBuilder'\)/);
   assert.match(recipe, /BYOK_AI_ENABLED && onOpenAi/);
   assert.match(recipe, /Generate AI recipe/);
+  assert.match(settings, /AI_KEY_SETUP_ENABLED &&/);
+  assert.match(transport, /credential\.source === 'server'/);
+  assert.match(transport, /\/api\/ai\/meta/);
 });

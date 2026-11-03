@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { readJsonResponse } from '../api/readJsonResponse';
+import { aiApiHeaders, usesDirectMetaTransport } from './credentialTransport';
 import { NetworkResults, type NetworkResult } from '../api/NetworkResult';
 import { FoodScheduleGrid } from '../components/FoodScheduleGrid';
 import { ENABLED_AI_PROVIDER_LABEL, RECIPE_PHOTO_GENERATION_ENABLED } from '../config/appConfig';
@@ -99,7 +100,7 @@ export function AiRecipeView({
     setSelected(undefined);
     try {
       const credential = await getRecognitionCredential();
-      if (!credential) throw new Error(`Add a ${ENABLED_AI_PROVIDER_LABEL} API key in Settings first.`);
+      if (!credential) throw new Error(`${ENABLED_AI_PROVIDER_LABEL} recipe generation is unavailable.`);
       const filters = {
         idea,
         cuisine,
@@ -114,14 +115,10 @@ export function AiRecipeView({
       };
       let generated: AiRecipe[];
       const generationResult = await runLoggedAiOperation('AI recipe generation', async () => {
-        if (credential.provider === 'META') return generateRecipesWithMeta(filters, credential.apiKey);
+        if (usesDirectMetaTransport(credential)) return generateRecipesWithMeta(filters, credential.apiKey);
         const response = await fetch('/api/ai/recipes/generate', {
           method: 'POST',
-          headers: {
-            authorization: `Bearer ${credential.apiKey}`,
-            'content-type': 'application/json',
-            'x-recognition-provider': credential.provider,
-          },
+          headers: aiApiHeaders(credential),
           body: JSON.stringify(filters),
         });
         const data = await readJsonResponse<{ error?: string; recipes: AiRecipe[] }>(response, 'Recipe generation');

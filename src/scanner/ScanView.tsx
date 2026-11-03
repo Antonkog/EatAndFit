@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { readJsonResponse } from '../api/readJsonResponse';
+import { aiApiHeaders, usesDirectMetaTransport } from '../ai/credentialTransport';
 import { ENABLED_AI_PROVIDER_LABEL } from '../config/appConfig';
 import { recordAiFailure, runLoggedAiOperation } from '../diagnostics/clientLog';
 import { localDate } from '../data/db';
@@ -132,17 +133,13 @@ function IngredientScannerPanel({
     setStatus('');
     try {
       const recognition = await getRecognitionCredential();
-      if (!recognition) throw new Error(`Add a ${ENABLED_AI_PROVIDER_LABEL} API key in Settings first.`);
+      if (!recognition) throw new Error(`${ENABLED_AI_PROVIDER_LABEL} Smart Scan is unavailable.`);
       const image = await prepareJpeg(file);
       const result = await runLoggedAiOperation('AI ingredient recognition', async () => {
-        if (recognition.provider === 'META') return recognizeIngredientsWithMeta(image, recognition.apiKey);
+        if (usesDirectMetaTransport(recognition)) return recognizeIngredientsWithMeta(image, recognition.apiKey);
         const response = await fetch('/api/ai/ingredients/detect', {
           method: 'POST',
-          headers: {
-            authorization: `Bearer ${recognition.apiKey}`,
-            'content-type': 'application/json',
-            'x-recognition-provider': recognition.provider,
-          },
+          headers: aiApiHeaders(recognition),
           body: JSON.stringify({ image }),
         });
         const data = await readJsonResponse<{ error?: string; ingredients?: string[] }>(response, 'Ingredient recognition');
@@ -173,8 +170,8 @@ function IngredientScannerPanel({
   if (!credential.configured) return (
     <section className="ingredient-scanner-card scanner-setup">
       <span><KeyRound /></span>
-      <h2>Add your API key to use Smart Scan</h2>
-      <p>The key is encrypted and stored only in this browser. Configure {ENABLED_AI_PROVIDER_LABEL} in Settings.</p>
+      <h2>Smart Scan is unavailable</h2>
+      <p>The configured {ENABLED_AI_PROVIDER_LABEL} service is not available right now.</p>
       <button className="primary-button" onClick={onOpenSettings}><KeyRound size={17} /> Open settings</button>
     </section>
   );

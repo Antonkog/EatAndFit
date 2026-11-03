@@ -137,7 +137,7 @@ Camera permission is requested only after a camera action is pressed. General ap
 
 ### Generic AI recording
 
-Exercises without a validated movement profile keep the timer-only path for users without a verified enabled AI key. For an eligible adult, the entry panel instead reads **Record set with AI** and explains that the set is recorded without sound for optional athlete tracking, repetition review, and one advisory coaching observation. `Record with camera` uses the selfie camera by default and retains the rear-camera switch where a second camera exists; `Use timer instead` keeps the ordinary timer flow.
+Exercises without a validated movement profile keep the timer-only path when no enabled AI service is available. For an eligible adult with the shared Meta service or an optional verified BYOK key, the entry panel instead reads **Record set with AI** and explains that the set is recorded without sound for optional athlete tracking, repetition review, and one advisory coaching observation. `Record with camera` uses the selfie camera by default and retains the rear-camera switch where a second camera exists; `Use timer instead` keeps the ordinary timer flow.
 
 The recording begins after a visible and spoken three-second countdown, shows `Recording set for AI`, elapsed time, a `Stop recording` action, and a 1:30 maximum. It does not start MediaPipe or draw a skeleton. When stopped manually or at the limit, the planned repetitions provisionally complete the set. `Analyze with AI` is explicit and optional. The active Meta adapter sends the catalog exercise name, instructions, and common mistakes to SAM 3.1 and Muse Spark 1.3 but no fabricated local angles or metrics. Muse can return only an integer count, confidence, one concise observation, and at most one next-set tip. If it differs from planned repetitions, the user must choose the count to save.
 
@@ -243,7 +243,7 @@ The action reviews the complete uploaded segment so Muse can provide an advisory
 
 The analysis action must state:
 
-> This muted set recording will temporarily pass through Eat & Fit and Meta. SAM 3.1 will track the athlete, and Muse Spark 1.3 will review the repetition count and coaching evidence. Temporary Eat & Fit and Meta files are deleted after analysis. This uses your Meta API key and may incur provider charges.
+> This muted set recording will temporarily pass through Eat & Fit and Meta. SAM 3.1 will track the athlete, and Muse Spark 1.3 will review the repetition count and coaching evidence. Temporary Eat & Fit and Meta files are deleted after analysis.
 
 `Analyze with Meta AI` is an explicit action for each set. It is never preselected or triggered automatically.
 
@@ -251,11 +251,11 @@ The analysis action must state:
 
 1. The browser keeps the full set only in memory and records at a controlled bitrate.
 2. The browser refuses uploads larger than 30 MiB.
-3. After explicit consent, it uploads only the recording to Eat & Fit for format normalization; the user's Meta key and movement evidence are not sent to Eat & Fit.
+3. After explicit consent, it uploads the recording to Eat & Fit for format normalization.
 4. The server removes audio and normalizes the recording in tmpfs to H.264 MP4 at no more than 720p and 12 FPS, returns the bytes, and deletes its temporary files.
-5. The browser uploads the normalized clip directly to Meta with the locally stored key.
+5. In shared or hybrid mode without a personal override, the browser uploads the normalized clip through a restricted Eat & Fit route and the server authenticates to Meta with its mounted secret. A saved personal key uses direct browser transport instead.
 6. SAM tracks the athlete across the complete set. Missing-person and multiple-person results stop the review.
-7. Muse receives the full set plus the local count, measured windows, catalog guidance, and authoritative form assessment directly from the browser.
+7. Muse receives the full set plus the local count, measured windows, catalog guidance, and authoritative form assessment through the selected credential transport.
 8. Muse returns an observed segment count, count confidence, and structured coaching.
 9. The browser deletes the Meta file in a `finally` path, then displays the sampled SAM track, Muse review, and any count difference.
 10. The browser discards its original set recording and SAM track data.
@@ -362,9 +362,9 @@ POST /api/ai/movement/prepare
 Content-Type: multipart/form-data
 ```
 
-The request contains only the temporary full-set recording, limited to 90 seconds and 30 MiB. The server converts it only in container tmpfs with a random filename and returns muted H.264 MP4. It neither receives the user's Meta key nor sends inference requests to Meta.
+The request contains only the temporary full-set recording, limited to 90 seconds and 30 MiB. The server converts it only in container tmpfs with a random filename and returns muted H.264 MP4. In shared or hybrid mode without a personal override, the server also forwards only the bounded Meta file and response operations required for SAM and Muse; its mounted credential is never returned to the browser.
 
-The browser uses the normalized response with the Meta Files and Responses APIs. Local count, rep windows, deterministic evidence, exercise guidance, and adult eligibility remain in the browser and are submitted directly to Meta after consent.
+The browser uses the normalized response with the Meta Files and Responses APIs through either the restricted shared-server transport or optional BYOK direct transport. Local count, rep windows, deterministic evidence, exercise guidance, and adult eligibility are submitted only after consent.
 
 Response shape:
 
@@ -395,8 +395,8 @@ The Muse count is advisory and can become the saved set count only after explici
 ## Privacy, availability, and safety
 
 - Local camera tracking and timer mode work in Core and BYOK editions.
-- Meta analysis is available only to users aged 19 or older with a verified Meta key.
-- A saved Meta key can be used for movement analysis even when Gemini is selected for ingredient or recipe features.
+- Meta analysis is available only to users aged 19 or older when the configured Meta service is available.
+- Hybrid mode selects shared Meta automatically while allowing a device-encrypted personal key to take precedence. The shared key has no browser delivery or decryption path.
 - Camera consent and Meta-upload consent are separate decisions.
 - Meta upload is off by default and requested for every analyzed set.
 - Audio is never recorded or uploaded.
@@ -440,7 +440,7 @@ Disadvantages:
 
 - video leaves the device after consent;
 - the application server temporarily handles the full set only for conversion;
-- requires a verified Meta key, connectivity, extra dependencies, and careful cleanup;
+- requires an available Meta credential transport, connectivity, extra dependencies, and careful cleanup;
 - introduces inference latency and provider charges;
 - SAM still cannot replace the pose engine.
 
@@ -547,8 +547,8 @@ Phases 2–5 below describe the implemented architecture. Phase 1 remains a repe
 ### Edition behavior
 
 - Core edition retains local camera and timer functionality.
-- BYOK edition exposes Meta analysis only with a verified Meta key.
-- Active Gemini selection does not hide a separately verified Meta movement key.
+- Hybrid mode exposes Meta analysis without revealing the shared credential and lets a verified personal Meta key override it; BYOK mode requires a verified personal key.
+- No credential mode performs automatic provider fallback.
 - There is no provider fallback from Meta movement analysis to Gemini.
 
 ## Acceptance criteria
