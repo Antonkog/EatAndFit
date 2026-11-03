@@ -33,7 +33,7 @@ import {
   type MealType,
   type Workout,
 } from '../data/db';
-import { energySourceLabel, estimateExerciseEnergy, estimateSetDurationSeconds, type EnergyEstimate } from '../energy/estimates';
+import { estimateExerciseEnergy, estimateSetDurationSeconds, wholeMinuteDurationSeconds, type EnergyEstimate } from '../energy/estimates';
 import { classifyExercise, type EnergyProfileId } from '../energy/sources';
 import { applyWorkoutCompletion } from '../energy/workout';
 import { exerciseMediaFor } from '../exercises/media';
@@ -379,7 +379,7 @@ function WorkoutNumberInput({
 }
 
 function minutesLabel(seconds: number) {
-  return String(Math.round(seconds / 6) / 10);
+  return String(Math.max(1, Math.ceil(seconds / 60)));
 }
 
 function WorkoutMinutesInput({
@@ -402,7 +402,9 @@ function WorkoutMinutesInput({
   const finish = () => {
     editing.current = false;
     const minutes = Number(draft);
-    const seconds = Number.isFinite(minutes) && minutes >= 0.1 ? Math.round(minutes * 60) : fallbackSeconds;
+    const seconds = Number.isFinite(minutes) && minutes > 0
+      ? Math.ceil(minutes) * 60
+      : wholeMinuteDurationSeconds(fallbackSeconds);
     setDraft(minutesLabel(seconds));
     if (seconds !== value) onChange(seconds);
   };
@@ -411,8 +413,8 @@ function WorkoutMinutesInput({
     <input
       aria-label="Minutes"
       type="number"
-      min="0.1"
-      step="0.1"
+      min="1"
+      step="1"
       placeholder="Min"
       value={draft}
       onFocus={(event) => { editing.current = true; event.currentTarget.select(); }}
@@ -420,7 +422,7 @@ function WorkoutMinutesInput({
         const nextDraft = event.target.value;
         setDraft(nextDraft);
         const minutes = Number(nextDraft);
-        if (nextDraft && Number.isFinite(minutes) && minutes >= 0.1) onChange(Math.round(minutes * 60));
+        if (nextDraft && Number.isInteger(minutes) && minutes >= 1) onChange(minutes * 60);
       }}
       onBlur={finish}
       onKeyDown={(event) => { if (event.key === 'Enter') event.currentTarget.blur(); }}
@@ -471,9 +473,6 @@ function WorkoutDay({
             const liveEstimate = workout.completed ? undefined : estimateWorkout(workout);
             const calories = workout.completed ? workout.caloriesBurned : liveEstimate?.calories;
             const duration = workout.completed ? workout.energyDurationMinutes : liveEstimate?.durationMinutes;
-            const equivalent = workout.completed ? workout.energyEquivalentKg : liveEstimate?.equivalentKg;
-            const source = workout.completed ? workout.calorieSource : liveEstimate ? energySourceLabel(liveEstimate) : undefined;
-            const sourceUrl = workout.completed ? workout.calorieSourceUrl : liveEstimate?.source.sourceUrl;
             const firstIncompleteSet = workout.sets.findIndex((set) => !set.complete);
             const canStart = date === localDate() && firstIncompleteSet >= 0;
             return (
@@ -495,8 +494,6 @@ function WorkoutDay({
                   <div className="workout-energy">
                     <span><strong>{Math.round(duration ?? 0)} min</strong><small>Estimated duration</small></span>
                     <span><strong>{Math.round(calories)} kcal</strong><small>{workout.completed ? 'Frozen when completed' : 'Estimated energy'}</small></span>
-                    <span><strong>{(equivalent ?? calories / 7700).toFixed(3)} kg</strong><small>Energy equivalent, not guaranteed weight loss</small></span>
-                    {source && (sourceUrl ? <a href={sourceUrl} target="_blank" rel="noreferrer">{source}</a> : <small>{source}</small>)}
                   </div>
                 )}
                 {!calories && estimateUnavailable && <p className="workout-energy-unavailable">Sourced calorie estimates begin at age 6.</p>}
@@ -511,7 +508,19 @@ function WorkoutDay({
                       <button className={set.complete ? 'set-done active' : 'set-done'} aria-label="Done" onClick={() => onChange({ ...workout, sets: workout.sets.map((item) => item.id === set.id ? { ...item, complete: !item.complete, ...(!item.complete ? {} : { completedReps: undefined, actualDurationSeconds: undefined, trackingMode: undefined, movementSummary: undefined }) } : item) })}>{set.complete ? <Check size={17} /> : <Circle size={17} />}</button>
                     </div>
                   ))}
-                  <button className="add-set" onClick={() => onChange({ ...workout, sets: [...workout.sets, { id: crypto.randomUUID(), reps: 10, weightKg: 0, durationSeconds: estimateSetDurationSeconds(10, energyProfile), complete: false }] })}><Plus size={17} /> Add set</button>
+                  <button className="add-set" onClick={() => {
+                    const previousSet = workout.sets.at(-1);
+                    onChange({
+                      ...workout,
+                      sets: [...workout.sets, {
+                        id: crypto.randomUUID(),
+                        reps: previousSet?.reps ?? 10,
+                        weightKg: previousSet?.weightKg ?? 0,
+                        durationSeconds: wholeMinuteDurationSeconds(previousSet?.durationSeconds ?? estimateSetDurationSeconds(10, energyProfile)),
+                        complete: false,
+                      }],
+                    });
+                  }}><Plus size={17} /> Add set</button>
                 </div>
               </article>
             );

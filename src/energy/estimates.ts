@@ -42,6 +42,10 @@ export function estimateSetDurationSeconds(reps: number, profileId: EnergyProfil
   return Math.max(30, Math.round(Math.max(0, reps) * activeSecondsPerRep[profileId]));
 }
 
+export function wholeMinuteDurationSeconds(seconds: number) {
+  return Math.max(60, Math.ceil(Math.max(0, seconds) / 60) * 60);
+}
+
 export function schofieldBmrKcalPerMinute(age: number, sex: ProfileSex, weightKg: number) {
   if (age < 6 || age > 18 || weightKg <= 0) return undefined;
   if (sex === 'male') return (age <= 9 ? 22.706 * weightKg + 504.3 : 17.686 * weightKg + 658.2) / 1440;

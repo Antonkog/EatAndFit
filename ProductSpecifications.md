@@ -183,7 +183,7 @@ The detail panel can show:
 - Male/female demonstration selection when that media exists.
 - Workout-date selection and `Add to workout`.
 
-Adding an exercise creates one planned set with 10 repetitions, 0 kg, and an incomplete status.
+Adding an exercise manually creates one planned, incomplete set with 10 repetitions and a whole-minute duration rounded upward from the local activity estimate. Bodyweight exercises use the saved profile weight in the visible `Weight (kg)` field. Manually selected equipment exercises start at 10 kg so the suggestion is immediately editable rather than zero.
 
 ### 6.4 Personalized training entry point
 
@@ -215,7 +215,7 @@ Default dates are the next Monday, Wednesday, and Friday, repeated in the follow
 
 Confirmation requires six different, non-past dates in chronological order. If any selected date already contains a workout, the user must confirm that the generated plan should be appended.
 
-Every generated set starts at 0 kg for later Calendar editing, but zero weight is not shown in the plan review or exports. AI-provided durations must be whole minutes. Repetition-based durations are rounded upward to at least one whole minute per set before storage. The plan is written to IndexedDB in one transaction and all workouts receive a shared `trainingPlanId`.
+AI-provided durations must be whole minutes. Repetition-based durations are rounded upward to at least one whole minute per set before storage. Generated bodyweight sets use the locally saved profile weight; generated equipment exercises retain 0 kg for later Calendar editing. Zero weight is not shown in the plan review or exports. The plan is written to IndexedDB in one transaction and all workouts receive a shared `trainingPlanId`.
 
 Before confirmation, the review screen shows whole per-exercise minutes plus the combined whole session duration and calories. It can export the current dates and exercises as either CSV or human-readable TXT. Both exports include session number, selected date, session title, exercise, sets, reps, whole estimated minutes, and estimated calories. They omit the always-zero starting weight.
 
@@ -237,10 +237,12 @@ Each set uses the visible columns `Set`, `Reps`, `Weight (kg)`, `Time (min)`, an
 
 - Repetitions: non-negative whole number.
 - Weight: non-negative decimal value with a 0.5 kg input step.
-- Activity time: displayed as positive decimal minutes. Storage remains seconds for backward-compatible workout and backup records.
+- Activity time: displayed and edited as positive whole minutes. Storage remains seconds for backward-compatible workout and backup records.
 - Done state.
 
-Reps and Kg inputs permit an empty editing draft. Focusing an existing zero selects it so the first typed digit replaces it. Empty values normalize to zero on blur or Enter. Invalid edits keep the previous valid stored value. The Minutes input starts with a non-zero, source-profile estimate, selects its value on focus, accepts 0.1-minute steps, and converts the chosen value to seconds for storage.
+Reps and Kg inputs permit an empty editing draft. Focusing an existing zero selects it so the first typed digit replaces it. Empty values normalize to zero on blur or Enter. Invalid edits keep the previous valid stored value. The Minutes input starts with a non-zero, source-profile estimate rounded upward, selects its value on focus, accepts whole-minute steps beginning at one minute, and converts the chosen value to seconds for storage. Older fractional stored durations remain backup-compatible but are presented as a rounded-up whole-minute suggestion when edited.
+
+The workout card shows only estimated duration and calories. Energy-equivalent weight, explanatory weight-loss copy, and source/calibration provenance are not displayed on the card. Source and frozen estimate metadata remain in the local record for reproducibility and backup compatibility.
 
 A workout becomes completed only when it has at least one set and every set is marked done. Completing all sets freezes the current calories, duration, source, source URL, and energy-equivalent value into history. Reopening any set returns the workout to planned and removes those frozen fields. Previously completed history is not recalculated when the profile, model, or source registry changes.
 
@@ -348,13 +350,13 @@ For ages 6–18, Youth Compendium `METy` is selected for bands 6–9, 10–12, 1
 kcal = METy × Schofield BMR kcal/min × minutes
 ```
 
-Schofield equations use age band, sex, and weight. No sourced estimate is returned below age 6.
+Schofield equations use age band, sex, and weight. Adult and older-adult formulas likewise use the weight saved in the local profile, including for push-ups, squats, and other bodyweight exercises. No sourced estimate is returned below age 6.
 
 Harvard Health 30-minute values are implemented as an attributable interpolation/duration-scaling reference and regression check. Current catalog runtime estimates resolve through the age-appropriate Compendium registry because all exercises have a valid Compendium mapping. Session totals sum the exact per-exercise durations and calories before display rounding; valid estimates are not inflated merely because they appear low.
 
-### 9.4 Confidence labels
+### 9.4 Internal confidence labels
 
-The UI labels an estimate as one of:
+The estimate record retains one of these provenance labels, although Calendar no longer displays it on the workout card:
 
 - Direct source
 - Closest activity

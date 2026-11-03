@@ -5,6 +5,7 @@ import { runLoggedAiOperation } from '../diagnostics/clientLog';
 import { estimateDurationSeconds, estimateExerciseEnergy, estimateSetDurationSeconds } from '../energy/estimates';
 import { classifyExercise } from '../energy/sources';
 import type { ExerciseCatalog } from '../exercises/types';
+import { suggestedWorkoutWeightKg } from '../exercises/workoutDefaults';
 import { useBackNavigation } from '../navigation/backNavigation';
 import { readUserProfile } from '../profile/userProfile';
 import { getRecognitionCredential } from '../settings/secureKeys';
@@ -110,7 +111,13 @@ export function TrainingPlanner({ catalog, onClose, onSaved }: { catalog: Exerci
           notes: session.title,
           completed: false,
           trainingPlanId: planId,
-          sets: setsForItem(item).map((set) => ({ id: crypto.randomUUID(), reps: set.reps, weightKg: 0, durationSeconds: set.durationSeconds, complete: false })),
+          sets: setsForItem(item).map((set) => ({
+            id: crypto.randomUUID(),
+            reps: set.reps,
+            weightKg: suggestedWorkoutWeightKg(exercise, profile.weightKg, 'ai'),
+            durationSeconds: set.durationSeconds,
+            complete: false,
+          })),
         };
       }));
       await saveTrainingPlan(workouts);

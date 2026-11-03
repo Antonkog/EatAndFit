@@ -12,13 +12,14 @@ import {
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { BYOK_AI_ENABLED } from '../config/appConfig';
 import { localDate, scheduleWorkout } from '../data/db';
-import { estimateSetDurationSeconds } from '../energy/estimates';
+import { estimateSetDurationSeconds, wholeMinuteDurationSeconds } from '../energy/estimates';
 import { classifyExercise } from '../energy/sources';
 import { movementProfileForExercise } from '../movement/profiles';
 import { useBackNavigation } from '../navigation/backNavigation';
 import { preferredExerciseSex, profileIssue, readUserProfile, setExerciseModelPreference, type ProfileSex } from '../profile/userProfile';
 import { dismissKeyboard } from '../ui/dismissKeyboard';
 import { exerciseMediaFor } from './media';
+import { suggestedWorkoutWeightKg } from './workoutDefaults';
 import { exerciseMatches, exerciseSearchSuggestions } from './search';
 import type { Exercise, ExerciseCatalog } from './types';
 
@@ -113,7 +114,14 @@ export function ExerciseDetail({
     setAdding(true);
     setError('');
     try {
-      await scheduleWorkout(exercise.id, exercise.name, date, estimateSetDurationSeconds(10, classifyExercise(exercise)));
+      const profile = readUserProfile();
+      await scheduleWorkout(
+        exercise.id,
+        exercise.name,
+        date,
+        wholeMinuteDurationSeconds(estimateSetDurationSeconds(10, classifyExercise(exercise))),
+        suggestedWorkoutWeightKg(exercise, profile.weightKg, 'manual'),
+      );
       setAdded(true);
       onAdded?.(date);
       onClose();

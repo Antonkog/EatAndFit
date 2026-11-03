@@ -466,7 +466,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .calendar-empty h3 { margin: 0 0 15px; color: var(--text); }
 .workout-card { padding: 0; overflow: hidden; border-radius: 24px; }
 .workout-card header { padding: 16px 20px; border-bottom: 1px solid var(--border); }
-.workout-energy { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 8px; padding: 14px 20px; border-bottom: 1px solid var(--border); background: rgba(183,255,79,.025); }
+.workout-energy { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 8px; padding: 14px 20px; border-bottom: 1px solid var(--border); background: rgba(183,255,79,.025); }
 .workout-energy > span { display: grid; gap: 3px; }
 .workout-energy strong { color: var(--text); font-size: 13px; }
 .workout-energy small { color: var(--muted-text); font-size: 9px; font-weight: 600; }
@@ -911,7 +911,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   .balance-chart .chart-track i { right: 18%; left: 18%; }
   .day-heading { align-items: stretch; flex-direction: column; }
   .day-actions > * { flex: 1; }
-  .set-labels { display: none; }
+  .set-labels { grid-template-columns: 28px repeat(3,minmax(0,1fr)) 38px; gap: 4px; padding-inline: 6px; font-size: 8px; letter-spacing: 0; text-align: center; }
   .set-row { grid-template-columns: 28px repeat(3,minmax(0,1fr)) 38px; gap: 4px; padding: 6px; }
   .set-row input { height: 38px; padding-inline: 3px; font-size: 12px; }
   .macro-grid { grid-template-columns: repeat(2,1fr); }
@@ -965,7 +965,6 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   .training-plan-sessions ul { grid-template-columns: 1fr; }
   .training-plan-actions { align-items: stretch; flex-direction: column; }
   .workout-energy { grid-template-columns: 1fr 1fr; padding-inline: 14px; }
-  .workout-energy > span:nth-child(3) { grid-column: 1/-1; }
   .workout-card > header { align-items: flex-start; }
   .workout-card-actions { align-items: flex-end; flex-direction: column-reverse; }
   .start-exercise-button { padding-inline: 10px; font-size: 10px; }
